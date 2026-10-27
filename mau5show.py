@@ -229,11 +229,21 @@ class Player:
 
 
 def _music_for(show, track):
-    """Load a show's analysis from its cache when there is one."""
-    if not os.path.exists(track):
-        return None
+    """Load a show's analysis, from its cache when there is one.
+
+    The cache holds the whole beat grid -- tempo, beats, bars, levels,
+    sections -- in about a hundred kilobytes, and Music reads it without
+    opening the audio at all.  So a cached show still knows where its
+    downbeats are on a machine that has no copy of the track, which is
+    every machine but the one the show was built on: the music is not
+    distributed with the source.  Only an uncached show needs the file.
+    """
     cache = show.get("analysis")
     cache = os.path.join(SHOWS, cache) if cache else None
+    if cache and os.path.exists(cache):
+        return Music(track, fps=show.get("fps", 40), cache=cache)
+    if not os.path.exists(track):
+        return None
     return Music(track, fps=show.get("fps", 40), cache=cache)
 
 
