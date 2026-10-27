@@ -57,10 +57,19 @@ class Region:
     instead of browning out the rest of the helmet.
     """
 
-    def __init__(self, name, lo, hi, ceiling, budget_ma, shed=1.0):
+    def __init__(self, name, lo, hi, ceiling, budget_ma, shed=1.0, floor=0.0):
         self.name, self.lo, self.hi = name, int(lo), int(hi)
         self.ceiling = int(ceiling)        # 0-255, per channel, per LED
         self.budget_ma = float(budget_ma)  # for the whole span
+        # The dimmest this region is allowed to be driven while it is
+        # being asked for anything at all.  Weighted shedding is right
+        # about priority and wrong about the endpoint: a shell with
+        # shed 6 is at nothing long before the tubes have given up, so
+        # a helmet left running settles into two glowing stripes and
+        # stops reading as a helmet.  The floor costs a few milliamps
+        # and keeps the shape.  It never lights an LED the preset
+        # wanted dark, and it yields entirely if it will not fit.
+        self.floor = float(floor)          # 0-255, per LED
         self.shed = float(shed)            # relative give under global pressure
 
     @property
@@ -155,11 +164,13 @@ class PowerGuard:
         self.default_ceiling = int(default_ceiling)
         self._ceil = np.full(self.count, float(default_ceiling), np.float32)
         self._shed = np.full(self.count, 4.0, np.float32)
+        self._floor = np.zeros(self.count, np.float32)
         for r in self.regions:
             lo, hi = max(0, r.lo), min(self.count - 1, r.hi)
             if hi >= lo:
                 self._ceil[lo:hi + 1] = r.ceiling
                 self._shed[lo:hi + 1] = r.shed
+                self._floor[lo:hi + 1] = min(r.floor, r.ceiling)
 
     # -- estimates ------------------------------------------------------
     def _per_led_ma(self, out):
@@ -214,18 +225,37 @@ class PowerGuard:
         # lands on budget.  Monotonic in s, so bisect: a frame that asks
         # for too much comes back dimmer everywhere, weighted, rather
         # than with the low-priority regions amputated.
-        governed = False
+        #
+        # The floor is solved here too, not afterwards.  The governor
+        # spends the budget exactly, so a floor applied as a second pass
+        # has nothing left to spend and collapses to nothing: the two
+        # have to be one equation.  Each LED ends at
+        #     max(s ** shed_i, floor_i / level_i)
+        # of what survived its region, so the floored LEDs take their
+        # few milliamps off the top and everything else sheds around
+        # them.  Still monotonic in s, so the bisection stands.
+        governed = floored = False
         if after_region > budget and after_region > 0:
             per = self._per_led_ma(out)
+            omx = out.max(1)
+            amx = np.asarray(buf, np.float32).reshape(-1, 3)[:self.count].max(1)
+            lit = (amx > 0) & (omx > 1e-6)
+            fs = np.zeros(self.count, np.float32)
+            np.divide(self._floor, omx, out=fs, where=lit)
+            np.clip(fs, 0.0, 1.0, out=fs)
+            if float((per * fs).sum()) > budget:
+                fs[:] = 0.0            # the floor does not fit; budget wins
             lo_s, hi_s = 0.0, 1.0
             for _ in range(40):
                 mid = (lo_s + hi_s) / 2.0
-                if float((per * mid ** self._shed).sum()) > budget:
+                if float((per * np.maximum(mid ** self._shed, fs)).sum()) > budget:
                     hi_s = mid
                 else:
                     lo_s = mid
-            out *= (lo_s ** self._shed)[:, None]
+            scale = np.maximum(lo_s ** self._shed, fs)
+            out *= scale[:, None]
             governed = True
+            floored = bool((fs > lo_s ** self._shed).any())
 
         final = self.frame_ma(out)
         if self.thermal is not None:
@@ -242,6 +272,7 @@ class PowerGuard:
             "ceiling_hit": asked > after_ceiling + 0.5,
             "regions_hit": hit,
             "governor_hit": governed,
+            "floor_hit": floored,
             "budget_ma": round(budget, 1),
             "thermal": self.thermal.state() if self.thermal else None,
         }
@@ -282,7 +313,7 @@ def load(path=DEFAULT, count=None):
         return None
     d = json.load(open(path))
     regions = [Region(r["name"], r["lo"], r["hi"], r["ceiling"],
-                      r["budget_ma"], r.get("shed", 1.0))
+                      r["budget_ma"], r.get("shed", 1.0), r.get("floor", 0.0))
                for r in d["regions"]]
     th = None
     if d.get("thermal"):

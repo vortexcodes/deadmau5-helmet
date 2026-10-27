@@ -272,6 +272,7 @@ class Pixels:
             except Exception:
                 self.guard = None
         self.last_power = None
+        self.last_sent = np.zeros((self.count, 3), np.uint8)
 
     # -- colour order -----------------------------------------------------
     def set_strips(self, strips):
@@ -304,6 +305,12 @@ class Pixels:
         a = a[:self.count]
         if self.guard is not None:
             a, self.last_power = self.guard.apply(a)
+        # What the helmet is actually showing, in true RGB -- after the
+        # guard has had its say but before the per-strip colour-order
+        # permutation, which is a property of the wiring and not of the
+        # picture.  Anything drawing a preview wants this, not the frame
+        # that was asked for.
+        self.last_sent = a
         data = (self.apply_order(a) if correct else a).tobytes()
 
         self.seq = self.seq % 15 + 1

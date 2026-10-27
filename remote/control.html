@@ -80,10 +80,21 @@
       background:#0e0e14;color:var(--fg);font-size:15px;padding:0 11px;
       -webkit-user-select:text;user-select:text}
  #cue{font-size:12px;color:var(--accent);font-weight:650;min-height:16px}
+ /* Live preview.  Blurred at the canvas level rather than per LED:
+    one GPU pass instead of 622 shadowBlur fills, which a phone will
+    not keep up with. */
+ #prevwrap{flex:none;position:relative;background:#06060a;
+           border-bottom:1px solid var(--line);overflow:hidden;
+           transition:height .18s ease}
+ #prev{display:block;width:100%;height:100%;filter:blur(1.6px) saturate(1.15)}
+ #prevtag{position:absolute;left:10px;bottom:6px;font-size:10px;color:#5a5a68;
+          letter-spacing:.08em;text-transform:uppercase}
+ #prevtag.sim{color:var(--warn)}
 </style>
 </head>
 <body>
 <header><span class="dot" id="dot"></span><h1>mau5ctl</h1><span id="pwr">--</span></header>
+<div id="prevwrap"><canvas id="prev"></canvas><span id="prevtag">preview</span></div>
 <nav>
   <button data-tab="presets" class="sel">PRESETS</button>
   <button data-tab="shows">SHOWS</button>
@@ -102,6 +113,7 @@
 <audio id="au" preload="auto"></audio>
 <script>
 let S = null, tab = 'presets', colour = [255,160,0], busy = false;
+let LAY = null, prevOn = true;
 const au = document.getElementById('au');
 const COLOURS = [[255,40,0],[255,160,0],[255,255,255],[0,220,255],
                  [0,255,140],[120,0,255],[255,0,120],[255,230,180]];
@@ -132,12 +144,16 @@ let lastSig = null;
 function draw(force){
   if(!S) return;
   const dot = document.getElementById('dot');
-  dot.className = (S.helmet_ok === false) ? 'dot err' : 'dot on';
-  dot.title = S.helmet_note || '';
+  dot.className = S.simulated ? 'dot' : ((S.helmet_ok === false) ? 'dot err' : 'dot on');
+  dot.title = S.simulated ? 'no helmet attached' : (S.helmet_note || '');
+  const tag = document.getElementById('prevtag');
+  tag.textContent = S.simulated ? 'simulated \u00b7 no helmet' : 'live';
+  tag.className = S.simulated ? 'sim' : '';
   const p = document.getElementById('pwr');
   p.textContent = (S.amps!=null ? S.amps.toFixed(2)+' A · '+S.watts.toFixed(0)+' W' : '--');
   p.className = (S.governor||S.ceiling||S.helmet_ok===false) ? 'cap' : '';
-  if(S.helmet_ok === false) p.textContent = 'helmet unreachable';
+  if(S.simulated) p.textContent = (S.watts!=null ? S.watts.toFixed(0)+' W would draw' : 'no helmet');
+  else if(S.helmet_ok === false) p.textContent = 'helmet unreachable';
   else if(S.thermal){
     const th = S.thermal;
     p.textContent = (S.amps!=null ? S.amps.toFixed(2)+' A' : '--')
@@ -290,7 +306,82 @@ setInterval(async ()=>{
   catch(e){ document.getElementById('dot').className='dot err'; }
 }, 1500);
 
-(async()=>{ const r = await fetch('/api/state'); S = await r.json(); draw(true); })();
+// ---- live preview -------------------------------------------------
+// Pulls the frame the controller is actually sending, after the power
+// guard, so what you see here is what the helmet is doing rather than
+// what the preset asked for.  Without a helmet attached it is the same
+// render against the same guard, which is the point: presets can be
+// judged from anywhere.
+const pc = document.getElementById('prev'), pctx = pc.getContext('2d');
+const pwrap = document.getElementById('prevwrap');
+
+function sizePreview(){
+  if(!LAY) return;
+  const w = pwrap.clientWidth || window.innerWidth;
+  const h = prevOn ? Math.round(Math.min(w / LAY.aspect, window.innerHeight*0.30)) : 0;
+  pwrap.style.height = h + 'px';
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  pc.width = Math.round(w*dpr); pc.height = Math.round(Math.max(h,1)*dpr);
+  pc.style.width = w+'px'; pc.style.height = h+'px';
+}
+
+// LED drive is linear and sight is not, so a shell held at 64/255 by
+// the guard is a quarter of the tubes' drive but nothing like a quarter
+// as dim to look at.  Drawn linearly the shell vanishes under the ears
+// and the preview misrepresents every full-helmet preset.  Encode the
+// same way a camera does and the balance matches the photographs.
+const GAMMA = new Uint8Array(256);
+for(let i=0;i<256;i++) GAMMA[i] = Math.round(255*Math.pow(i/255, 0.45));
+
+function paint(buf){
+  if(!LAY || !prevOn || pc.height < 4) return;
+  const W = pc.width, H = pc.height, dpr = W / (pwrap.clientWidth||1);
+  pctx.fillStyle = '#06060a'; pctx.fillRect(0,0,W,H);
+  // the unlit LEDs first, so the helmet keeps its shape when it is dark
+  pctx.fillStyle = '#1c1c26';
+  for(let i=0;i<LAY.n;i++){
+    pctx.beginPath();
+    pctx.arc(LAY.x[i]*W, LAY.y[i]*H, 1.1*dpr*LAY.size[i], 0, 6.2832);
+    pctx.fill();
+  }
+  pctx.globalCompositeOperation = 'lighter';
+  for(let i=0;i<LAY.n;i++){
+    const r = GAMMA[buf[i*3]], g = GAMMA[buf[i*3+1]], b = GAMMA[buf[i*3+2]];
+    if(r+g+b < 9) continue;
+    const x = LAY.x[i]*W, y = LAY.y[i]*H, rad = 2.3*dpr*LAY.size[i];
+    pctx.fillStyle = 'rgb('+r+','+g+','+b+')';
+    pctx.beginPath(); pctx.arc(x, y, rad, 0, 6.2832); pctx.fill();
+  }
+  pctx.globalCompositeOperation = 'source-over';
+}
+
+// Paced by how fast the frames actually come back rather than by a
+// fixed interval: over a tunnel a 10 Hz timer just queues requests it
+// cannot finish, and the preview falls further behind the longer it runs.
+async function frameLoop(){
+  for(;;){
+    if(!prevOn || document.hidden){ await new Promise(r=>setTimeout(r,400)); continue; }
+    const t0 = performance.now();
+    try{
+      const r = await fetch('/api/frame', {cache:'no-store'});
+      paint(new Uint8Array(await r.arrayBuffer()));
+    }catch(e){ await new Promise(r=>setTimeout(r,800)); continue; }
+    const spent = performance.now() - t0;
+    await new Promise(r=>setTimeout(r, Math.max(0, 66 - spent)));
+  }
+}
+
+pwrap.onclick = ()=>{ prevOn = !prevOn; sizePreview();
+  document.getElementById('prevtag').style.display = prevOn ? '' : 'none'; };
+window.addEventListener('resize', sizePreview);
+
+(async()=>{
+  const r = await fetch('/api/state'); S = await r.json(); draw(true);
+  try{
+    LAY = await (await fetch('/api/layout')).json();
+    sizePreview(); frameLoop();
+  }catch(e){ pwrap.style.height = '0px'; }
+})();
 </script>
 </body>
 </html>

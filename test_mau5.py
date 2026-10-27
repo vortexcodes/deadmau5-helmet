@@ -261,6 +261,85 @@ def t_shows():
     note("%d of the show tracks are on this machine" % tracks)
 
 
+def t_floor_holds_the_shape():
+    """A helmet left running must still look like a helmet.
+
+    Weighted shedding gets the priority right and the endpoint wrong:
+    the shell has shed 6, so it reaches zero long before the tubes
+    give up, and anything driven for more than about a minute settles
+    into two glowing stripes.  Each region now has a floor it is not
+    shed below.  Three things have to hold at once: the floor is
+    reached, the thermal budget is still not exceeded, and an LED the
+    preset wanted dark stays dark.
+    """
+    import mau5power, mau5engine as E
+    h = E.Helmet()
+    g = mau5power.load(count=h.n)
+    floors = {r.name: r.floor for r in g.regions}
+    ok(any(v > 0 for v in floors.values()), "no floors configured")
+
+    buf = np.clip(E.make("rainbow").render(h, 1.0, None), 0, 255)
+    out = rep = None
+    for t in range(0, 300, 1):                 # run it into the ground
+        out, rep = g.apply(buf, now=float(t))
+    ok(rep["thermal"]["full_pct"] > 95, "the bucket should be empty by now")
+
+    for r in g.regions:
+        if r.floor <= 0:
+            continue
+        seg = out[r.lo:r.hi + 1].max(1)
+        askseg = buf[r.lo:r.hi + 1].max(1)
+        want = askseg > 0
+        if not want.any():
+            continue
+        ok(seg[want].min() >= r.floor - 1.0,
+           "%s fell to %.1f, below its floor of %.1f"
+           % (r.name, float(seg[want].min()), r.floor))
+
+    ok(rep["watts"] <= 11.0 + 0.4,
+       "sustained draw %.1f W is over the 11 W ceiling" % rep["watts"])
+
+    # a floor must never light something the preset wanted dark
+    dark = np.zeros((h.n, 3))
+    dark[h.tubes] = 255
+    for t in range(300, 340):
+        out, rep = g.apply(dark, now=float(t))
+    eq(int(out[~h.tubes].max()), 0, "the floor lit LEDs the preset wanted dark")
+
+
+def t_power_regions():
+    """The power profile's regions must be the map's regions.
+
+    They drifted once: power.json put the ear tube/rim boundary thirty
+    LEDs early at both ears, so sixty tube LEDs were capped at the rim
+    ceiling and charged against the rim budget.  Nothing failed, the
+    tubes were simply dimmer than intended, which is invisible unless
+    you go looking.  The map is the authority -- the measured
+    colour-order swap lands exactly on its rim span, and a strip
+    boundary is a physical fact.
+    """
+    import itertools, mau5map, mau5power
+    rows = mau5map.load()
+    spans = {}
+    for k, g in itertools.groupby(enumerate(rows), key=lambda t: t[1]["region"]):
+        g = list(g)
+        ok(k not in spans, "region %r is not contiguous in the map" % k)
+        spans[k] = (g[0][0], g[-1][0])
+    g = mau5power.load(count=len(rows))
+    got = {r.name: (r.lo, r.hi) for r in g.regions}
+    eq(sorted(got), sorted(spans), "power.json names different regions")
+    for name, (lo, hi) in spans.items():
+        eq(got[name], (lo, hi), "power.json region %r" % name)
+
+    # and the colour-order correction has to agree about the rims too
+    strips = json.load(open(os.path.join(HERE, "data", "cal", "strips.json")))
+    rim_lo = min(spans[k][0] for k in spans if k.endswith("rim"))
+    rim_hi = max(spans[k][1] for k in spans if k.endswith("rim"))
+    for st in strips["strips"]:
+        eq((st["start"], st["start"] + st["count"] - 1), (rim_lo, rim_hi),
+           "strips.json does not cover exactly the mapped rims")
+
+
 def t_show_player():
     import mau5show
     f = [x for x in os.listdir(mau5show.SHOWS) if x.endswith(".json")]
@@ -619,7 +698,8 @@ GROUPS = {
     "map": [t_map, t_frame, t_masks, t_strip_orientation, t_ears_match],
     "presets": [t_presets, t_preset_params, t_text_bitmap, t_accepts],
     "power": [t_power_budget, t_power_board_limit, t_guard_in_send,
-              t_thermal, t_thermal_never_exceeds],
+              t_thermal, t_thermal_never_exceeds, t_power_regions,
+              t_floor_holds_the_shape],
     "colour": [t_colour_correction],
     "shows": [t_shows, t_show_player, t_crossfade, t_beat_helpers,
               t_analysis_cache],

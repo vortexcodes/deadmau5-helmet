@@ -80,11 +80,29 @@ class Controller:
         self._at = time.monotonic()
         self.playing = False
 
+        # The guard, even with no helmet attached.  The preview is meant
+        # to show what the helmet would do, and what it would do is
+        # clamped: a preset that asks for 55 W and gets 18 looks very
+        # different.  A preview that skipped the guard would flatter
+        # every bright preset and be useless for judging one.
+        self.guard = pix.guard if pix is not None else None
+        if self.guard is None:
+            try:
+                import mau5power
+                self.guard = mau5power.load(count=self.h.n)
+            except Exception:
+                self.guard = None
+        self.last_frame = np.zeros((self.h.n, 3), np.uint8)
+
         self.favourites = _load_favourites()
         self.last_power = None
         self.error = None
         self.stop = False
         self._fps_seen = 0.0
+        # No helmet because none was asked for is a different thing from
+        # a helmet that stopped answering, and the UI should not cry
+        # wolf about the first.
+        self.simulated = wled is None
         self.helmet_ok = wled is not None
         self.helmet_note = None
         threading.Thread(target=self._run, daemon=True).start()
@@ -189,6 +207,13 @@ class Controller:
                 if self.pix is not None:
                     self.pix.send(buf)
                     self.last_power = self.pix.last_power
+                    self.last_frame = self.pix.last_sent
+                elif self.guard is not None:
+                    shown, rep = self.guard.apply(np.clip(buf, 0, 255))
+                    self.last_power = rep
+                    self.last_frame = shown
+                else:
+                    self.last_frame = np.clip(buf, 0, 255).astype(np.uint8)
                 self.error = None
             except Exception as e:
                 # Report it once rather than looping silently: a preset
@@ -251,6 +276,7 @@ class Controller:
             "error": self.error,
             "thermal": p.get("thermal"),
             "helmet_ok": self.helmet_ok, "helmet_note": self.helmet_note,
+            "simulated": self.simulated,
             "governor": p.get("governor_hit"), "ceiling": p.get("ceiling_hit"),
             "presets": sorted(E.REGISTRY),
             "favourites": list(self.favourites),
@@ -259,6 +285,32 @@ class Controller:
             "shows": sorted(f for f in os.listdir(SHOWS) if f.endswith(".json"))
                      if os.path.isdir(SHOWS) else [],
         }
+
+
+def layout(h):
+    """Where to draw each LED, as the camera in front of the helmet sees it.
+
+    Orthographic x across and z up, the same screen frame the glyph
+    presets lay out against, normalised into a 0..1 box with y already
+    flipped for a canvas.  Sent once; the frames that follow are just
+    colours in this order.
+    """
+    x, y = h.px.astype(float), h.py.astype(float)
+    x0, x1 = float(x.min()), float(x.max())
+    y0, y1 = float(y.min()), float(y.max())
+    sx, sy = (x1 - x0) or 1.0, (y1 - y0) or 1.0
+    k = max(sx, sy)
+    return {
+        "n": int(h.n),
+        "x": [round((v - x0) / k + (1 - sx / k) / 2, 4) for v in x],
+        "y": [round(1.0 - ((v - y0) / k + (1 - sy / k) / 2), 4) for v in y],
+        "aspect": round(sx / sy, 4),
+        "region": [str(r) for r in h.region],
+        # the tubes are physically four times brighter per LED than the
+        # shell, so the preview draws them bigger or it lies about the look
+        "size": [2.6 if t else (1.7 if rim else 1.0)
+                 for t, rim in zip(h.tubes.tolist(), h.rims.tolist())],
+    }
 
 
 def _jsonable(d):
@@ -294,6 +346,14 @@ def make_handler(ctl):
                 return self._send(open(p, "rb").read(), "text/html; charset=utf-8")
             if path == "/api/state":
                 return self._send(ctl.state())
+            if path == "/api/layout":
+                return self._send(layout(ctl.h))
+            if path == "/api/frame":
+                # Raw bytes, not JSON: 622 LEDs is 1866 bytes this way
+                # and about 9 kB as a list of numbers, which matters on
+                # a phone pulling it ten times a second.
+                return self._send(ctl.last_frame.astype(np.uint8).tobytes(),
+                                  "application/octet-stream")
             if path.startswith("/audio/"):
                 return self._audio(urllib.parse.unquote(path[len("/audio/"):]))
             self._send({"error": "no route"}, code=404)

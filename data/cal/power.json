@@ -15,40 +15,45 @@
    "lo": 0,
    "hi": 398,
    "ceiling": 64,
-   "budget_ma": 300.0,
-   "shed": 6.0
+   "budget_ma": 300,
+   "shed": 6.0,
+   "floor": 3.0
   },
   {
    "name": "ear1_tubes",
    "lo": 399,
-   "hi": 461,
+   "hi": 491,
    "ceiling": 255,
-   "budget_ma": 560.0,
-   "shed": 1.0
+   "budget_ma": 620,
+   "shed": 1.0,
+   "floor": 6.0
   },
   {
    "name": "ear1_rim",
-   "lo": 462,
+   "lo": 492,
    "hi": 510,
    "ceiling": 160,
-   "budget_ma": 260.0,
-   "shed": 3.0
+   "budget_ma": 200,
+   "shed": 3.0,
+   "floor": 5.0
   },
   {
    "name": "ear2_rim",
    "lo": 511,
-   "hi": 557,
+   "hi": 527,
    "ceiling": 160,
-   "budget_ma": 250.0,
-   "shed": 3.0
+   "budget_ma": 190,
+   "shed": 3.0,
+   "floor": 5.0
   },
   {
    "name": "ear2_tubes",
-   "lo": 558,
+   "lo": 528,
    "hi": 621,
    "ceiling": 255,
-   "budget_ma": 580.0,
-   "shed": 1.0
+   "budget_ma": 640,
+   "shed": 1.0,
+   "floor": 6.0
   }
  ]
 }
