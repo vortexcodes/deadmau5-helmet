@@ -1,0 +1,313 @@
+# SUPERSEDED -- kept for reference only.
+#
+# This describes the CAD helmet: a full sphere, 1185 pixels, two
+# chains, driven by a Pi running FPP.  The helmet that exists is
+# 623 WS2815 on one chain straight into WLED.  Nothing on the
+# current path reads this file.
+#
+# The real geometry lives in data/cal/pixel_map.csv (built by
+# mau5map.py from the CAD plus the camera calibration), and the
+# thermal limits in data/cal/power.json.
+#
+# helmet.toml -- the single source of truth for the mau5head show system.
+#
+# Every tool reads this file: mau5sim, mau5build, mau5fx, setup/make_wled_config.py
+# and setup/fpp_setup.sh.  Change a number here and everything downstream follows.
+#
+# Units: millimetres and degrees unless a key says otherwise.
+#
+# Coordinate frame (shared with mau5head_sim_backdrop.glb):
+#     origin = sphere centre,  +Z up,  -Y front,  +/-X = the visor pivot axis.
+#     azimuth 0 deg = front (-Y), increasing towards +X.
+#     elevation 0 deg = equator, +90 = crown.
+
+[show]
+fps            = 40          # FPP default step time = 25 ms
+data_dir       = "data"      # pixel_map.csv / wiring_chained.csv live here
+shows_dir      = "shows"     # built .fseq / .mp4 / playlist json land here
+color_order    = "GRB"       # WS2815 -- affects nothing in the sim, only WLED export
+
+# ---------------------------------------------------------------- shell -----
+[shell]
+sphere_radius_mm    = 177.17
+channels            = 68     # vertical channels around the sphere
+rows                = 22     # grid rows; no single channel carries all 22
+channel_pitch_mm    = 16.37  # 68 * 16.37 = 1113.2 mm = 2*pi*177.17  (exact)
+row_pitch_mm        = 16.67  # 60 LED/m strip pitch
+row_pitch_deg       = 5.51   # AUTHORITATIVE for placement -- see README "geometry"
+bottom_row_elev_deg = -49.59 # elevation of row 0; row 21 lands on +66.12
+expected_pixels     = 1185   # what the measured geometry currently produces.
+                             # Any change to the cutouts or the row grid that
+                             # moves this gets flagged instead of sliding by.
+pixel_size_mm       = 10.0   # drawn size of one pixel in the simulator
+
+# Recessed-pixel density falls off near the crown, because the channels converge.
+[shell.density]
+full_to_deg    = 54.0   #      elev <= 54 : every channel
+half_to_deg    = 65.0   # 54 < elev <= 65 : every 2nd channel
+quarter_to_deg = 76.0   # 65 < elev <= 76 : every 4th channel
+
+# Cutouts: grid cells that carry no pixel.
+#
+# The two "profile" cutouts below are MEASURED off mau5head_sim_backdrop.glb --
+# the file being printed -- not invented.  Each row is
+#     [channel, elevation_low, elevation_high]
+# and `mirror = true` pairs channel n with channel 68-n, the same azimuth on the
+# other side of the face.  Both were read as the elevation band where the shell
+# surface drops ~11 mm below the sphere (the visor pocket) or disappears
+# entirely (the ear mount bosses).  Re-measure any time with:
+#     python3 mau5cfg.py --measure
+#
+# Note the visor slot NARROWS as it goes down: -30 deg at the face, -4.5 deg at
+# the temples.  That is why the top row of chin pixels follows a slanted line
+# rather than a straight row, and why there are four full rows of pixels
+# underneath it.
+
+# The blocks below are GENERATED from the printed geometry, not invented:
+#     python3 mau5cfg.py --measure > blocks.txt
+# Each row is [channel, elevation_low, elevation_high]; `mirror = true` pairs
+# channel n with 68-n, the same azimuth on the other side of the face.  A pocket
+# in the shell deeper than 6 mm reads as "no pixel here" (a pixel recess is only
+# a couple of mm; the visor pocket is 11).  Only mirror-symmetric pockets are
+# kept -- one that appears on a single side is decimation noise.
+#
+# Note the visor slot NARROWS going down: -30 deg at the face, -4.5 deg at the
+# temples.  That is why the top row of chin pixels follows a slanted line rather
+# than a straight row, and why four full rows of pixels sit underneath it.
+
+[[shell.cutout]]
+name = "visor_slot"
+kind = "profile"
+mirror = true
+margin_deg = 0.0
+bands = [
+  [ 0,  -30.0,    8.5],   # azimuth   +0.0
+  [ 1,  -30.0,    8.5],   # azimuth   +5.3
+  [ 2,  -29.5,    8.5],   # azimuth  +10.6
+  [ 3,  -29.0,    8.0],   # azimuth  +15.9
+  [ 4,  -28.0,    8.0],   # azimuth  +21.2
+  [ 5,  -36.0,  -34.0],   # azimuth  +26.5
+  [ 5,  -30.5,    6.0],   # azimuth  +26.5
+  [ 6,  -34.5,  -33.0],   # azimuth  +31.8
+  [ 6,  -29.0,    6.5],   # azimuth  +31.8
+  [ 6,   10.0,   12.0],   # azimuth  +31.8
+  [ 7,  -27.5,    6.5],   # azimuth  +37.1
+  [ 8,  -25.5,    6.0],   # azimuth  +42.4
+  [ 9,  -23.0,    5.0],   # azimuth  +47.6
+  [10,  -20.5,    4.5],   # azimuth  +52.9
+  [11,  -18.0,    3.5],   # azimuth  +58.2
+  [12,  -15.0,    3.0],   # azimuth  +63.5
+  [13,  -12.5,    2.0],   # azimuth  +68.8
+  [14,   -8.0,    1.5],   # azimuth  +74.1
+  [15,   -4.5,    0.0],   # azimuth  +79.4
+  [16,   -2.0,   -0.5],   # azimuth  +84.7
+  [17,   -3.0,    3.0],   # azimuth  +90.0
+]
+
+[[shell.cutout]]
+name = "chin_vent"
+kind = "profile"
+mirror = true
+margin_deg = 0.0
+bands = [
+  [ 0,  -44.0,  -37.5],   # azimuth   +0.0
+  [ 1,  -43.5,  -37.0],   # azimuth   +5.3
+]
+
+[[shell.cutout]]
+name = "ear_mounts"
+kind = "profile"
+mirror = true
+margin_deg = 0.0
+bands = [
+  [20,   34.5,   38.0],   # azimuth +105.9
+  [20,   41.0,   44.5],   # azimuth +105.9
+  [20,   48.5,   53.0],   # azimuth +105.9
+  [21,   35.5,   42.5],   # azimuth +111.2
+  [21,   48.0,   51.5],   # azimuth +111.2
+  [22,   32.0,   47.5],   # azimuth +116.5
+  [23,   30.0,   34.5],   # azimuth +121.8
+  [23,   37.5,   40.0],   # azimuth +121.8
+  [23,   43.0,   47.0],   # azimuth +121.8
+  [24,   44.0,   47.5],   # azimuth +127.1
+  [25,   44.5,   47.0],   # azimuth +132.4
+]
+
+# not applied -- 14 pocket(s) that do not match a known feature or
+# are not mirrored, so they read as decimation noise:
+#   ch  1  az    +5.3    15.0..16.5    (no matching feature)
+#   ch  2  az   +10.6    14.5..16.0    (no matching feature)
+#   ch  4  az   +21.2    13.0..16.0    (no matching feature)
+#   ch  7  az   +37.1    73.5..77.5    (no matching feature)
+#   ch 10  az   +52.9    73.5..77.5    (no matching feature)
+#   ch 24  az  +127.1    74.0..77.5    (no matching feature)
+#   ch 27  az  +142.9    73.5..77.5    (no matching feature)
+#   ch 41  az  -142.9    73.5..77.5    (no matching feature)
+#   ch 44  az  -127.1    73.5..77.5    (no matching feature)
+#   ch 58  az   -52.9    73.5..77.5    (no matching feature)
+#   ch 61  az   -37.1    73.5..77.5    (no matching feature)
+#   ch 64  az   -21.2    13.5..16.0    (no matching feature)
+#   ch 66  az   -10.6    14.5..16.0    (no matching feature)
+#   ch 67  az    -5.3    15.0..16.5    (no matching feature)
+
+# ------------------------------------------------------------- wiring -------
+# The shell is one serpentine walk: start at start_az_deg, step around the
+# sphere, alternate each channel bottom-up / top-down.  The walk is then cut
+# into the two WLED outputs at the LED counts below, so the counts in this
+# file are always exactly what the controller is configured for.
+[wiring]
+start_az_deg = 90.0      # data enters at the right-hand visor pivot
+az_direction = 1         # +1 = walk towards the back
+first_channel_up = true  # first channel runs bottom -> top
+
+[[output]]
+name  = "A"
+gpio  = 16
+role  = "shell_back"
+count = 686              # shell pixels carried by this output.
+                         # Was 549 before the chin pixels went in; this is a
+                         # HARDWARE fact -- it must match where you actually
+                         # cut the strip.  mau5cfg --verify checks it.
+
+[[output]]
+name  = "B"
+gpio  = 17               # NOT GPIO3 -- that is RX0, shared with the serial console
+role  = "shell_front"
+count = 499              # shell pixels; every accessory below is chained after
+
+# WS2815 clocks at 800 kHz = 30 us per LED, so output B's 957 LEDs need
+# 28.7 ms per refresh -- more than the 25 ms a 40 fps frame gets.  With the
+# chin pixels in the map this is no longer marginal: that output cannot keep
+# up, and the controller will quietly refresh it slower than the show runs.
+# The fix is hardware.  Uncomment the block below, add `fixtures = []` to
+# output B, and move the accessory data line off the end of the front shell
+# onto GPIO 18.  That splits the load three ways, all
+# inside the frame.  Run `python3 mau5cfg.py --verify` to confirm.
+# (Current numbers: 686 / 499 / 458 = 20.6 / 15.0 / 13.7 ms.)
+#
+# [[output]]
+# name  = "C"
+# gpio  = 18
+# role  = "accessories"
+# count = 0
+# fixtures = ["ERR", "ETR1", "ETR2", "ETR3", "VT01", "VB01",
+#             "ERL", "ETL1", "ETL2", "ETL3"]
+
+# Accessories, in the order they are chained after the front shell on output B.
+# Counts are estimates until the strips are cut -- change them here only.
+[[fixture]]
+id = "ERR"
+name = "right ear rim"
+kind = "ring"
+count = 59
+centre = [224.0, 107.5, 215.3]      # circle fitted to the backdrop mesh
+normal = [-0.237, 0.945, -0.225]
+radius_mm = 164.2
+start_angle_deg = 90.0
+direction = 1
+
+[[fixture]]
+id = "ETR1"
+name = "right ear blade 1"
+kind = "blade"
+count = 44
+offset_mm = -115.0          # chord offset from the ear centre, in-plane
+[[fixture]]
+id = "ETR2"
+name = "right ear blade 2"
+kind = "blade"
+count = 62
+offset_mm = 0.0
+[[fixture]]
+id = "ETR3"
+name = "right ear blade 3"
+kind = "blade"
+count = 44
+offset_mm = 115.0
+
+[[fixture]]
+id = "VT01"
+name = "visor top light pipe"
+kind = "arc"
+count = 20
+elev_deg = 4.0
+az_start_deg = -79.0
+az_end_deg = 79.0
+radius_mm = 182.0
+
+[[fixture]]
+id = "VB01"
+name = "visor bottom light pipe"
+kind = "arc"
+count = 20
+elev_deg = -31.0
+az_start_deg = -79.0
+az_end_deg = 79.0
+radius_mm = 182.0
+
+[[fixture]]
+id = "ERL"
+name = "left ear rim"
+kind = "ring"
+count = 59
+centre = [-223.4, 106.7, 215.5]
+normal = [0.242, 0.943, -0.227]
+radius_mm = 164.8
+start_angle_deg = 90.0
+direction = -1
+
+[[fixture]]
+id = "ETL1"
+name = "left ear blade 1"
+kind = "blade"
+count = 44
+offset_mm = -115.0
+[[fixture]]
+id = "ETL2"
+name = "left ear blade 2"
+kind = "blade"
+count = 62
+offset_mm = 0.0
+[[fixture]]
+id = "ETL3"
+name = "left ear blade 3"
+kind = "blade"
+count = 44
+offset_mm = 115.0
+
+# Which ear each blade belongs to (blades are drawn across that ear's disc).
+[fixture_parent]
+ETR1 = "ERR"
+ETR2 = "ERR"
+ETR3 = "ERR"
+ETL1 = "ERL"
+ETL2 = "ERL"
+ETL3 = "ERL"
+
+# ---------------------------------------------------------- controller ------
+[controller]
+name        = "mau5head-wled"
+ip          = "192.168.4.50"
+gateway     = "192.168.4.1"
+netmask     = "255.255.255.0"
+ddp_port    = 4048
+abl_amps    = 8.0
+psu_volts   = 12
+brightness  = 255
+
+# -------------------------------------------------------------- player ------
+[player]
+host        = "192.168.4.1"     # the Pi, which is also the AP
+api         = "http://192.168.4.1/api"
+ssid        = "mau5head"
+audio_out   = "3.5mm"
+sequence_dir = "/home/fpp/media/sequences"
+music_dir    = "/home/fpp/media/music"
+
+# ------------------------------------------------------------ simulator -----
+[sim]
+backdrop_glb   = "mau5head_sim_backdrop.glb"
+backdrop_alpha = 0.18
+background     = "#0d0d10"
+ddp_listen_port = 4048
+mp4_fps        = 40

@@ -1,0 +1,397 @@
+{
+ "count": 1000,
+ "saved": "2026-10-26T23:53:33",
+ "sections": [
+  {
+   "name": "section_1",
+   "start": 6,
+   "end": 12
+  },
+  {
+   "name": "section_2",
+   "start": 13,
+   "end": 18
+  },
+  {
+   "name": "section_3",
+   "start": 19,
+   "end": 23
+  },
+  {
+   "name": "section_4",
+   "start": 24,
+   "end": 27
+  },
+  {
+   "name": "section_5",
+   "start": 28,
+   "end": 31
+  },
+  {
+   "name": "section_6",
+   "start": 32,
+   "end": 34
+  },
+  {
+   "name": "section_7",
+   "start": 35,
+   "end": 37
+  },
+  {
+   "name": "section_8",
+   "start": 38,
+   "end": 40
+  },
+  {
+   "name": "section_9",
+   "start": 41,
+   "end": 41
+  },
+  {
+   "name": "section_10",
+   "start": 42,
+   "end": 42
+  },
+  {
+   "name": "section_11",
+   "start": 43,
+   "end": 43
+  },
+  {
+   "name": "section_12",
+   "start": 44,
+   "end": 44
+  },
+  {
+   "name": "section_13",
+   "start": 45,
+   "end": 45
+  },
+  {
+   "name": "section_14",
+   "start": 46,
+   "end": 46
+  },
+  {
+   "name": "section_15",
+   "start": 47,
+   "end": 47
+  },
+  {
+   "name": "section_16",
+   "start": 48,
+   "end": 48
+  },
+  {
+   "name": "section_17",
+   "start": 49,
+   "end": 49
+  },
+  {
+   "name": "section_18",
+   "start": 50,
+   "end": 50
+  },
+  {
+   "name": "section_19",
+   "start": 51,
+   "end": 51
+  },
+  {
+   "name": "section_20",
+   "start": 52,
+   "end": 53
+  },
+  {
+   "name": "section_21",
+   "start": 54,
+   "end": 55
+  },
+  {
+   "name": "section_22",
+   "start": 56,
+   "end": 58
+  },
+  {
+   "name": "section_23",
+   "start": 59,
+   "end": 61
+  },
+  {
+   "name": "section_24",
+   "start": 62,
+   "end": 65
+  },
+  {
+   "name": "section_25",
+   "start": 66,
+   "end": 69
+  },
+  {
+   "name": "section_26",
+   "start": 70,
+   "end": 74
+  },
+  {
+   "name": "section_27",
+   "start": 75,
+   "end": 80
+  },
+  {
+   "name": "section_28",
+   "start": 81,
+   "end": 87
+  },
+  {
+   "name": "section_29",
+   "start": 88,
+   "end": 93
+  },
+  {
+   "name": "section_30",
+   "start": 94,
+   "end": 102
+  },
+  {
+   "name": "first strip on top from the inside this is on the left from the outside. it's on the right",
+   "start": 103,
+   "end": 114
+  },
+  {
+   "name": "section_32",
+   "start": 115,
+   "end": 123
+  },
+  {
+   "name": "section_33",
+   "start": 124,
+   "end": 134
+  },
+  {
+   "name": "section_34",
+   "start": 135,
+   "end": 143
+  },
+  {
+   "name": "section_35",
+   "start": 144,
+   "end": 154
+  },
+  {
+   "name": "section_36",
+   "start": 155,
+   "end": 162
+  },
+  {
+   "name": "section_37",
+   "start": 163,
+   "end": 172
+  },
+  {
+   "name": "section_38",
+   "start": 173,
+   "end": 173
+  },
+  {
+   "name": "section_39",
+   "start": 174,
+   "end": 178
+  },
+  {
+   "name": "section_40",
+   "start": 179,
+   "end": 183
+  },
+  {
+   "name": "section_41",
+   "start": 184,
+   "end": 186
+  },
+  {
+   "name": "section_42",
+   "start": 187,
+   "end": 194
+  },
+  {
+   "name": "section_43",
+   "start": 195,
+   "end": 203
+  },
+  {
+   "name": "section_44",
+   "start": 204,
+   "end": 210
+  },
+  {
+   "name": "section_45",
+   "start": 211,
+   "end": 219
+  },
+  {
+   "name": "section_46",
+   "start": 220,
+   "end": 226
+  },
+  {
+   "name": "section_47",
+   "start": 227,
+   "end": 237
+  },
+  {
+   "name": "section_48",
+   "start": 238,
+   "end": 244
+  },
+  {
+   "name": "section_49",
+   "start": 245,
+   "end": 253
+  },
+  {
+   "name": "section_50",
+   "start": 254,
+   "end": 260
+  },
+  {
+   "name": "section_51",
+   "start": 261,
+   "end": 270
+  },
+  {
+   "name": "section_52",
+   "start": 271,
+   "end": 277
+  },
+  {
+   "name": "section_53",
+   "start": 278,
+   "end": 286
+  },
+  {
+   "name": "section_54",
+   "start": 287,
+   "end": 293
+  },
+  {
+   "name": "section_55",
+   "start": 294,
+   "end": 303
+  },
+  {
+   "name": "section_56",
+   "start": 304,
+   "end": 304
+  },
+  {
+   "name": "section_57",
+   "start": 305,
+   "end": 309
+  },
+  {
+   "name": "section_58",
+   "start": 310,
+   "end": 314
+  },
+  {
+   "name": "section_59",
+   "start": 315,
+   "end": 317
+  },
+  {
+   "name": "section_60",
+   "start": 318,
+   "end": 325
+  },
+  {
+   "name": "section_61",
+   "start": 326,
+   "end": 335
+  },
+  {
+   "name": "section_62",
+   "start": 336,
+   "end": 344
+  },
+  {
+   "name": "section_63",
+   "start": 345,
+   "end": 355
+  },
+  {
+   "name": "section_64",
+   "start": 356,
+   "end": 364
+  },
+  {
+   "name": "section_65",
+   "start": 365,
+   "end": 376
+  },
+  {
+   "name": "section_66",
+   "start": 377,
+   "end": 377
+  },
+  {
+   "name": "section_67",
+   "start": 377,
+   "end": 386
+  },
+  {
+   "name": "section_68",
+   "start": 387,
+   "end": 397
+  },
+  {
+   "name": "section_69",
+   "start": 398,
+   "end": 398
+  },
+  {
+   "name": "section_70",
+   "start": 398,
+   "end": 425
+  },
+  {
+   "name": "This is the start of the tube or the end of the helmet. I'm not sure exactly which one this will save to",
+   "start": 426,
+   "end": 461
+  },
+  {
+   "name": "section_72",
+   "start": 462,
+   "end": 491
+  },
+  {
+   "name": "section_73",
+   "start": 492,
+   "end": 510
+  },
+  {
+   "name": "Ears for some reason the ears are in chunks of 20 or 10 or something but they are the right color",
+   "start": 511,
+   "end": 529
+  },
+  {
+   "name": "Ears are good. The first ear I did was the one on the right. From being inside the helmet it started on the outside then the LEDs went to the inside. The second ear is the same, where it started on the outside of the helmet, the LEDs went over, and they ended in the center of the helmet",
+   "start": 530,
+   "end": 557
+  },
+  {
+   "name": "section_76",
+   "start": 558,
+   "end": 593
+  },
+  {
+   "name": "section_77",
+   "start": 594,
+   "end": 621
+  },
+  {
+   "name": "This is the end of the tube",
+   "start": 622,
+   "end": 622
+  }
+ ],
+ "note": ""
+}

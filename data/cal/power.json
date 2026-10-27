@@ -1,0 +1,54 @@
+{
+ "count": 622,
+ "budget_ma": 1500.0,
+ "default_ceiling": 32,
+ "thermal": {
+  "sustained_w": 11.0,
+  "burst_j": 900.0,
+  "max_w": 25.5,
+  "standby_w": 7.464,
+  "ramp": 0.3
+ },
+ "regions": [
+  {
+   "name": "shell",
+   "lo": 0,
+   "hi": 398,
+   "ceiling": 64,
+   "budget_ma": 300.0,
+   "shed": 6.0
+  },
+  {
+   "name": "ear1_tubes",
+   "lo": 399,
+   "hi": 461,
+   "ceiling": 255,
+   "budget_ma": 560.0,
+   "shed": 1.0
+  },
+  {
+   "name": "ear1_rim",
+   "lo": 462,
+   "hi": 510,
+   "ceiling": 160,
+   "budget_ma": 260.0,
+   "shed": 3.0
+  },
+  {
+   "name": "ear2_rim",
+   "lo": 511,
+   "hi": 557,
+   "ceiling": 160,
+   "budget_ma": 250.0,
+   "shed": 3.0
+  },
+  {
+   "name": "ear2_tubes",
+   "lo": 558,
+   "hi": 621,
+   "ceiling": 255,
+   "budget_ma": 580.0,
+   "shed": 1.0
+  }
+ ]
+}

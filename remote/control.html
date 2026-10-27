@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0d0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<title>mau5ctl</title>
+<style>
+ :root{--bg:#0d0d10;--card:#17171e;--line:#2a2a35;--fg:#e8e8ef;--dim:#8a8a99;
+       --accent:#00c8ff;--hot:#ff2d6f;--ok:#38d39f;--warn:#ffb020}
+ *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+   -webkit-user-select:none;user-select:none}
+ html,body{margin:0;height:100%;overscroll-behavior:none}
+ body{background:var(--bg);color:var(--fg);display:flex;flex-direction:column;
+      font:16px/1.35 ui-sans-serif,system-ui,-apple-system,Roboto,sans-serif;
+      padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+ header{display:flex;align-items:center;gap:8px;padding:9px 14px;flex:none;
+        border-bottom:1px solid var(--line)}
+ .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
+ .dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+ .dot.err{background:var(--hot)}
+ h1{font-size:14px;margin:0;font-weight:650;letter-spacing:.02em}
+ #pwr{margin-left:auto;font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+ #pwr.cap{color:var(--warn);font-weight:700}
+ nav{display:flex;border-bottom:1px solid var(--line);flex:none}
+ nav button{flex:1;background:none;border:none;color:var(--dim);font-size:14px;
+            font-weight:650;padding:11px 0;border-bottom:2px solid transparent}
+ nav button.sel{color:var(--accent);border-bottom-color:var(--accent)}
+ main{flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch}
+ .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+ .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;
+       padding:14px 6px;text-align:center;font-size:13px;font-weight:650;
+       color:var(--fg);min-height:66px;display:flex;align-items:center;
+       justify-content:center}
+ .tile.sel{background:linear-gradient(180deg,#0097c4,#006c8c);border-color:#0bd;
+           color:#fff}
+ .row{display:flex;gap:9px;align-items:center;margin:11px 0}
+ .lbl{color:var(--dim);font-size:11px;text-transform:uppercase;
+      letter-spacing:.09em;margin:14px 0 6px}
+ input[type=range]{width:100%;height:34px}
+ .showrow{display:flex;align-items:center;gap:10px;background:var(--card);
+          border:1px solid var(--line);border-radius:13px;padding:11px 13px;
+          margin-bottom:9px}
+ .showrow.sel{border-color:var(--accent)}
+ .showrow b{font-size:14px;font-weight:650;flex:1;overflow:hidden;
+            text-overflow:ellipsis;white-space:nowrap}
+ .showrow span{font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums}
+ #transport{flex:none;border-top:1px solid var(--line);padding:10px 12px;
+            background:#111118}
+ #bar{height:5px;background:#000;border-radius:3px;overflow:hidden;margin-bottom:9px}
+ #fill{height:100%;width:0;background:var(--accent)}
+ .tbtns{display:flex;gap:9px}
+ .tbtns button{flex:1;min-height:52px;border-radius:13px;border:1px solid var(--line);
+               background:#20202a;color:var(--fg);font-size:16px;font-weight:700}
+ #playbtn{background:linear-gradient(180deg,#2a6a3f,#1d4c2d);border-color:#2f7a49;
+          color:#d8ffe8;flex:2}
+ #playbtn.on{background:linear-gradient(180deg,#8a5a10,#5c3c08);border-color:#a8701a;
+             color:#ffe9c2}
+ #blackout{background:#3a1020;border-color:#5a1c33;color:#ffb9cd}
+ .swatches{display:flex;gap:8px;flex-wrap:wrap}
+ .sw{width:46px;height:46px;border-radius:12px;border:2px solid #0006}
+ .sw.sel{border-color:#fff}
+ .note{font-size:12px;color:var(--dim);margin-top:4px}
+ .prow{display:flex;align-items:center;gap:10px;margin:7px 0}
+ .prow label{width:88px;font-size:12px;color:var(--dim);flex:none;
+             text-transform:uppercase;letter-spacing:.06em}
+ .prow input[type=range]{flex:1}
+ .prow output{width:54px;text-align:right;font-size:12px;color:var(--fg);
+              font-variant-numeric:tabular-nums}
+ .toggle{min-height:38px;padding:0 18px;border-radius:10px;border:1px solid var(--line);
+         background:#20202a;color:var(--dim);font-weight:700;font-size:13px}
+ .toggle.on{background:var(--accent);color:#04202a;border-color:var(--accent)}
+ .favs{display:flex;flex-wrap:wrap;gap:8px}
+ .fav{display:flex;align-items:center;gap:8px;background:#12252c;
+      border:1px solid #1d3f4a;border-radius:11px;padding:9px 11px;
+      color:#a9e6f7;font-size:13px;font-weight:650}
+ .fav i{font-style:normal;color:#ff7fa5;font-size:17px;padding:0 2px}
+ .txt{flex:1;min-height:40px;border-radius:10px;border:1px solid var(--line);
+      background:#0e0e14;color:var(--fg);font-size:15px;padding:0 11px;
+      -webkit-user-select:text;user-select:text}
+ #cue{font-size:12px;color:var(--accent);font-weight:650;min-height:16px}
+</style>
+</head>
+<body>
+<header><span class="dot" id="dot"></span><h1>mau5ctl</h1><span id="pwr">--</span></header>
+<nav>
+  <button data-tab="presets" class="sel">PRESETS</button>
+  <button data-tab="shows">SHOWS</button>
+  <button data-tab="settings">SET</button>
+</nav>
+<main id="main"></main>
+<div id="transport">
+  <div id="cue"></div>
+  <div id="bar"><div id="fill"></div></div>
+  <div class="tbtns">
+    <button id="playbtn">PLAY</button>
+    <button id="back">&minus;15</button>
+    <button id="blackout">OFF</button>
+  </div>
+</div>
+<audio id="au" preload="auto"></audio>
+<script>
+let S = null, tab = 'presets', colour = [255,160,0], busy = false;
+const au = document.getElementById('au');
+const COLOURS = [[255,40,0],[255,160,0],[255,255,255],[0,220,255],
+                 [0,255,140],[120,0,255],[255,0,120],[255,230,180]];
+
+const rgb = c => 'rgb('+c[0]+','+c[1]+','+c[2]+')';
+const mmss = s => (s<0?0:Math.floor(s/60))+':'+String(Math.floor(s%60)).padStart(2,'0');
+
+async function post(path, body){
+  try{
+    const r = await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},
+                               body:JSON.stringify(body||{})});
+    S = await r.json(); draw();
+  }catch(e){ document.getElementById('dot').className='dot err'; }
+}
+
+// Rebuilding main on every poll would steal focus from a slider the
+// user is dragging and reset it mid-gesture.  So the status line always
+// refreshes, but the panel only when something it shows has changed and
+// nothing in it is being touched.
+function sig(){
+  return JSON.stringify([tab, S.mode, S.preset, S.show, S.presets.length,
+                         S.shows, S.spec && S.spec.map(d=>d.name),
+                         tab==='presets' ? S.params : null,
+                         tab==='settings' ? S.brightness : null]);
+}
+let lastSig = null;
+
+function draw(force){
+  if(!S) return;
+  const dot = document.getElementById('dot');
+  dot.className = (S.helmet_ok === false) ? 'dot err' : 'dot on';
+  dot.title = S.helmet_note || '';
+  const p = document.getElementById('pwr');
+  p.textContent = (S.amps!=null ? S.amps.toFixed(2)+' A · '+S.watts.toFixed(0)+' W' : '--');
+  p.className = (S.governor||S.ceiling||S.helmet_ok===false) ? 'cap' : '';
+  if(S.helmet_ok === false) p.textContent = 'helmet unreachable';
+  else if(S.thermal){
+    const th = S.thermal;
+    p.textContent = (S.amps!=null ? S.amps.toFixed(2)+' A' : '--')
+      + ' \u00b7 heat ' + Math.round(th.full_pct) + '%';
+    if(th.full_pct > 80) p.className = 'cap';
+  }
+  document.getElementById('cue').textContent =
+    S.mode==='show' ? (S.show||'')+(S.cue?'  —  '+S.cue:'') : (S.preset||'');
+  document.getElementById('fill').style.width =
+    (S.duration ? 100*Math.min(1,S.t/S.duration) : 0)+'%';
+  document.getElementById('playbtn').textContent =
+    S.mode==='show' ? (au.paused ? 'PLAY' : 'PAUSE') : 'LIVE';
+  document.getElementById('playbtn').className = au.paused ? '' : 'on';
+
+  const m = document.getElementById('main');
+  const touching = m.contains(document.activeElement) &&
+                   document.activeElement !== document.body;
+  const sg = sig();
+  if(!force && sg === lastSig) return;
+  if(touching && !force) return;
+  lastSig = sg;
+  if(tab==='presets'){
+    const spec = (S.mode==='preset' && S.spec) ? S.spec : [];
+    m.innerHTML = '<div class="grid">' + S.presets.map(n=>
+      `<div class="tile${S.mode==='preset'&&S.preset===n?' sel':''}" data-p="${n}">${n}</div>`
+    ).join('') + '</div>' +
+    '<div class="lbl">colour</div><div class="swatches">' + COLOURS.map((c,i)=>
+      `<div class="sw${rgb(c)===rgb(colour)?' sel':''}" data-c="${i}" style="background:${rgb(c)}"></div>`
+    ).join('') + '</div>' +
+    ((S.favourites && S.favourites.length) ?
+      '<div class="lbl">saved</div><div class="favs">' + S.favourites.map(f=>
+        `<div class="fav" data-f="${f.label}"><b>${f.label}</b>
+         <i data-x="${f.label}">&times;</i></div>`).join('') + '</div>' : '') +
+    (spec.length ? '<div class="lbl">'+S.preset+' settings</div>' + spec.map(d=>{
+      const cur = S.params[d.name];
+      if(d.kind==='number')
+        return `<div class="prow"><label>${d.name}</label>
+          <input type="range" data-n="${d.name}" min="${d.min}" max="${d.max}"
+                 step="${d.step}" value="${cur}">
+          <output id="o_${d.name}">${(+cur).toFixed(2)}</output></div>`;
+      if(d.kind==='bool')
+        return `<div class="prow"><label>${d.name}</label>
+          <button class="toggle${cur?' on':''}" data-b="${d.name}">${cur?'ON':'OFF'}</button></div>`;
+      if(d.kind==='text')
+        return `<div class="prow"><label>${d.name}</label>
+          <input class="txt" type="text" data-t="${d.name}" value="${String(cur).replace(/"/g,'&quot;')}"></div>`;
+      return '';
+    }).join('') +
+      `<div class="prow"><label>save as</label>
+       <input class="txt" type="text" id="favname" placeholder="name this look">
+       <button class="toggle on" id="savefav">SAVE</button></div>`
+     : '<div class="note">Tap a preset to tune it.</div>');
+
+    m.querySelectorAll('[data-p]').forEach(el=>el.onclick=()=>
+      post('/api/preset',{name:el.dataset.p, params:{color:colour}}));
+    m.querySelectorAll('[data-c]').forEach(el=>el.onclick=()=>{
+      colour = COLOURS[+el.dataset.c];
+      if(S.mode==='preset'&&S.preset) edit({color:colour}); else draw();
+    });
+    m.querySelectorAll('[data-n]').forEach(el=>{
+      el.oninput = ()=>{ document.getElementById('o_'+el.dataset.n).textContent =
+                           (+el.value).toFixed(2); };
+      el.onchange = ()=>edit({[el.dataset.n]: +el.value});
+    });
+    m.querySelectorAll('[data-b]').forEach(el=>el.onclick=()=>
+      edit({[el.dataset.b]: !(S.params[el.dataset.b])}));
+    m.querySelectorAll('[data-t]').forEach(el=>{
+      el.onchange = ()=>edit({[el.dataset.t]: el.value});
+      el.onkeydown = e=>{ if(e.key==='Enter') el.blur(); };
+    });
+    m.querySelectorAll('[data-f]').forEach(el=>el.onclick=e=>{
+      if(e.target.dataset.x) return;
+      post('/api/recall', {label: el.dataset.f});
+    });
+    m.querySelectorAll('[data-x]').forEach(el=>el.onclick=e=>{
+      e.stopPropagation();
+      post('/api/forget', {label: el.dataset.x});
+    });
+    const sb = document.getElementById('savefav');
+    if(sb) sb.onclick = ()=>{
+      const f = document.getElementById('favname');
+      if(f && f.value.trim()){ post('/api/save', {label: f.value.trim()});
+                               f.value = ''; }
+    };
+  } else if(tab==='shows'){
+    m.innerHTML = S.shows.map(n=>
+      `<div class="showrow${S.show===n?' sel':''}" data-s="${n}"><b>${n.replace(/\.json$/,'')}</b>
+       <span>${S.show===n?mmss(S.t)+' / '+mmss(S.duration):''}</span></div>`
+    ).join('') || '<div class="note">No shows built yet.</div>';
+    m.querySelectorAll('[data-s]').forEach(el=>el.onclick=()=>loadShow(el.dataset.s));
+  } else {
+    m.innerHTML =
+      '<div class="lbl">master brightness</div>'+
+      `<input type="range" id="bri" min="0" max="100" value="${Math.round((S.brightness||0)*100)}">`+
+      `<div class="note">Scales everything before the power guard. The guard still
+       caps the helmet at its own budget, so this can only make it dimmer.</div>`+
+      '<div class="lbl">audio output</div>'+
+      '<div class="note">The track plays on this phone, so it goes wherever this '+
+      'phone is pointed — pair your Bluetooth speaker in Android settings and '+
+      'it follows automatically. The helmet follows the audio, not the other way round.</div>'+
+      '<div class="lbl">heat</div>'+
+      (S.thermal ? `<div class="note">The helmet is allowed
+        ${S.thermal.sustained_w} W indefinitely and bursts above it on
+        ${S.thermal.burst_j} J of thermal mass. Bucket
+        <b>${Math.round(S.thermal.full_pct)}% full</b>, currently allowing
+        <b>${S.thermal.allowance_w} W</b> of LED. Quiet passages refill it.
+        ${S.thermal.standby_w} W of that is standby, which no setting here
+        can reduce.</div>` : '<div class="note">No thermal budget loaded.</div>')+
+      '<div class="lbl">status</div>'+
+      `<div class="note">mode ${S.mode} · ${S.presets.length} presets ·
+       ${S.shows.length} shows${S.governor?' · GOVERNOR ACTIVE':''}</div>`;
+    const b = document.getElementById('bri');
+    b.oninput = ()=>{ if(!busy){ busy=true;
+      post('/api/brightness',{value:b.value/100}).finally(()=>busy=false); } };
+  }
+}
+
+// change one parameter without losing the others
+function edit(delta){
+  const params = Object.assign({}, S.params || {}, delta);
+  return post('/api/preset', {name: S.preset, params});
+}
+
+async function loadShow(name){
+  await post('/api/show',{name});
+  const r = await fetch('/api/state'); S = await r.json();
+  // use the show's own track field -- the json and the mp3 do not have
+  // to share a name, and guessing one from the other breaks silently
+  if(S.track){ au.src = '/audio/' + encodeURIComponent(S.track); }
+  au.currentTime = 0;
+  draw();
+}
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel'); tab = b.dataset.tab; draw(true);
+});
+document.getElementById('playbtn').onclick = ()=>{
+  if(S && S.mode==='show'){ au.paused ? au.play() : au.pause(); }
+};
+document.getElementById('back').onclick = ()=>{ au.currentTime = Math.max(0, au.currentTime-15); };
+document.getElementById('blackout').onclick = ()=>{ au.pause(); post('/api/off'); };
+
+au.onplay  = ()=>post('/api/clock',{t:au.currentTime, playing:true});
+au.onpause = ()=>post('/api/clock',{t:au.currentTime, playing:false});
+au.onseeked= ()=>post('/api/clock',{t:au.currentTime, playing:!au.paused});
+setInterval(()=>{ if(!au.paused) post('/api/clock',{t:au.currentTime, playing:true}); }, 400);
+setInterval(async ()=>{
+  try{ const r = await fetch('/api/state'); S = await r.json(); draw(); }
+  catch(e){ document.getElementById('dot').className='dot err'; }
+}, 1500);
+
+(async()=>{ const r = await fetch('/api/state'); S = await r.json(); draw(true); })();
+</script>
+</body>
+</html>

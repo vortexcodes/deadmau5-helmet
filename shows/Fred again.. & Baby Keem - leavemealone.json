@@ -1,0 +1,131 @@
+{
+ "track": "Fred again.. & Baby Keem - leavemealone.mp3",
+ "fps": 40,
+ "duration": 222.76,
+ "bpm": 174.02,
+ "beats": 646,
+ "analysis": "Fred again.. & Baby Keem - leavemealone.analysis.npz",
+ "fade": 0.6,
+ "accent": true,
+ "cues": [
+  {
+   "start": 0.416,
+   "end": 33.515,
+   "preset": "scanner",
+   "params": {
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 33.515,
+   "end": 66.614,
+   "preset": "wipe",
+   "params": {
+    "a": [
+     0,
+     180,
+     255
+    ],
+    "b": [
+     120,
+     0,
+     255
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 66.614,
+   "end": 88.681,
+   "preset": "fire",
+   "params": {
+    "speed": 1.8
+   },
+   "level": 3
+  },
+  {
+   "start": 88.681,
+   "end": 110.747,
+   "preset": "rainbow",
+   "params": {
+    "period": 2.5
+   },
+   "level": 3
+  },
+  {
+   "start": 110.747,
+   "end": 116.263,
+   "preset": "police",
+   "params": {},
+   "level": 3
+  },
+  {
+   "start": 116.263,
+   "end": 138.33,
+   "preset": "gradient",
+   "params": {
+    "period": 14.0,
+    "a": [
+     255,
+     40,
+     0
+    ],
+    "b": [
+     255,
+     150,
+     0
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 138.33,
+   "end": 154.879,
+   "preset": "heartbeat",
+   "params": {
+    "color": [
+     0,
+     180,
+     255
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 154.879,
+   "end": 176.945,
+   "preset": "wave",
+   "params": {
+    "period": 5.0,
+    "length": 0.8,
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 176.945,
+   "end": 199.012,
+   "preset": "plasma",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 199.012,
+   "end": 222.457,
+   "preset": "rainbow",
+   "params": {
+    "period": 6.0
+   },
+   "level": 2
+  }
+ ]
+}

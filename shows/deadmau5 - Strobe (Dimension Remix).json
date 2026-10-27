@@ -1,0 +1,192 @@
+{
+ "track": "deadmau5 - Strobe (Dimension Remix).mp3",
+ "fps": 40,
+ "duration": 308.97,
+ "bpm": 174.0,
+ "beats": 896,
+ "analysis": "deadmau5 - Strobe (Dimension Remix).analysis.npz",
+ "fade": 0.6,
+ "accent": true,
+ "cues": [
+  {
+   "start": 1.037,
+   "end": 23.106,
+   "preset": "scanner",
+   "params": {
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 23.106,
+   "end": 34.141,
+   "preset": "twinkle",
+   "params": {
+    "color": [
+     0,
+     180,
+     255
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 34.141,
+   "end": 50.693,
+   "preset": "comet",
+   "params": {
+    "period": 4.0,
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 50.693,
+   "end": 67.245,
+   "preset": "tubepulse",
+   "params": {
+    "color": [
+     0,
+     255,
+     140
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 67.245,
+   "end": 94.831,
+   "preset": "earspin",
+   "params": {
+    "period": 2.4,
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 94.831,
+   "end": 116.901,
+   "preset": "chase",
+   "params": {
+    "period": 2.2,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 116.901,
+   "end": 150.005,
+   "preset": "split",
+   "params": {
+    "shell": "plasma",
+    "ears": "chase"
+   },
+   "level": 2
+  },
+  {
+   "start": 150.005,
+   "end": 177.591,
+   "preset": "wave",
+   "params": {
+    "period": 1.6,
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 2
+  },
+  {
+   "start": 177.591,
+   "end": 199.66,
+   "preset": "breathe",
+   "params": {
+    "period": 8.0,
+    "color": [
+     0,
+     255,
+     140
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 199.66,
+   "end": 221.73,
+   "preset": "twinkle",
+   "params": {
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 221.73,
+   "end": 238.282,
+   "preset": "fire",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 238.282,
+   "end": 260.351,
+   "preset": "eq",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 260.351,
+   "end": 282.42,
+   "preset": "comet",
+   "params": {
+    "period": 1.6,
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 2
+  },
+  {
+   "start": 282.42,
+   "end": 287.937,
+   "preset": "vu",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 287.937,
+   "end": 308.627,
+   "preset": "heartbeat",
+   "params": {
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 0
+  }
+ ]
+}

@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>mau5remote</title>
+<!--
+  mau5remote -- one file, no build step, no internet.
+
+  Install on the Pi so it is same-origin with the API (no CORS to fight):
+      scp remote/index.html fpp@<pi>:/tmp/mau5.html
+      ssh fpp@<pi> 'sudo cp /tmp/mau5.html /opt/fpp/www/mau5.html'
+  then open  http://<pi>/mau5.html  on the phone and add it to the home screen.
+
+  Opened from anywhere else it still works if you type the Pi's address into
+  the host box -- FPP has to be sending CORS headers for that, which not every
+  release does.  Serving it from the Pi avoids the question entirely.
+
+  An FPP upgrade replaces /opt/fpp/www, so re-copy after upgrading.
+-->
+<style>
+  :root{
+    --bg:#0d0d10; --card:#17171e; --line:#26262f; --fg:#e8e8ef; --dim:#8a8a99;
+    --accent:#00c8ff; --hot:#ff2d6f; --ok:#38d39f; --warn:#ffb020;
+    --tap:64px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:16px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right)
+            env(safe-area-inset-bottom) env(safe-area-inset-left);
+    display:flex; flex-direction:column; overscroll-behavior:none;
+  }
+  header{
+    display:flex; align-items:center; gap:10px; padding:14px 16px 10px;
+    border-bottom:1px solid var(--line);
+  }
+  h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.02em}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--dim);flex:none;
+       transition:background .2s}
+  .dot.on{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+  .dot.err{background:var(--hot);box-shadow:0 0 10px var(--hot)}
+  #hostbtn{margin-left:auto;background:none;border:1px solid var(--line);
+           color:var(--dim);border-radius:8px;padding:8px 10px;font-size:12px}
+
+  #now{padding:14px 16px;border-bottom:1px solid var(--line);background:var(--card)}
+  #title{font-size:20px;font-weight:650;margin:0 0 2px;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #sub{color:var(--dim);font-size:13px;min-height:18px}
+  #bar{height:6px;border-radius:3px;background:#000;margin:12px 0 6px;overflow:hidden}
+  #fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--hot));
+        transition:width .35s linear}
+  #times{display:flex;justify-content:space-between;color:var(--dim);
+         font-size:12px;font-variant-numeric:tabular-nums}
+
+  main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 12px 12px}
+  .row{
+    display:flex;align-items:center;gap:12px;width:100%;min-height:var(--tap);
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    color:var(--fg);font-size:18px;font-weight:600;text-align:left;
+    padding:12px 16px;margin:8px 0;
+  }
+  .row:active{background:#20202a;transform:scale(.99)}
+  .row .play{color:var(--accent);font-size:20px;flex:none}
+  .row.playing{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .row.playing .play{color:var(--ok)}
+  .muted{color:var(--dim);font-size:14px;font-weight:400;padding:18px 6px;text-align:center}
+
+  footer{border-top:1px solid var(--line);padding:10px 12px 14px;background:var(--card)}
+  .btns{display:flex;gap:10px}
+  button.act{
+    flex:1;min-height:var(--tap);border-radius:14px;border:1px solid var(--line);
+    background:#20202a;color:var(--fg);font-size:16px;font-weight:650;
+  }
+  button.act:active{filter:brightness(1.35)}
+  button.stop{background:#3a1020;border-color:#5a1c33;color:#ffb9cd}
+  button.grace{background:#12252c;border-color:#1d3f4a;color:#a9e6f7}
+  .vol{display:flex;align-items:center;gap:12px;margin-top:12px}
+  .vol span{color:var(--dim);font-size:12px;width:34px;text-align:right;
+            font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1;height:var(--tap);accent-color:var(--accent);background:none}
+
+  dialog{background:var(--card);color:var(--fg);border:1px solid var(--line);
+         border-radius:16px;padding:18px;width:min(90vw,340px)}
+  dialog::backdrop{background:#000a}
+  dialog input{width:100%;min-height:48px;font-size:16px;margin:10px 0 14px;
+               background:#0b0b0f;color:var(--fg);border:1px solid var(--line);
+               border-radius:10px;padding:0 12px}
+  dialog .btns button{min-height:48px}
+  #toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));
+         transform:translateX(-50%);background:#000d;border:1px solid var(--line);
+         color:var(--fg);padding:10px 16px;border-radius:12px;font-size:14px;
+         opacity:0;transition:opacity .25s;pointer-events:none;max-width:88vw}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dot" id="dot"></span>
+  <h1>mau5head</h1>
+  <button id="hostbtn">host</button>
+</header>
+
+<section id="now">
+  <p id="title">—</p>
+  <div id="sub">not connected</div>
+  <div id="bar"><div id="fill"></div></div>
+  <div id="times"><span id="tel">0:00</span><span id="trem">-0:00</span></div>
+</section>
+
+<main id="list"><p class="muted">looking for the Pi…</p></main>
+
+<footer>
+  <div class="btns">
+    <button class="act stop"  id="stop">stop now</button>
+    <button class="act grace" id="grace">stop after</button>
+  </div>
+  <div class="vol">
+    <span>vol</span>
+    <input type="range" id="vol" min="0" max="100" step="5" value="70">
+    <span id="volv">70</span>
+  </div>
+</footer>
+
+<dialog id="hostdlg">
+  <b>Pi address</b>
+  <input id="hostin" placeholder="192.168.4.1" inputmode="url" autocapitalize="off"
+         autocorrect="off" spellcheck="false">
+  <div class="btns">
+    <button class="act" id="hostsave">save</button>
+    <button class="act" id="hostcancel">cancel</button>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const LS = { host:"mau5.host", lists:"mau5.playlists", vol:"mau5.vol" };
+
+// Served from the Pi -> same origin, no host needed. Otherwise use the saved one.
+let HOST = localStorage.getItem(LS.host) || "";
+const base = () => HOST ? (HOST.startsWith("http") ? HOST : "http://" + HOST) : "";
+
+let playing = null, wake = null, failures = 0, busy = false;
+
+function toast(msg, ms = 1800) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("on"), ms);
+}
+function mmss(s) {
+  s = Math.max(0, Math.round(s || 0));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+async function api(path, opts) {
+  const c = new AbortController();
+  const timer = setTimeout(() => c.abort(), 6000);
+  try {
+    const r = await fetch(base() + "/api" + path,
+                          Object.assign({ signal: c.signal, cache: "no-store" }, opts));
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const text = await r.text();
+    try { return JSON.parse(text); } catch (e) { return text; }
+  } finally { clearTimeout(timer); }
+}
+
+// ---- playlists ----------------------------------------------------------
+function renderList(names) {
+  const list = $("#list");
+  if (!names || !names.length) {
+    list.innerHTML = '<p class="muted">no playlists on the Pi yet.<br>' +
+                     'build one with <code>mau5build deploy</code>.</p>';
+    return;
+  }
+  list.innerHTML = "";
+  for (const n of names) {
+    const b = document.createElement("button");
+    b.className = "row" + (n === playing ? " playing" : "");
+    b.innerHTML = '<span class="play">' + (n === playing ? "▶" : "▷") + "</span>";
+    b.appendChild(document.createTextNode(n));
+    b.onclick = () => start(n);
+    list.appendChild(b);
+  }
+}
+
+async function loadPlaylists() {
+  const names = await api("/playlists");
+  const arr = Array.isArray(names) ? names
+            : (names && names.playlists) ? names.playlists : [];
+  localStorage.setItem(LS.lists, JSON.stringify(arr));
+  renderList(arr);
+  return arr;
+}
+
+async function start(name) {
+  if (busy) return;
+  busy = true;
+  try {
+    await api("/playlist/" + encodeURIComponent(name) + "/start");
+    playing = name; renderList(cached()); toast("starting " + name);
+    keepAwake(true);
+  } catch (e) { toast("could not start: " + e.message, 3000); }
+  finally { busy = false; setTimeout(poll, 350); }
+}
+
+async function stop(graceful) {
+  try {
+    await api("/playlists/stop" + (graceful ? "gracefully" : ""));
+    toast(graceful ? "stopping at the end of the song" : "stopped");
+  } catch (e) { toast("stop failed: " + e.message, 3000); }
+  setTimeout(poll, 350);
+}
+
+const cached = () => { try { return JSON.parse(localStorage.getItem(LS.lists)) || []; }
+                       catch (e) { return []; } };
+
+// ---- status -------------------------------------------------------------
+function setOnline(ok) {
+  const d = $("#dot");
+  d.className = "dot" + (ok ? " on" : (failures > 2 ? " err" : ""));
+}
+
+async function poll() {
+  try {
+    const s = await api("/fppd/status");
+    failures = 0; setOnline(true);
+    const pl = (s.current_playlist && s.current_playlist.playlist) || "";
+    const isPlaying = String(s.status_name || "").indexOf("playing") === 0;
+    const song = s.current_song || s.current_sequence || "";
+    if (playing !== (isPlaying ? pl : null)) {
+      playing = isPlaying ? pl : null;
+      renderList(cached());
+    }
+    $("#title").textContent = isPlaying ? (pl || song) : "idle";
+    $("#sub").textContent = isPlaying
+      ? (song ? song : "") + (s.current_playlist ?
+          "  ·  " + s.current_playlist.index + "/" + s.current_playlist.count : "")
+      : (s.status_name || "stopped");
+    const el = parseFloat(s.seconds_played || 0);
+    const rem = parseFloat(s.seconds_remaining || 0);
+    const tot = el + rem;
+    $("#fill").style.width = (tot > 0 ? (100 * el / tot) : 0) + "%";
+    $("#tel").textContent = mmss(el);
+    $("#trem").textContent = "-" + mmss(rem);
+    if (typeof s.volume === "number" && Date.now() - volTouched > 2500) {
+      $("#vol").value = s.volume; $("#volv").textContent = s.volume;
+    }
+    keepAwake(isPlaying);
+  } catch (e) {
+    failures++; setOnline(false);
+    if (failures === 3) $("#sub").textContent = "no answer from " + (base() || "this host");
+  }
+}
+
+// ---- volume -------------------------------------------------------------
+let volTimer = null, volTouched = 0;
+$("#vol").oninput = e => {
+  const v = parseInt(e.target.value, 10);       // read now: a poll may land
+  volTouched = Date.now();                      // before the debounce fires
+  $("#volv").textContent = v;
+  clearTimeout(volTimer);
+  volTimer = setTimeout(async () => {
+    localStorage.setItem(LS.vol, v);
+    try {
+      await api("/system/volume", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volume: v })
+      });
+    } catch (err) { toast("volume: " + err.message); }
+  }, 220);
+};
+
+// ---- screen wake --------------------------------------------------------
+async function keepAwake(on) {
+  try {
+    if (on && !wake && navigator.wakeLock) {
+      wake = await navigator.wakeLock.request("screen");
+      wake.addEventListener("release", () => { wake = null; });
+    } else if (!on && wake) { await wake.release(); wake = null; }
+  } catch (e) { /* denied or unsupported: not worth telling anyone */ }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") { keepAwake(!!playing); poll(); }
+});
+
+// ---- host dialog --------------------------------------------------------
+$("#hostbtn").onclick = () => { $("#hostin").value = HOST; $("#hostdlg").showModal(); };
+$("#hostcancel").onclick = () => $("#hostdlg").close();
+$("#hostsave").onclick = () => {
+  HOST = $("#hostin").value.trim();
+  localStorage.setItem(LS.host, HOST);
+  $("#hostdlg").close(); failures = 0;
+  boot();
+};
+$("#stop").onclick = () => stop(false);
+$("#grace").onclick = () => stop(true);
+
+// ---- boot ---------------------------------------------------------------
+function boot() {
+  renderList(cached());          // instant, from the last time we connected
+  const v = localStorage.getItem(LS.vol);
+  if (v) { $("#vol").value = v; $("#volv").textContent = v; }
+  loadPlaylists().catch(() => {
+    if (!cached().length)
+      $("#list").innerHTML = '<p class="muted">can\'t reach the Pi.<br>' +
+        'Join the <b>mau5head</b> hotspot, then tap <b>host</b> above.</p>';
+  });
+  poll();
+}
+boot();
+setInterval(poll, 1000);
+setInterval(() => { loadPlaylists().catch(() => {}); }, 15000);
+</script>
+</body>
+</html>

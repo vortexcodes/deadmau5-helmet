@@ -1,0 +1,59 @@
+# The as-built chain, in the order the data line actually runs.
+#
+# IMPORTANT -- handedness.  This was described from INSIDE the helmet, so
+# "right" here is the wearer's right, which appears on the LEFT of a camera
+# looking at the face.  `described_from = "wearer"` tells the solver to expect
+# the mirror; it never guesses, it checks against where LED 0 actually lit up.
+#
+# Indices are 0-based because that is what DDP and WLED use.  "LED 1" in
+# conversation is index 0 here.
+
+[chain]
+described_from = "wearer"
+starts = "chin band, wearer's far right, at the top of the band"
+
+# Each section is a stretch of continuous strip.  `jumper_before = true` means
+# a cable with no LEDs on it runs into this section: the LED indices stay
+# consecutive, but the position jumps a long way.  That is exactly the signal
+# the solver splits on.
+
+[[chain.section]]
+name = "chin"
+kind = "shell"
+where = "the band below the mouth, running wearer-right to wearer-left"
+expect = "one run along the bottom"
+
+[[chain.section]]
+name = "front_upper"
+kind = "shell"
+where = "upper front, entered at the wearer's upper-left corner"
+expect = "vertical strips, snaking back and forth across the face"
+jumper_before = true          # the long cable from the end of the chin run
+
+[[chain.section]]
+name = "ear1_tubes"
+kind = "ear_inside"
+where = "inside of the first ear -- the light tubes"
+expect = "back and forth along the tubes"
+jumper_before = true
+
+[[chain.section]]
+name = "ear1_rim"
+kind = "ear_outside"
+where = "outside contour of the first ear"
+expect = "one loop around the rim"
+color_order_suspect = true    # the strip that turns orange into green
+
+[[chain.section]]
+name = "ear2_rim"
+kind = "ear_outside"
+where = "outside contour of the second ear"
+expect = "one loop around the rim"
+jumper_before = true
+color_order_suspect = true
+
+[[chain.section]]
+name = "ear2_tubes"
+kind = "ear_inside"
+where = "inside of the second ear -- the light tubes"
+expect = "back and forth along the tubes"

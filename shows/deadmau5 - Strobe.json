@@ -1,0 +1,239 @@
+{
+ "track": "deadmau5 - Strobe.mp3",
+ "fps": 40,
+ "duration": 636.89,
+ "bpm": 128.0,
+ "beats": 1358,
+ "analysis": "deadmau5 - Strobe.analysis.npz",
+ "fade": 0.6,
+ "accent": true,
+ "cues": [
+  {
+   "start": 1.756,
+   "end": 46.755,
+   "preset": "breathe",
+   "params": {
+    "period": 8.0,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 46.755,
+   "end": 91.754,
+   "preset": "twinkle",
+   "params": {
+    "color": [
+     0,
+     180,
+     255
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 91.754,
+   "end": 136.753,
+   "preset": "ripple",
+   "params": {
+    "period": 3.4,
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 136.753,
+   "end": 174.252,
+   "preset": "tubepulse",
+   "params": {
+    "color": [
+     0,
+     255,
+     140
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 174.252,
+   "end": 196.751,
+   "preset": "earspin",
+   "params": {
+    "period": 2.4,
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 196.751,
+   "end": 241.75,
+   "preset": "gradient",
+   "params": {
+    "period": 14.0,
+    "a": [
+     255,
+     40,
+     0
+    ],
+    "b": [
+     255,
+     150,
+     0
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 241.75,
+   "end": 286.749,
+   "preset": "spiral",
+   "params": {
+    "period": 6.0
+   },
+   "level": 1
+  },
+  {
+   "start": 286.749,
+   "end": 316.748,
+   "preset": "confetti",
+   "params": {
+    "rate": 26.0
+   },
+   "level": 3
+  },
+  {
+   "start": 316.748,
+   "end": 346.748,
+   "preset": "breathe",
+   "params": {
+    "period": 8.0,
+    "color": [
+     0,
+     255,
+     140
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 346.748,
+   "end": 384.247,
+   "preset": "wipe",
+   "params": {
+    "a": [
+     255,
+     255,
+     255
+    ],
+    "b": [
+     0,
+     200,
+     255
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 384.247,
+   "end": 421.746,
+   "preset": "comet",
+   "params": {
+    "period": 4.0,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 421.746,
+   "end": 466.745,
+   "preset": "eq",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 466.745,
+   "end": 504.244,
+   "preset": "comet",
+   "params": {
+    "period": 1.6,
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 2
+  },
+  {
+   "start": 504.244,
+   "end": 534.243,
+   "preset": "police",
+   "params": {},
+   "level": 3
+  },
+  {
+   "start": 534.243,
+   "end": 564.242,
+   "preset": "lightning",
+   "params": {
+    "every": 1.1,
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 3
+  },
+  {
+   "start": 564.242,
+   "end": 571.742,
+   "preset": "pinwheel",
+   "params": {
+    "period": 1.2,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 3
+  },
+  {
+   "start": 571.742,
+   "end": 609.241,
+   "preset": "plasma",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 609.241,
+   "end": 635.49,
+   "preset": "twinkle",
+   "params": {
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 0
+  }
+ ]
+}

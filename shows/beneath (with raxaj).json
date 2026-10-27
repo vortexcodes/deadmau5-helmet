@@ -1,0 +1,93 @@
+{
+ "track": "beneath (with raxaj).mp3",
+ "fps": 40,
+ "duration": 274.41,
+ "bpm": 126.42,
+ "beats": 578,
+ "analysis": "beneath (with raxaj).analysis.npz",
+ "fade": 0.6,
+ "accent": true,
+ "cues": [
+  {
+   "start": 1.856,
+   "end": 39.826,
+   "preset": "plasma",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 39.826,
+   "end": 77.795,
+   "preset": "rainbow",
+   "params": {
+    "period": 6.0
+   },
+   "level": 2
+  },
+  {
+   "start": 77.795,
+   "end": 108.171,
+   "preset": "fire",
+   "params": {},
+   "level": 2
+  },
+  {
+   "start": 108.171,
+   "end": 153.734,
+   "preset": "tubepulse",
+   "params": {
+    "color": [
+     0,
+     255,
+     140
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 153.734,
+   "end": 199.297,
+   "preset": "eyes",
+   "params": {
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 0
+  },
+  {
+   "start": 199.297,
+   "end": 229.673,
+   "preset": "chase",
+   "params": {
+    "period": 2.2,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 1
+  },
+  {
+   "start": 229.673,
+   "end": 260.048,
+   "preset": "spiral",
+   "params": {
+    "period": 6.0
+   },
+   "level": 1
+  },
+  {
+   "start": 260.048,
+   "end": 273.338,
+   "preset": "confetti",
+   "params": {
+    "rate": 26.0
+   },
+   "level": 3
+  }
+ ]
+}

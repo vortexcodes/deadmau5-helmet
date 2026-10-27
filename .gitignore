@@ -1,0 +1,24 @@
+# Regenerable caches
+.mau5cache/
+__pycache__/
+*.pyc
+shows/*.analysis.npz
+
+# Calibration photographs and video: large, and every one of them can be
+# retaken in a few minutes.  The *results* of the calibration are small
+# and are committed -- data/cal/*.csv and *.json are the irreplaceable part.
+data/cal/timelapse/
+data/cal/baralign/
+data/cal/review/
+data/cal/shots/
+data/cal/_tmp/
+*.mp4
+
+# Your music. The show JSONs reference these by filename; the tracks
+# themselves are commercial releases and are not ours to redistribute.
+*.mp3
+
+# Self-signed localhost cert for mau5eye's phone page. A committed
+# private key is a committed private key even when it only guards a
+# camera preview. Regenerate with setup/make_eye_cert.sh.
+data/cal/tls/

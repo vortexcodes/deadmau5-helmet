@@ -1,0 +1,159 @@
+{
+  "id": {
+    "mdns": "mau5head-wled",
+    "name": "mau5head-wled",
+    "inv": "mau5head"
+  },
+  "nw": {
+    "ins": [
+      {
+        "ssid": "mau5head",
+        "pskl": 0,
+        "ip": [
+          192,
+          168,
+          4,
+          50
+        ],
+        "gw": [
+          192,
+          168,
+          4,
+          1
+        ],
+        "sn": [
+          255,
+          255,
+          255,
+          0
+        ]
+      }
+    ]
+  },
+  "ap": {
+    "ssid": "mau5head-AP",
+    "pskl": 8,
+    "chan": 1,
+    "hide": 0,
+    "behav": 2,
+    "ip": [
+      4,
+      3,
+      2,
+      1
+    ]
+  },
+  "wifi": {
+    "sleep": false
+  },
+  "hw": {
+    "led": {
+      "total": 1643,
+      "maxpwr": 8000,
+      "ledma": 0,
+      "cct": false,
+      "ins": [
+        {
+          "start": 0,
+          "len": 686,
+          "pin": [
+            16
+          ],
+          "order": 0,
+          "rev": false,
+          "skip": 0,
+          "type": 22,
+          "ref": false,
+          "rgbwm": 0,
+          "freq": 0
+        },
+        {
+          "start": 686,
+          "len": 957,
+          "pin": [
+            17
+          ],
+          "order": 0,
+          "rev": false,
+          "skip": 0,
+          "type": 22,
+          "ref": false,
+          "rgbwm": 0,
+          "freq": 0
+        }
+      ]
+    }
+  },
+  "light": {
+    "scale-bri": 100,
+    "pal-mode": 0,
+    "gc": {
+      "bri": 1.0,
+      "col": 1.0
+    },
+    "aseg": false
+  },
+  "def": {
+    "bri": 255,
+    "on": true,
+    "ps": -1
+  },
+  "if": {
+    "live": {
+      "en": true,
+      "mso": false,
+      "port": 5568,
+      "mc": false,
+      "dmx": {
+        "uni": 1,
+        "seqskip": false,
+        "e131prio": 0,
+        "addr": 1,
+        "dss": 0,
+        "mode": 4
+      },
+      "timeout": 100,
+      "maxbri": false,
+      "no-gc": true,
+      "offset": 0
+    },
+    "va": {
+      "alexa": false
+    },
+    "sync": {
+      "port0": 21324,
+      "port1": 65506,
+      "recv": {
+        "bri": false,
+        "col": false,
+        "fx": false
+      },
+      "send": {
+        "dir": false,
+        "btn": false,
+        "va": false,
+        "hue": false,
+        "macro": false,
+        "twice": false
+      }
+    }
+  },
+  "ol": {
+    "clock": 0,
+    "cntdwn": false
+  },
+  "timers": {
+    "cntdwn": {
+      "goal": [
+        20,
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      "macro": 0
+    },
+    "ins": []
+  }
+}

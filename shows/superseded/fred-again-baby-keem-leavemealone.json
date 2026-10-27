@@ -1,0 +1,26 @@
+{
+  "name": "fred-again-baby-keem-leavemealone",
+  "version": 3,
+  "repeat": 0,
+  "loopCount": 0,
+  "empty": false,
+  "desc": "built by mau5build",
+  "random": 0,
+  "leadIn": [],
+  "mainPlaylist": [
+    {
+      "type": "both",
+      "enabled": 1,
+      "playOnce": 0,
+      "sequenceName": "fred-again-baby-keem-leavemealone.fseq",
+      "mediaName": "Fred again.. & Baby Keem - leavemealone.mp3",
+      "videoOut": "--Default--",
+      "duration": 222.75
+    }
+  ],
+  "leadOut": [],
+  "playlistInfo": {
+    "total_duration": 222.75,
+    "total_items": 1
+  }
+}

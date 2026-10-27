@@ -1,0 +1,26 @@
+{
+  "name": "deadmau5-strobe",
+  "version": 3,
+  "repeat": 0,
+  "loopCount": 0,
+  "empty": false,
+  "desc": "built by mau5build",
+  "random": 0,
+  "leadIn": [],
+  "mainPlaylist": [
+    {
+      "type": "both",
+      "enabled": 1,
+      "playOnce": 0,
+      "sequenceName": "deadmau5-strobe.fseq",
+      "mediaName": "deadmau5 - Strobe.mp3",
+      "videoOut": "--Default--",
+      "duration": 636.875
+    }
+  ],
+  "leadOut": [],
+  "playlistInfo": {
+    "total_duration": 636.875,
+    "total_items": 1
+  }
+}
