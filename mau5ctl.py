@@ -71,6 +71,12 @@ class Controller:
         self.params = {}
         self.preset_t0 = time.monotonic()
         self.brightness = 1.0
+        # Run live presets on the track's clock when one is playing, so
+        # a preset chosen by hand lands with the music exactly as a
+        # show cue does.  Without this the two halves of the controller
+        # behave differently for no reason the user can see.
+        self.sync = True
+        self.pulse = 0.22
 
         self.show = None
         self.show_name = None
@@ -191,9 +197,17 @@ class Controller:
     # -- the frame loop -------------------------------------------------
     def _frame(self):
         if self.mode == "preset" and self.preset is not None:
-            return self.preset.render(self.h,
-                                      time.monotonic() - self.preset_t0,
-                                      self.music)
+            free = time.monotonic() - self.preset_t0
+            m = self.music if (self.sync and self.playing) else None
+            if m is None:
+                return self.preset.render(self.h, free, self.music)
+            t = self.now()
+            te, _ = E.lock_time(m, self.preset_name, self.params, t)
+            out = self.preset.render(self.h, te, m)
+            if self.pulse > 0:
+                k = max(0.0, 1.0 - m.beat_phase(t) * 3.0) ** 2
+                out = np.clip(out * (1.0 + self.pulse * k), 0, 255)
+            return out
         if self.mode == "show" and self.player is not None:
             return self.player.frame(self.now())
         return np.zeros((self.h.n, 3))
@@ -277,6 +291,18 @@ class Controller:
             "thermal": p.get("thermal"),
             "helmet_ok": self.helmet_ok, "helmet_note": self.helmet_note,
             "simulated": self.simulated,
+            "sync": self.sync, "pulse": round(self.pulse, 3),
+            "lockable": self.preset_name in E.LOCKABLE,
+            "lock_beats": (E.lock_time(self.music, self.preset_name,
+                                       self.params, self.now())[1]
+                           if (self.music is not None and self.mode == "preset"
+                               and self.preset_name in E.LOCKABLE) else None),
+            "cycle_s": (round(E.cycle_seconds(self.preset_name, self.params) or 0, 3)
+                        if self.mode == "preset" else None),
+            "lock_conf": (round(self.music.lock_conf, 3)
+                          if self.music is not None
+                          and self.music.lock_conf == self.music.lock_conf else None),
+            "bpm": round(self.music.bpm, 1) if self.music is not None else None,
             "governor": p.get("governor_hit"), "ceiling": p.get("ceiling_hit"),
             "presets": sorted(E.REGISTRY),
             "favourites": list(self.favourites),
@@ -310,7 +336,54 @@ def layout(h):
         # shell, so the preview draws them bigger or it lies about the look
         "size": [2.6 if t else (1.7 if rim else 1.0)
                  for t, rim in zip(h.tubes.tolist(), h.rims.tolist())],
+        # 1 facing the viewer, 0 at the silhouette.  An LED on the edge
+        # of the dome is seen almost edge-on and covers a fraction of
+        # the area it does head on; without this the shell renders as a
+        # flat disc of evenly spaced dots and reads as a dinner plate.
+        "face": _facing(h),
+        # How much each LED spills into its neighbours.  Not a constant:
+        # the tubes are 187 LEDs packed into six lines, and a spill that
+        # suits the shell's open grid accumulates there into a solid
+        # white slab.  Density has to be paid for in alpha.
+        "bloom": [0.22 if t else (0.30 if rim else 0.42)
+                  for t, rim in zip(h.tubes.tolist(), h.rims.tolist())],
+        "parts": _outlines(h),
     }
+
+
+def _facing(h):
+    import numpy as _np
+    d = h.depth.astype(float)
+    r = _np.hypot(_np.hypot(h.px, h.py - 30.0), d)
+    f = _np.clip(d / _np.maximum(r, 1e-6), 0.0, 1.0)
+    f[~h.shell] = 1.0                      # the ear discs are flat and face us
+    return [round(float(v), 3) for v in f]
+
+
+def _outlines(h):
+    """A faint circle per physical part, so the shape survives the dark.
+
+    Taken from the LEDs themselves rather than from the CAD: the point
+    is to frame what is drawn, and what is drawn is the map.
+    """
+    import numpy as _np
+    out = []
+    x, y = h.px.astype(float), h.py.astype(float)
+    x0, x1 = float(x.min()), float(x.max())
+    y0, y1 = float(y.min()), float(y.max())
+    k = max(x1 - x0, y1 - y0) or 1.0
+    for name, m in (("shell", h.shell), ("ear1", h.ear1), ("ear2", h.ear2)):
+        if not m.any():
+            continue
+        cx, cy = float(x[m].mean()), float(y[m].mean())
+        rad = float(_np.percentile(_np.hypot(x[m] - cx, y[m] - cy), 97))
+        out.append({
+            "name": name,
+            "cx": round((cx - x0) / k + (1 - (x1 - x0) / k) / 2, 4),
+            "cy": round(1.0 - ((cy - y0) / k + (1 - (y1 - y0) / k) / 2), 4),
+            "r": round(rad / k, 4),
+        })
+    return out
 
 
 def _jsonable(d):
@@ -411,6 +484,11 @@ def make_handler(ctl):
                     ctl.set_show(body["name"])
                 elif path == "/api/clock":
                     ctl.clock(body.get("t"), body.get("playing"))
+                elif path == "/api/sync":
+                    if "sync" in body:
+                        ctl.sync = bool(body["sync"])
+                    if "pulse" in body:
+                        ctl.pulse = max(0.0, min(1.0, float(body["pulse"])))
                 elif path == "/api/brightness":
                     ctl.brightness = max(0.0, min(1.0, float(body["value"])))
                 elif path == "/api/save":

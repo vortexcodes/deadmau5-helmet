@@ -862,6 +862,86 @@ for _c in (Solid, Breathe, RainbowSweep, Scanner, Wipe, Strobe, Twinkle,
     REGISTRY[_c.name] = _c
 
 
+# ----------------------------------------------------------------------
+# Locking a preset to the beat.
+#
+# A scanner with a 2.4 s period against a 128 bpm track completes
+# 1.28 cycles per bar.  It is never wrong and never once lands with the
+# music, and no amount of colour choice rescues it: the eye reads the
+# drift long before it reads the palette.  Quantise the period to a
+# whole number of beats and take the phase from the beat grid instead
+# of the clock, and the same preset lands every bar.
+#
+# Only presets that are exactly periodic in their cycle parameter can
+# be treated this way -- a preset carrying state across the cycle
+# boundary would stutter each time the phase wrapped.  Which ones those
+# are is measured, not assumed: t_lockable_presets re-derives this
+# table by comparing render(t) with render(t + period).
+#
+# name -> (parameter, unit, cycles of the parameter per visual cycle)
+LOCKABLE = {
+    "alignbar":  ("period", "s", 1.0),
+    "breathe":   ("period", "s", 1.0),
+    "chase":     ("period", "s", 1.0),
+    "comet":     ("period", "s", 1.0),
+    "earspin":   ("period", "s", 1.0),
+    "heartbeat": ("bpm", "bpm", 1.0),
+    "pinwheel":  ("period", "s", 1.0),
+    "police":    ("hz", "hz", 2.0),     # a full red/blue swap is two flashes
+    "rainbow":   ("period", "s", 1.0),
+    "ripple":    ("period", "s", 1.0),
+    "scanner":   ("period", "s", 1.0),
+    "spiral":    ("period", "s", 1.0),
+    "stripid":   ("cycle", "s", 1.0),
+    "strobe":    ("hz", "hz", 1.0),
+    "tubepulse": ("period", "s", 1.0),
+    "twinkle":   ("period", "s", 1.0),
+    "wave":      ("period", "s", 1.0),
+    "wipe":      ("period", "s", 1.0),
+}
+
+# Cycle lengths worth snapping to, in beats.  Sixteenths at the bottom
+# for strobes, eight bars at the top for a slow wipe across a
+# breakdown.  Powers of two only: this is four-to-the-floor music, and
+# a three-beat cycle lands on the bar once every three bars, which
+# reads as a mistake rather than as a triplet.
+DIVISIONS = (0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0)
+
+
+def cycle_seconds(name, params):
+    """How long one visual cycle of this preset lasts, or None."""
+    ent = LOCKABLE.get(name)
+    if ent is None:
+        return None
+    key, unit, mul = ent
+    v = params.get(key, REGISTRY[name].params.get(key))
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    if v <= 0:
+        return None
+    base = v if unit == "s" else (1.0 / v if unit == "hz" else 60.0 / v)
+    return base * mul
+
+
+def lock_time(music, name, params, t):
+    """The time to hand render() so the cycle lands on the beat grid.
+
+    The preset keeps its own period parameter and never learns about
+    the music; it is simply given a phase rather than a clock.  Returns
+    t unchanged when there is nothing to lock to.
+    """
+    per = cycle_seconds(name, params)
+    if music is None or per is None:
+        return t, None
+    spb = 60.0 / max(getattr(music, "bpm", 0.0) or 0.0, 1e-6)
+    want = per / spb
+    beats = min(DIVISIONS, key=lambda d: abs(math.log(d / want)))
+    phase = (music.beat_index(t) % beats) / beats
+    return phase * per, beats
+
+
 def make(name, **kw):
     if name not in REGISTRY:
         raise SystemExit("no preset %r.  Known: %s"

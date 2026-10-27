@@ -445,7 +445,7 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
               % (len(beats), len(bars), ph + 1))
     return dict(duration=dur, bpm=bpm, beats=beats, bars=bars, energy=energy,
                 levels=levels, audio=a, sr=sr, env=env, env_fps=fps,
-                env_t0=env_t0)
+                env_t0=env_t0, lock=conf)
 
 
 def main(argv=None):

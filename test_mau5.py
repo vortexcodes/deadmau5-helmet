@@ -228,6 +228,71 @@ def t_colour_correction():
     eq(tuple(out[400]), (200, 0, 0), "tube red must leave unchanged")
 
 
+def t_lockable_presets():
+    """Re-derive the beat-lock table instead of trusting it.
+
+    A preset may only be phase-locked if it is exactly periodic in its
+    cycle parameter -- one carrying state across the boundary would
+    stutter every time the phase wrapped.  So check that each listed
+    preset really does repeat, and that no preset with a cycle
+    parameter was left off the list by accident without a reason.
+    """
+    import mau5engine as E
+    h = E.Helmet()
+
+    def repeats(name, params=None):
+        per = E.cycle_seconds(name, params or E.REGISTRY[name].params)
+        if per is None or per <= 0:
+            return None
+        p = E.make(name, **(params or {}))
+        worst = 0.0
+        for t0 in (0.13, 0.57, 1.11, 2.9):
+            a = np.asarray(p.render(h, t0, None), float)
+            b = np.asarray(p.render(h, t0 + per, None), float)
+            worst = max(worst, float(np.abs(a - b).max()))
+        return worst
+
+    for name in E.LOCKABLE:
+        ok(name in E.REGISTRY, "LOCKABLE names %r, which does not exist" % name)
+        w = repeats(name)
+        ok(w is not None, "%s is listed as lockable but has no cycle" % name)
+        ok(w < 1.0, "%s is listed as lockable but render(t) != render(t+period) "
+                    "(worst %.1f)" % (name, w))
+
+    # anything with a cycle-shaped parameter that is NOT listed should
+    # be genuinely non-periodic, or it is an oversight
+    known_unlocked = {"eyes", "lightning", "gradient"}
+    for name, cls in E.REGISTRY.items():
+        if name in E.LOCKABLE:
+            continue
+        if not any(k in cls.params for k in ("period", "hz", "bpm", "cycle", "every")):
+            continue
+        ok(name in known_unlocked,
+           "%s has a cycle parameter but is neither lockable nor "
+           "listed as deliberately unlocked" % name)
+
+
+def t_beat_lock_lands_on_the_grid():
+    """A locked preset must repeat on beats, not on seconds."""
+    import mau5engine as E, mau5show
+    f = sorted(x for x in os.listdir(mau5show.SHOWS) if x.endswith(".json"))
+    show = json.load(open(os.path.join(mau5show.SHOWS, f[0])))
+    m = mau5show._music_for(show, os.path.join(HERE, show["track"]))
+    ok(m is not None, "no analysis to lock against")
+    for name in ("scanner", "wipe", "strobe"):
+        params = E.REGISTRY[name].params
+        t0 = float(m.bars[4]) if len(m.bars) > 4 else 10.0
+        te0, beats = E.lock_time(m, name, params, t0)
+        ok(beats in E.DIVISIONS, "%s snapped to %r, not a division" % (name, beats))
+        # one whole cycle later on the beat grid, the phase must return
+        spb = 60.0 / m.bpm
+        te1, _ = E.lock_time(m, name, params, t0 + beats * spb)
+        per = E.cycle_seconds(name, params)
+        d = abs(te1 - te0) % per
+        ok(min(d, per - d) < per * 0.06,
+           "%s drifted %.3f of a cycle over one lock period" % (name, min(d, per-d)/per))
+
+
 def t_shows():
     """Every show is structurally sound, cue to cue.
 
@@ -701,7 +766,7 @@ GROUPS = {
               t_thermal, t_thermal_never_exceeds, t_power_regions,
               t_floor_holds_the_shape],
     "colour": [t_colour_correction],
-    "shows": [t_shows, t_show_player, t_crossfade, t_beat_helpers,
+    "shows": [t_lockable_presets, t_beat_lock_lands_on_the_grid, t_shows, t_show_player, t_crossfade, t_beat_helpers,
               t_analysis_cache],
     "wire": [t_ddp_packet, t_lan_ip],
     "camera": [t_eye_after],

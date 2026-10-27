@@ -75,6 +75,7 @@ class Music:
                 self.levels = z["levels"]; self.energy = z["energy"]
                 self.onset = z["onset"]
                 self.sections = [tuple(int(v) for v in r) for r in z["sections"]]
+                self.lock_conf = float(z["lock"]) if "lock" in z else float("nan")
                 self.bands = True
                 return
         an = mau5song.analyse(path, verbose=verbose)
@@ -88,13 +89,37 @@ class Music:
             fps, self.duration)
         secs = mau5song.sections(self.levels)
         self.sections = mau5song.split_long(secs)
+        # How well the tempo estimate actually locked onto the track.
+        # Beat-locking an effect to a grid that is only approximately
+        # where the beats are is worse than letting it run free: the
+        # effect then lands wrong on purpose rather than at random.
+        self.lock_conf = float(an.get("lock", float("nan")))
         self.bands = True                      # Equaliser may ask for bands
         if cache:
             np.savez_compressed(
                 cache, fps=fps, duration=self.duration, bpm=self.bpm,
                 beats=self.beats, bars=self.bars, levels=self.levels,
                 energy=self.energy, onset=self.onset,
-                sections=np.array(self.sections, int))
+                sections=np.array(self.sections, int),
+                lock=self.lock_conf)
+
+    def beat_index(self, t):
+        """Continuous position on the beat grid, fractional beats.
+
+        Interpolated between measured beats rather than computed from
+        the tempo, so it follows a track that drifts instead of walking
+        away from it over four minutes.
+        """
+        b = self.beats
+        if len(b) < 2:
+            return float(t * self.bpm / 60.0)
+        i = int(np.searchsorted(b, t) - 1)
+        if i < 0:
+            return float((t - b[0]) / max(b[1] - b[0], 1e-6))
+        if i + 1 >= len(b):
+            spb = max(b[-1] - b[-2], 1e-6)
+            return float(len(b) - 1 + (t - b[-1]) / spb)
+        return float(i + (t - b[i]) / max(b[i + 1] - b[i], 1e-6))
 
     def beat_phase(self, t):
         """0 at a beat, rising to 1 just before the next one."""
@@ -160,6 +185,19 @@ def build(track, fps=40, out=None):
     return show, out
 
 
+# Below this the tempo estimate is not trustworthy enough to pin
+# effects to: a grid that is only approximately where the beats are
+# makes an effect land wrong on purpose rather than at random.
+#
+# Measured over the five built shows.  Locking moved the big visual
+# events on to the beat by +26, +37, +32 and +69 percent for the four
+# tracks scoring 0.246 and above, and by -28 percent for the one
+# scoring 0.119.  The threshold sits in the gap.  Five tracks is not
+# many, so this is a sensible place to start rather than a constant
+# anyone should trust to three figures.
+LOCK_MIN = 0.18
+
+
 class Player:
     """Walks a show's cues and renders frames.
 
@@ -182,6 +220,17 @@ class Player:
         self.music = music
         self.fade = float(show.get("fade", 0.0))
         self.accent = bool(show.get("accent", False))
+        # How hard every beat is marked, 0..1, over and above the
+        # downbeat flash.  A show that only answers the downbeat moves
+        # once a bar and reads as slow; a little lift on each beat is
+        # what makes it look driven by the track rather than beside it.
+        self.pulse = float(show.get("pulse", 0.22))
+        # Lock unless the show says otherwise, or the analysis never
+        # found the beat in the first place.
+        want = show.get("lock")
+        conf = getattr(music, "lock_conf", float("nan")) if music is not None else 0.0
+        self.lock = bool(want) if want is not None else (
+            conf == conf and conf >= LOCK_MIN)
         self._cache = {}
         self._cues = sorted(show["cues"], key=lambda c: c["start"])
 
@@ -203,11 +252,18 @@ class Player:
         c = self.cue_at(t)
         return self._preset(c) if c else None
 
+    def _render(self, cue, t):
+        """One cue at time t, on the beat grid where that is meaningful."""
+        te = t
+        if self.lock and self.music is not None:
+            te, _ = E.lock_time(self.music, cue["preset"], cue["params"], t)
+        return self._preset(cue).render(self.h, te, self.music)
+
     def frame(self, t):
         cur = self.cue_at(t)
         if cur is None:
             return np.zeros((self.h.n, 3))
-        out = self._preset(cur).render(self.h, t, self.music)
+        out = self._render(cur, t)
 
         if self.fade > 0:
             into = t - cur["start"]
@@ -216,16 +272,21 @@ class Player:
                 if i > 0:
                     prev = self._cues[i - 1]
                     k = into / self.fade
-                    out = (k * out
-                           + (1 - k) * self._preset(prev).render(self.h, t, self.music))
+                    out = k * out + (1 - k) * self._render(prev, t)
 
-        if self.accent and self.music is not None and cur.get("level", 0) >= 2:
-            if self.music.is_downbeat(t):
-                ph = self.music.beat_phase(t)
+        if self.music is not None:
+            lvl = cur.get("level", 0)
+            ph = self.music.beat_phase(t)
+            # A short lift on every beat, scaled by how loud the section
+            # is -- a breakdown should breathe, a drop should hit.
+            if self.pulse > 0 and lvl >= 1:
+                k = max(0.0, 1.0 - ph * 3.0) ** 2
+                out = out * (1.0 + self.pulse * (0.4 + 0.3 * lvl) * k)
+            if self.accent and lvl >= 2 and self.music.is_downbeat(t):
                 k = max(0.0, 1.0 - ph * 6.0) * 0.45
                 if k > 0:
-                    out = np.clip(out + k * 255.0, 0, 255)
-        return out
+                    out = out + k * 255.0
+        return np.clip(out, 0, 255)
 
 
 def _music_for(show, track):

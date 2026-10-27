@@ -86,7 +86,7 @@
  #prevwrap{flex:none;position:relative;background:#06060a;
            border-bottom:1px solid var(--line);overflow:hidden;
            transition:height .18s ease}
- #prev{display:block;width:100%;height:100%;filter:blur(1.6px) saturate(1.15)}
+ #prev{display:block;width:100%;height:100%;filter:blur(0.9px) saturate(1.12)}
  #prevtag{position:absolute;left:10px;bottom:6px;font-size:10px;color:#5a5a68;
           letter-spacing:.08em;text-transform:uppercase}
  #prevtag.sim{color:var(--warn)}
@@ -113,12 +113,21 @@
 <audio id="au" preload="auto"></audio>
 <script>
 let S = null, tab = 'presets', colour = [255,160,0], busy = false;
-let LAY = null, prevOn = true;
+let LAY = null, prevOn = 0;
 const au = document.getElementById('au');
 const COLOURS = [[255,40,0],[255,160,0],[255,255,255],[0,220,255],
                  [0,255,140],[120,0,255],[255,0,120],[255,230,180]];
 
 const rgb = c => 'rgb('+c[0]+','+c[1]+','+c[2]+')';
+function syncNote(){
+  if(!S) return '';
+  if(!S.bpm) return 'no track loaded';
+  if(!S.lockable) return S.preset + ' does not lock';
+  if(!S.lock_beats) return S.bpm + ' bpm';
+  const b = S.lock_beats;
+  const name = b>=4 ? (b/4)+' bar'+(b>4?'s':'') : b+' beat'+(b===1?'':'s');
+  return name + ' @ ' + S.bpm + ' bpm';
+}
 const mmss = s => (s<0?0:Math.floor(s/60))+':'+String(Math.floor(s%60)).padStart(2,'0');
 
 async function post(path, body){
@@ -137,6 +146,7 @@ function sig(){
   return JSON.stringify([tab, S.mode, S.preset, S.show, S.presets.length,
                          S.shows, S.spec && S.spec.map(d=>d.name),
                          tab==='presets' ? S.params : null,
+                         tab==='presets' ? [S.sync,S.pulse,S.lock_beats,S.bpm] : null,
                          tab==='settings' ? S.brightness : null]);
 }
 let lastSig = null;
@@ -204,8 +214,17 @@ function draw(force){
     }).join('') +
       `<div class="prow"><label>save as</label>
        <input class="txt" type="text" id="favname" placeholder="name this look">
-       <button class="toggle on" id="savefav">SAVE</button></div>`
-     : '<div class="note">Tap a preset to tune it.</div>');
+       <button class="toggle on" id="savefav">SAVE</button></div>` +
+      '<div class="prow"><button class="toggle" id="randomise">RANDOMISE</button>' +
+      '<button class="toggle" id="defaults">DEFAULTS</button></div>'
+     : '<div class="note">Tap a preset to tune it.</div>') +
+    '<div class="lbl">sync to music</div>' +
+    `<div class="prow"><label>beat lock</label>
+      <button class="toggle${S.sync?' on':''}" id="synctog">${S.sync?'ON':'OFF'}</button>
+      <output style="width:auto">${syncNote()}</output></div>
+     <div class="prow"><label>beat pulse</label>
+      <input type="range" id="pulse" min="0" max="0.8" step="0.02" value="${S.pulse}">
+      <output id="o_pulse">${(+S.pulse).toFixed(2)}</output></div>`;
 
     m.querySelectorAll('[data-p]').forEach(el=>el.onclick=()=>
       post('/api/preset',{name:el.dataset.p, params:{color:colour}}));
@@ -232,6 +251,30 @@ function draw(force){
       e.stopPropagation();
       post('/api/forget', {label: el.dataset.x});
     });
+    const st = document.getElementById('synctog');
+    if(st) st.onclick = ()=>post('/api/sync',{sync: !S.sync});
+    const pu = document.getElementById('pulse');
+    if(pu){
+      pu.oninput = ()=>{ document.getElementById('o_pulse').textContent =
+                           (+pu.value).toFixed(2); };
+      pu.onchange = ()=>post('/api/sync',{pulse: +pu.value});
+    }
+    const rnd = document.getElementById('randomise');
+    if(rnd) rnd.onclick = ()=>{
+      // within the spec's own bounds, so a roll can never ask for
+      // something the preset would reject
+      const kw = {};
+      for(const d of S.spec){
+        if(d.kind==='number') kw[d.name] = +(d.min + Math.random()*(d.max-d.min)).toFixed(3);
+        else if(d.kind==='bool') kw[d.name] = Math.random() < 0.5;
+      }
+      kw.color = [Math.random(),Math.random(),Math.random()]
+                   .map(v=>Math.round(40+215*v));
+      colour = kw.color;
+      post('/api/preset',{name:S.preset, params:kw});
+    };
+    const dft = document.getElementById('defaults');
+    if(dft) dft.onclick = ()=>post('/api/preset',{name:S.preset, params:{}});
     const sb = document.getElementById('savefav');
     if(sb) sb.onclick = ()=>{
       const f = document.getElementById('favname');
@@ -313,12 +356,15 @@ setInterval(async ()=>{
 // render against the same guard, which is the point: presets can be
 // judged from anywhere.
 const pc = document.getElementById('prev'), pctx = pc.getContext('2d');
+const oc = document.createElement('canvas'), octx = oc.getContext('2d');
 const pwrap = document.getElementById('prevwrap');
 
+const PREV_H = [0.30, 0.52, 0.0];        // tap to cycle: normal, big, hidden
 function sizePreview(){
   if(!LAY) return;
   const w = pwrap.clientWidth || window.innerWidth;
-  const h = prevOn ? Math.round(Math.min(w / LAY.aspect, window.innerHeight*0.30)) : 0;
+  const frac = PREV_H[prevOn];
+  const h = frac ? Math.round(Math.min(w / LAY.aspect, window.innerHeight*frac)) : 0;
   pwrap.style.height = h + 'px';
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   pc.width = Math.round(w*dpr); pc.height = Math.round(Math.max(h,1)*dpr);
@@ -333,24 +379,72 @@ function sizePreview(){
 const GAMMA = new Uint8Array(256);
 for(let i=0;i<256;i++) GAMMA[i] = Math.round(255*Math.pow(i/255, 0.45));
 
+// Three passes, because the helmet is three different optical things.
+//
+//  1  the bodies -- faint outlines and unlit pixels, so a dark helmet
+//     still reads as a helmet rather than as an empty box
+//  2  bloom -- every lit LED smeared wide and dim.  On the ears this
+//     is most of what you actually see: the tubes sit behind a
+//     translucent disc and the whole disc glows, which is why a
+//     photograph of one lit tube shows a bar and not a dot
+//  3  the cores -- small and bright, the pixels themselves
+//
+// Shell LEDs shrink towards the silhouette by their facing term. An
+// LED seen edge-on covers a fraction of the area it does head on, and
+// without that the dome renders as a flat plate of even dots.
 function paint(buf){
-  if(!LAY || !prevOn || pc.height < 4) return;
-  const W = pc.width, H = pc.height, dpr = W / (pwrap.clientWidth||1);
+  if(!LAY || pc.height < 4) return;
+  const W = pc.width, H = pc.height, S = Math.min(W, H) / 1.4;
+  const dpr = W / (pwrap.clientWidth||1);
+  pctx.globalCompositeOperation = 'source-over';
   pctx.fillStyle = '#06060a'; pctx.fillRect(0,0,W,H);
-  // the unlit LEDs first, so the helmet keeps its shape when it is dark
-  pctx.fillStyle = '#1c1c26';
+
+  for(const p of LAY.parts){
+    pctx.strokeStyle = '#191922'; pctx.lineWidth = 1.5*dpr;
+    pctx.beginPath(); pctx.arc(p.cx*W, p.cy*H, p.r*W, 0, 6.2832); pctx.stroke();
+  }
+  pctx.fillStyle = '#16161e';
   for(let i=0;i<LAY.n;i++){
     pctx.beginPath();
-    pctx.arc(LAY.x[i]*W, LAY.y[i]*H, 1.1*dpr*LAY.size[i], 0, 6.2832);
+    pctx.arc(LAY.x[i]*W, LAY.y[i]*H,
+             Math.max(0.5, 1.0*dpr*LAY.size[i]*LAY.face[i]), 0, 6.2832);
     pctx.fill();
   }
-  pctx.globalCompositeOperation = 'lighter';
+
+  // The diffuse layer, drawn small and scaled up.  A diffuser spreads
+  // light, it does not multiply it, so stacking translucent blobs
+  // additively is the wrong model -- six tubes of sixteen LEDs each
+  // saturate to white long before the disc would.  Rendering into a
+  // canvas an eighth the size and letting the upscale interpolate is a
+  // blur that conserves energy, and it is one drawImage.
+  const ow = Math.max(8, Math.round(W/8)), oh = Math.max(8, Math.round(H/8));
+  if(oc.width !== ow || oc.height !== oh){ oc.width = ow; oc.height = oh; }
+  octx.clearRect(0,0,ow,oh);
+  octx.globalCompositeOperation = 'lighter';
+  const sx = ow/W, sy = oh/H;
   for(let i=0;i<LAY.n;i++){
     const r = GAMMA[buf[i*3]], g = GAMMA[buf[i*3+1]], b = GAMMA[buf[i*3+2]];
     if(r+g+b < 9) continue;
-    const x = LAY.x[i]*W, y = LAY.y[i]*H, rad = 2.3*dpr*LAY.size[i];
+    octx.fillStyle = 'rgb('+r+','+g+','+b+')';
+    octx.globalAlpha = LAY.bloom[i];
+    octx.beginPath();
+    octx.arc(LAY.x[i]*W*sx, LAY.y[i]*H*sy,
+             Math.max(0.9, dpr*LAY.size[i]*2.4*sx), 0, 6.2832);
+    octx.fill();
+  }
+  octx.globalAlpha = 1.0;
+  pctx.globalCompositeOperation = 'lighter';
+  pctx.imageSmoothingEnabled = true;
+  pctx.imageSmoothingQuality = 'high';
+  pctx.drawImage(oc, 0, 0, W, H);
+  for(let i=0;i<LAY.n;i++){
+    const r = GAMMA[buf[i*3]], g = GAMMA[buf[i*3+1]], b = GAMMA[buf[i*3+2]];
+    if(r+g+b < 9) continue;
+    const f = LAY.face[i];
+    const base = dpr*LAY.size[i]*(0.35 + 0.65*f);
     pctx.fillStyle = 'rgb('+r+','+g+','+b+')';
-    pctx.beginPath(); pctx.arc(x, y, rad, 0, 6.2832); pctx.fill();
+    pctx.beginPath();
+    pctx.arc(LAY.x[i]*W, LAY.y[i]*H, base*1.55, 0, 6.2832); pctx.fill();
   }
   pctx.globalCompositeOperation = 'source-over';
 }
@@ -360,7 +454,7 @@ function paint(buf){
 // cannot finish, and the preview falls further behind the longer it runs.
 async function frameLoop(){
   for(;;){
-    if(!prevOn || document.hidden){ await new Promise(r=>setTimeout(r,400)); continue; }
+    if(PREV_H[prevOn]===0 || document.hidden){ await new Promise(r=>setTimeout(r,400)); continue; }
     const t0 = performance.now();
     try{
       const r = await fetch('/api/frame', {cache:'no-store'});
@@ -371,8 +465,7 @@ async function frameLoop(){
   }
 }
 
-pwrap.onclick = ()=>{ prevOn = !prevOn; sizePreview();
-  document.getElementById('prevtag').style.display = prevOn ? '' : 'none'; };
+pwrap.onclick = ()=>{ prevOn = (prevOn + 1) % PREV_H.length; sizePreview(); };
 window.addEventListener('resize', sizePreview);
 
 (async()=>{
