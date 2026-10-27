@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import base64
+import socket
 import mimetypes
 import os
 import threading
@@ -99,6 +101,7 @@ class Controller:
             except Exception:
                 self.guard = None
         self.last_frame = np.zeros((self.h.n, 3), np.uint8)
+        self._t0_sim = 0.0
 
         self.favourites = _load_favourites()
         self.last_power = None
@@ -223,7 +226,16 @@ class Controller:
                     self.last_power = self.pix.last_power
                     self.last_frame = self.pix.last_sent
                 elif self.guard is not None:
-                    shown, rep = self.guard.apply(np.clip(buf, 0, 255))
+                    # Ceilings and region budgets still apply -- those
+                    # are properties of the wiring and hold whatever
+                    # the helmet is doing.  The thermal bucket does
+                    # not: it models heat in an object that is not
+                    # here, and letting it drain means a preview left
+                    # open for two minutes fades to almost nothing and
+                    # looks like a bug.  Hold it full and report what
+                    # the real helmet would settle to instead.
+                    shown, rep = self.guard.apply(np.clip(buf, 0, 255),
+                                                  now=self._t0_sim)
                     self.last_power = rep
                     self.last_frame = shown
                 else:
@@ -400,9 +412,39 @@ def make_handler(ctl):
         def log_message(self, *a):
             pass
 
+        def handle_one_request(self):
+            # A browser that seeks in an <audio> element, or closes a
+            # frame stream, simply drops the connection mid-write.  That
+            # is routine, but it arrives as BrokenPipeError out of
+            # socketserver and takes the whole handler down with a
+            # traceback -- and with keep-alive on, the next request on
+            # that connection goes nowhere.  Swallow the disconnect and
+            # let the thread end quietly.
+            try:
+                return BaseHTTPRequestHandler.handle_one_request(self)
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True
+
+        def do_HEAD(self):
+            # Players ask before they fetch.  Answering 501 makes a
+            # track look unplayable before a byte has been requested.
+            self._head_only = True
+            try:
+                self.do_GET()
+            finally:
+                self._head_only = False
+
+        _head_only = False
+
         def _send(self, body, ctype="application/json", code=200, extra=None):
             if not isinstance(body, bytes):
                 body = json.dumps(body).encode()
+            if self._head_only:
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                return
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
@@ -421,6 +463,8 @@ def make_handler(ctl):
                 return self._send(ctl.state())
             if path == "/api/layout":
                 return self._send(layout(ctl.h))
+            if path == "/api/stream":
+                return self._stream()
             if path == "/api/frame":
                 # Raw bytes, not JSON: 622 LEDs is 1866 bytes this way
                 # and about 9 kB as a list of numbers, which matters on
@@ -430,6 +474,36 @@ def make_handler(ctl):
             if path.startswith("/audio/"):
                 return self._audio(urllib.parse.unquote(path[len("/audio/"):]))
             self._send({"error": "no route"}, code=404)
+
+        def _stream(self):
+            """Push frames until the client goes away.
+
+            Polling cost a round trip per frame, which over a tunnel is
+            two hundred milliseconds of nothing happening and a preview
+            that runs at four frames a second however fast the renderer
+            is.  One open connection and the frames arrive as they are
+            made.
+            """
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            if self._head_only:
+                return
+            period = 1.0 / 15.0
+            try:
+                self.wfile.write(b"retry: 2000\n\n")
+                while not ctl.stop:
+                    b64 = base64.b64encode(ctl.last_frame.astype(np.uint8).tobytes())
+                    self.wfile.write(b"data: " + b64 + b"\n\n")
+                    self.wfile.flush()
+                    time.sleep(period)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                self.close_connection = True
 
         def _audio(self, name):
             """Serve the track with range support -- phones seek by range."""
@@ -454,15 +528,20 @@ def make_handler(ctl):
             if rng:
                 self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
             self.end_headers()
-            with open(full, "rb") as f:
-                f.seek(start)
-                left = n
-                while left > 0:
-                    chunk = f.read(min(65536, left))
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
-                    left -= len(chunk)
+            if self._head_only:
+                return
+            try:
+                with open(full, "rb") as f:
+                    f.seek(start)
+                    left = n
+                    while left > 0:
+                        chunk = f.read(min(65536, left))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        left -= len(chunk)
+            except (BrokenPipeError, ConnectionResetError):
+                self.close_connection = True
 
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path
@@ -507,6 +586,29 @@ def make_handler(ctl):
     return H
 
 
+class _DualStack(ThreadingHTTPServer):
+    """Listen on IPv4 and IPv6 at once.
+
+    Bound to 0.0.0.0 this answers 127.0.0.1 and nothing else, and
+    anything that resolves "localhost" to ::1 first -- cloudflared
+    does -- gets connection refused and reports the whole service as
+    down.  That failure is intermittent, because it depends on which
+    address the resolver hands back, which makes it look like flakiness
+    rather than a missing listener.
+    """
+
+    address_family = socket.AF_INET6
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def server_bind(self):
+        try:
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        except OSError:
+            pass
+        return ThreadingHTTPServer.server_bind(self)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -539,7 +641,7 @@ def main(argv=None):
                              % (a.preset, ", ".join(sorted(E.REGISTRY))))
         ctl.set_preset(a.preset)
         print("starting in preset: %s" % a.preset)
-    srv = ThreadingHTTPServer(("0.0.0.0", a.port), make_handler(ctl))
+    srv = _DualStack(("::", a.port), make_handler(ctl))
     print("\n  open on your phone:   http://%s:%d/\n"
           % (mau5wled.lan_ip(), a.port))
     print("  %d presets, %d shows" % (len(E.REGISTRY), len(ctl.state()["shows"])))

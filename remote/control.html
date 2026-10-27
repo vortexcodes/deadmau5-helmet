@@ -80,6 +80,24 @@
       background:#0e0e14;color:var(--fg);font-size:15px;padding:0 11px;
       -webkit-user-select:text;user-select:text}
  #cue{font-size:12px;color:var(--accent);font-weight:650;min-height:16px}
+ /* On a wide screen the phone column leaves the preview postage-stamp
+    sized and everything else stranded beside a metre of empty space.
+    Give the preview the room and stack the controls down one side. */
+ @media (min-width:760px){
+   body{display:grid;height:100vh;
+        grid-template-columns:1fr minmax(360px,440px);
+        grid-template-rows:auto auto 1fr auto}
+   header{grid-column:1/span 2}
+   #prevwrap{grid-column:1;grid-row:2/span 3;height:auto !important;
+             border-right:1px solid var(--line);border-bottom:none;
+             display:flex;align-items:center;justify-content:center}
+   #prev{width:100%;height:100%;object-fit:contain}
+   nav{grid-column:2;grid-row:2}
+   main{grid-column:2;grid-row:3;min-height:0}
+   #transport{grid-column:2;grid-row:4;border-top:1px solid var(--line)}
+   .grid{grid-template-columns:repeat(2,1fr)}
+   .tile{min-height:54px;font-size:14px}
+ }
  /* Live preview.  Blurred at the canvas level rather than per LED:
     one GPU pass instead of 622 shadowBlur fills, which a phone will
     not keep up with. */
@@ -360,14 +378,24 @@ const oc = document.createElement('canvas'), octx = oc.getContext('2d');
 const pwrap = document.getElementById('prevwrap');
 
 const PREV_H = [0.30, 0.52, 0.0];        // tap to cycle: normal, big, hidden
+const wide = () => window.matchMedia('(min-width:760px)').matches;
+
 function sizePreview(){
   if(!LAY) return;
-  const w = pwrap.clientWidth || window.innerWidth;
-  const frac = PREV_H[prevOn];
-  const h = frac ? Math.round(Math.min(w / LAY.aspect, window.innerHeight*frac)) : 0;
-  pwrap.style.height = h + 'px';
+  let w, h;
+  if(wide()){
+    // the grid decides the box; fit the helmet's aspect inside it
+    const bw = pwrap.clientWidth, bh = pwrap.clientHeight;
+    if(bw < 8 || bh < 8) return;
+    w = Math.min(bw, bh * LAY.aspect); h = w / LAY.aspect;
+  }else{
+    w = pwrap.clientWidth || window.innerWidth;
+    const frac = PREV_H[prevOn];
+    h = frac ? Math.round(Math.min(w / LAY.aspect, window.innerHeight*frac)) : 0;
+    pwrap.style.height = h + 'px';
+  }
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  pc.width = Math.round(w*dpr); pc.height = Math.round(Math.max(h,1)*dpr);
+  pc.width = Math.round(Math.max(w,1)*dpr); pc.height = Math.round(Math.max(h,1)*dpr);
   pc.style.width = w+'px'; pc.style.height = h+'px';
 }
 
@@ -399,9 +427,19 @@ function paint(buf){
   pctx.globalCompositeOperation = 'source-over';
   pctx.fillStyle = '#06060a'; pctx.fillRect(0,0,W,H);
 
+  // Filled bodies rather than outlines.  Three large faint rings over
+  // a dark background read as stray arcs, not as a head and two ears;
+  // a disc the colour of a switched-off diffuser reads as the object.
   for(const p of LAY.parts){
-    pctx.strokeStyle = '#191922'; pctx.lineWidth = 1.5*dpr;
-    pctx.beginPath(); pctx.arc(p.cx*W, p.cy*H, p.r*W, 0, 6.2832); pctx.stroke();
+    const R = p.r*W*1.14;
+    const g = pctx.createRadialGradient(p.cx*W, p.cy*H, 0, p.cx*W, p.cy*H, R);
+    // ending on the page background, not near it: a last stop even one
+    // step off draws a visible rim, and three rims read as scribble
+    g.addColorStop(0, 'rgba(120,125,145,0.055)');
+    g.addColorStop(0.72, 'rgba(120,125,145,0.035)');
+    g.addColorStop(1, 'rgba(120,125,145,0)');
+    pctx.fillStyle = g;
+    pctx.beginPath(); pctx.arc(p.cx*W, p.cy*H, R, 0, 6.2832); pctx.fill();
   }
   pctx.fillStyle = '#16161e';
   for(let i=0;i<LAY.n;i++){
@@ -449,30 +487,49 @@ function paint(buf){
   pctx.globalCompositeOperation = 'source-over';
 }
 
-// Paced by how fast the frames actually come back rather than by a
-// fixed interval: over a tunnel a 10 Hz timer just queues requests it
-// cannot finish, and the preview falls further behind the longer it runs.
-async function frameLoop(){
+// Frames arrive on one open connection.  Polling cost a round trip
+// each, which over a tunnel is two hundred milliseconds of nothing and
+// a preview stuck at four frames a second however fast the renderer
+// is.  Polling stays as the fallback for anything that cannot hold the
+// stream open.
+let es = null;
+function startStream(){
+  if(es) es.close();
+  const bin = new Uint8Array(LAY.n*3);
+  try{
+    es = new EventSource('/api/stream');
+  }catch(e){ return pollFrames(); }
+  es.onmessage = ev=>{
+    if(PREV_H[prevOn]===0 && !wide()) return;
+    const raw = atob(ev.data);
+    for(let i=0;i<bin.length && i<raw.length;i++) bin[i] = raw.charCodeAt(i);
+    paint(bin);
+  };
+  es.onerror = ()=>{ /* EventSource retries on its own */ };
+}
+
+async function pollFrames(){
   for(;;){
-    if(PREV_H[prevOn]===0 || document.hidden){ await new Promise(r=>setTimeout(r,400)); continue; }
+    if((PREV_H[prevOn]===0 && !wide()) || document.hidden){
+      await new Promise(r=>setTimeout(r,400)); continue; }
     const t0 = performance.now();
     try{
       const r = await fetch('/api/frame', {cache:'no-store'});
       paint(new Uint8Array(await r.arrayBuffer()));
     }catch(e){ await new Promise(r=>setTimeout(r,800)); continue; }
-    const spent = performance.now() - t0;
-    await new Promise(r=>setTimeout(r, Math.max(0, 66 - spent)));
+    await new Promise(r=>setTimeout(r, Math.max(0, 66 - (performance.now()-t0))));
   }
 }
 
-pwrap.onclick = ()=>{ prevOn = (prevOn + 1) % PREV_H.length; sizePreview(); };
+pwrap.onclick = ()=>{ if(wide()) return; prevOn = (prevOn + 1) % PREV_H.length; sizePreview(); };
 window.addEventListener('resize', sizePreview);
 
 (async()=>{
   const r = await fetch('/api/state'); S = await r.json(); draw(true);
   try{
     LAY = await (await fetch('/api/layout')).json();
-    sizePreview(); frameLoop();
+    sizePreview();
+    if(window.EventSource) startStream(); else pollFrames();
   }catch(e){ pwrap.style.height = '0px'; }
 })();
 </script>
