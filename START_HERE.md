@@ -1,8 +1,7 @@
 # Picking this up on another machine
 
 ```bash
-gh auth login                                   # once, device code, ~1 min
-gh repo clone vortexcodes/deadmau5-helmet
+git clone https://github.com/vortexcodes/deadmau5-helmet.git
 cd deadmau5-helmet
 python3 -m pip install numpy pillow matplotlib
 python3 -m pytest test_mau5.py -q               # 25 tests, no hardware needed
@@ -43,9 +42,22 @@ are the part that took the night:
 Losing those means re-running the localisation. Losing the photographs
 means nothing.
 
-## The repo is private
+## The music is not in here
 
-It contains your own mp3s. Making it public would redistribute those, so
-it is private; the music is gitignored out of nothing, it is simply in a
-repo only you can read. If you want a public version, say so and I will
-split the code out without the tracks.
+The repo is public, so the tracks are not in it -- they are commercial
+releases and not ours to hand out. The show files reference them by
+filename, so to play a show, drop the mp3s next to the show JSONs:
+
+    deadmau5 - Strobe.mp3
+    deadmau5 - Strobe (Dimension Remix).mp3
+    deadmau5 - Ghosts n Stuff (Nero Remix).mp3
+    Fred again.. & Baby Keem - leavemealone.mp3
+    beneath (with raxaj).mp3
+
+They are in the private `vortexcodes/deadmau5-helmet-archive`, which is
+the pre-split repo with everything in it:
+
+    git clone https://github.com/vortexcodes/deadmau5-helmet-archive.git
+
+Everything that does not play audio -- the map, the presets, the power
+model, the tests -- works without them.
