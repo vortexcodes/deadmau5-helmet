@@ -19,6 +19,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
+import subprocess
+import re
 import ssl
 import threading
 import time
@@ -222,6 +225,53 @@ def shot(out, host="127.0.0.1", port=8752, fresh=1.5, wait=15.0, tls=False,
                      "with the camera started?" % base)
 
 
+def cert_ips(crt):
+    """The addresses an existing certificate actually covers."""
+    try:
+        out = subprocess.run(["openssl", "x509", "-in", crt, "-noout", "-text"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return set()
+    ips = set()
+    for part in re.findall(r"IP Address:([0-9a-fA-F:.]+)", out):
+        ips.add(part)
+    return ips
+
+
+def ensure_cert(crt, key, ips, days=365):
+    """Make sure the certificate covers the address the phone will type.
+
+    A self-signed certificate is the right tool here -- the page needs
+    a secure context so getUserMedia will run, and nothing about the
+    traffic is secret -- but the address still has to match.  A browser
+    given an IP URL has no hostname to fall back on, so a SAN listing
+    yesterday's DHCP lease is not a warning anybody can click through;
+    it is a flat refusal, and it looks exactly like the server being
+    down.  The lease moves, so check on every start.
+    """
+    want = set(ips) | {"127.0.0.1"}
+    if os.path.exists(crt) and os.path.exists(key) and want <= cert_ips(crt):
+        return False
+    os.makedirs(os.path.dirname(crt) or ".", exist_ok=True)
+    san = ",".join(["IP:" + i for i in sorted(want)] + ["DNS:localhost"])
+    cfg = ("[req]\ndistinguished_name=dn\nx509_extensions=v3\nprompt=no\n"
+           "[dn]\nCN=mau5eye\n[v3]\nsubjectAltName=" + san +
+           "\nbasicConstraints=CA:FALSE\n")
+    with tempfile.NamedTemporaryFile("w", suffix=".cnf", delete=False) as f:
+        f.write(cfg)
+        path = f.name
+    try:
+        # a config file rather than -addext: LibreSSL, which is what
+        # macOS ships as openssl, does not take -addext
+        subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048",
+                        "-nodes", "-keyout", key, "-out", crt,
+                        "-days", str(days), "-config", path],
+                       check=True, capture_output=True, timeout=60)
+    finally:
+        os.unlink(path)
+    return True
+
+
 def main(argv=None):
     import mau5wled
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
@@ -250,6 +300,13 @@ def main(argv=None):
     handler = make_handler(eye)
     srv = ThreadingHTTPServer(("0.0.0.0", a.port), handler)
     ip = mau5wled.lan_ip()
+
+    if a.tls:
+        try:
+            if ensure_cert(a.cert, a.key, [ip] if ip else []):
+                print("  certificate regenerated for %s" % ip)
+        except Exception as e:
+            print("  could not make a certificate (%s); https disabled" % e)
 
     tls_srv = None
     if a.tls and os.path.exists(a.cert) and os.path.exists(a.key):
