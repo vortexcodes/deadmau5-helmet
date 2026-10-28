@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#07070a">
+<title>mau5head</title>
+<style>
+:root{--bg:#07070a;--panel:#131319;--line:#26262f;--ink:#e9e9f0;--dim:#8a8a99;
+      --go:#1f7a3a;--stop:#8c2020;--on:#2d6cdf}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{padding:env(safe-area-inset-top) 12px calc(96px + env(safe-area-inset-bottom))}
+h1{font-size:15px;font-weight:600;margin:14px 0 8px;letter-spacing:.3px}
+h1 small{color:var(--dim);font-weight:400}
+#conn{font-size:13px;color:var(--dim);padding:6px 0}
+#conn.good{color:#67d98b}
+#conn.bad{color:#ff8080}
+#warn{display:none;background:#3a2a0c;border:1px solid #6b4e10;color:#ffd48a;
+  padding:8px 10px;border-radius:8px;font-size:13px;margin:6px 0}
+canvas{width:100%;display:block;background:#07070a;border:1px solid var(--line);
+  border-radius:12px}
+.stats{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--dim);
+  padding:8px 2px}
+.stats b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+#meter{height:4px;background:var(--line);border-radius:3px;overflow:hidden}
+#bar{height:100%;width:0;background:linear-gradient(90deg,#2d6cdf,#d9a62d,#d94b2d);
+  transition:width .25s}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));
+  gap:8px;margin:10px 0}
+#grid button{appearance:none;border:1px solid var(--line);background:var(--panel);
+  color:var(--ink);border-radius:10px;padding:14px 6px;font-size:14px;
+  font-family:inherit}
+#grid button.on{background:var(--on);border-color:#5b93ff}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:10px 12px;margin:10px 0}
+.row{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:14px}
+.row span{flex:0 0 94px;color:var(--dim)}
+.row b{flex:0 0 46px;text-align:right;font-variant-numeric:tabular-nums;
+  font-weight:500}
+.row input[type=range]{flex:1;min-width:0}
+.row input[type=color]{width:46px;height:30px;padding:0;border:0;background:none}
+.row input[type=text]{flex:1;min-width:0;background:#0d0d12;color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:8px}
+select{background:#0d0d12;color:var(--ink);border:1px solid var(--line);
+  border-radius:8px;padding:8px;font-family:inherit;font-size:14px}
+footer{position:fixed;left:0;right:0;bottom:0;background:#0b0b10f2;
+  border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+  backdrop-filter:blur(8px)}
+#go{width:100%;border:0;border-radius:12px;background:var(--go);color:#fff;
+  font:600 17px/1 inherit;padding:18px;font-family:inherit}
+#go.stop{background:var(--stop)}
+.note{color:var(--dim);font-size:12px;padding:4px 2px 20px}
+</style>
+</head>
+<body>
+
+<h1>mau5head <small>— offline</small></h1>
+<div id="conn">starting…</div>
+<div id="warn"></div>
+
+<canvas id="view"></canvas>
+<div id="meter"><div id="bar"></div></div>
+<div class="stats">
+  <span><b id="fps">0</b> fps</span>
+  <span><b id="ma">0</b> mA</span>
+  <span><b id="w">0</b> W</span>
+  <span>heat <b id="therm">-</b></span>
+  <span>dropped <b id="drop">0</b></span>
+  <span>now <b id="now">—</b></span>
+</div>
+
+<div id="grid"></div>
+
+<div class="panel">
+  <div class="row"><span>brightness</span><b id="brival">255</b>
+    <input id="bri" type="range" min="8" max="255" step="1" value="255"></div>
+  <div class="row"><span>cycle</span>
+    <select id="cycle">
+      <option value="0">off</option>
+      <option value="20">every 20 s</option>
+      <option value="45">every 45 s</option>
+      <option value="120">every 2 min</option>
+    </select></div>
+</div>
+
+<div class="panel" id="params"></div>
+
+<p class="note">
+<span id="leds">0</span> LEDs, held under <span id="budget">0</span> mA of LED
+current by the same guard the laptop uses, with the controller's own limiter
+under that. Built <span id="built">—</span>. Keep this page in front: the
+helmet stops when the phone does, and goes dark by itself within about a
+minute if the phone stops talking altogether.
+</p>
+
+<footer><button id="go">start</button></footer>
+
+<script><!--@DATA--></script>
+<script><!--@ENGINE--></script>
+<script><!--@GUARD--></script>
+<script><!--@WIRE--></script>
+<script><!--@UI--></script>
+</body>
+</html>

@@ -21,3 +21,9 @@ data/cal/_tmp/
 # private key is a committed private key even when it only guards a
 # camera preview. Regenerate with setup/make_eye_cert.sh.
 data/cal/tls/
+
+# The offline player, built from remote/offline/ by mau5offline.py.
+# Generated: it carries the map, the fonts and the power model baked
+# in, so a committed copy would silently go stale the first time any
+# of those changed.
+data/offline/

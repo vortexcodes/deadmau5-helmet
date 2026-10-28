@@ -547,3 +547,144 @@ This turns `docs/mau5remote-android.md` from a *remote* into a *player*: it has
 to read the FSEQ, keep a frame clock locked to its own audio playback, and
 push DDP. That is the next build, and it is a real one. Until it exists, the
 mini can play shows the same way for testing.
+
+## Offline mode: the helmet with no network and no laptop
+
+At a show there is no house WiFi worth trusting and no reason to be carrying
+the laptop. The helmet brings up its own access point, the phone joins it,
+opens one page, and all 34 animations run with nothing else involved.
+
+```bash
+python3 mau5offline.py build              # make the page, no hardware needed
+python3 mau5offline.py serve              # drive it against a fake controller
+python3 mau5offline.py config --host X --ap-psk '…' --apply
+python3 mau5offline.py deploy --host X    # upload it, then read it back
+python3 mau5offline.py check  --host X    # is it actually ready
+```
+
+Then: join **mau5head-AP**, open **http://4.3.2.1/mau5.htm**.
+
+### Why the page lives on the controller
+
+Every other place it could live is ruled out, which is worth writing down
+because each of them looks reasonable until you try it.
+
+* A browser cannot open a UDP socket, so DDP is not available to a phone and
+  the pixels have to go over the controller's own HTTP API.
+* An `https://` page cannot make requests to a plain-`http` 192.168 address.
+  That rules out hosting it anywhere with a certificate — GitHub Pages
+  included, and with it the whole installable-PWA idea.
+* A plain-`http` page is not a secure context, so no service worker will
+  cache it. The laptop cannot serve it either, because then the laptop has to
+  be there.
+
+Exactly one HTTP server is on that network with nothing else to do, so the
+player is uploaded to WLED's own filesystem: 51 kB gzipped, same origin as the
+API it drives, nothing to install on the phone, and it works from anybody's
+phone for as long as the helmet boots.
+
+### What runs where
+
+```
+phone                                   controller
+  mau5engine, ported to JS      ──┐
+  the power guard, ported         ├──  WLED, segment frozen
+  the colour-order correction   ──┘    automatic brightness limiter
+  a preview of what it is sending      nothing else
+```
+
+The presets and the guard are **ports, not reimplementations**: the same
+parameter names, the same order, the same arithmetic. `test_mau5.py offline`
+renders every preset in both languages at seven times and compares — worst
+disagreement 0.0002 of a count out of 255 — and drives both power guards with
+the same frames and the same clock, where the currents come out identical.
+
+The geometry is not ported at all. `Helmet`'s derived arrays are exported from
+Python and read back as typed arrays, so the port cannot disagree about where
+an LED is, only about what colour to paint it, which is the part that is
+tested.
+
+### The wire
+
+WLED's individual-LED syntax, `{"seg":{"i":[…]}}`, over the WebSocket when the
+build has one and plain POSTs when it does not. Only what changed is sent and
+runs of one colour collapse to a range, which is the difference between 5.6 kB
+a frame and a mean of 1.0 kB. `solid` is 88 bytes; `fire`, the worst, is 3.6 kB.
+
+Sending `i` puts the segment in WLED's freeze state, which is what stops the
+running effect painting over the frames. Three things follow from that:
+
+* **The parts of a frame accumulate**, so a frame too big for the firmware's
+  JSON buffer is split rather than dropped. Nothing is sent over 3000 bytes.
+* **Nothing acknowledges a frame.** WLED answers an HTTP post before parsing
+  the body and a WebSocket says nothing at all, so the player resends the
+  whole frame every two seconds; any LED left stale by a dropped message
+  rights itself within that.
+* **The last frame stays lit forever** if the phone goes away. Hence the dead
+  man below.
+
+The frame rate is measured, not declared. An ESP32 parsing JSON is the slow
+part of this system and how slow depends on the preset, so the player backs
+off when the controller refuses and creeps back up when it keeps up. Against a
+controller that takes 35 ms a message it settles at 17 fps; against one that
+takes 8 ms, 29.
+
+### Power, with the laptop gone
+
+On the house network the guard in `Pixels.send` is the only clamp, and that is
+fine because every frame goes through it. Offline the frames come from a
+browser tab, so there are three:
+
+1. **The same guard, in JavaScript**, reading the same `data/cal/power.json`:
+   regions, ceilings, shed weights, floors and the thermal bucket. Watch
+   `heat` climb on the page and the current ration itself down from 1622 mA to
+   about 1040 mA after a couple of minutes of something bright — that is the
+   bucket filling, exactly as it does on the laptop.
+2. **WLED's own brightness limiter**, set by `mau5offline.py config` to the
+   same number, `budget + standby` mA at 19 mA per LED. A limiter a UI bug can
+   skip is not a limiter; this one runs on the controller, below anything the
+   page can reach, and it also covers the helmet being powered on with no
+   phone anywhere near it.
+3. **A dead man's handle.** The segment latches, so the player re-arms WLED's
+   nightlight — instant mode, one minute — every twenty seconds. If the phone
+   is dropped, locked or out of battery the helmet goes dark about a minute
+   later. The page also blanks the helmet on stop and on `pagehide`, which
+   covers everything except the phone dying outright.
+
+### Testing it without a helmet
+
+`mau5fake.py` answers like the controller does and is deliberately strict
+where the firmware is strict: it refuses individual LED writes unless the
+segment is frozen, drops a message over its JSON buffer in silence, and
+broadcasts state back over the WebSocket the way WLED does. `--lag`,
+`--max-json`, `--no-ws`, `--no-ws-echo` and `--no-freeze` are there to make
+each of those failures happen on purpose.
+
+```bash
+python3 mau5fake.py --lag 35 --max-json 3072   # a slow controller
+python3 mau5fake.py --no-freeze                # a build older than 0.13
+python3 mau5fake.py --host 192.168.10.172      # the real one, via the laptop
+```
+
+`/fake/view` draws the pixel buffer it was sent, which is the closest thing to
+looking at the helmet.
+
+### What offline mode does not do
+
+**Shows.** The animations are all there; the five music shows are not. A show
+needs the track playing on the phone as the clock and its analysis — band
+energies at 40 Hz — as the drive, which is 250 to 670 kB a song before any
+quantising. The cue lists themselves are 13 kB and would go straight over.
+Nothing about the design prevents it; it is the next piece, not a limitation.
+
+**Anything with no phone at all.** Join the AP without opening the page and
+you get WLED's own effects, which still work and are a reasonable fallback.
+
+### The thing most likely to go wrong at a show
+
+Android does not like a WiFi network with no internet on it, and will quietly
+keep mobile data as the default route or offer to switch away from the AP
+altogether. Requests to `4.3.2.1` normally still go over WiFi because that
+subnet is directly connected, but if the page will not load, that is the first
+thing to check: tell Android to stay connected, and turn off "switch to mobile
+data automatically".

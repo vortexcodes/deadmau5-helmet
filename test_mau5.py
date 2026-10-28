@@ -836,6 +836,201 @@ def t_ears_match():
        % (100 * abs(w1 - w2) / max(w1, w2), w1, w2))
 
 
+# ----------------------------------------------------------------------
+# Offline mode.
+#
+# At a show the phone talks to the controller and nothing else, so the
+# preset engine and the power guard both run in JavaScript on the
+# phone.  Two implementations of the same thing is a standing invitation
+# to drift, and the drift would show up on a helmet at a party with
+# nobody able to debug it.  These are what make the port a port: the
+# same presets, the same guard and the same colour correction, driven
+# in both languages and compared.
+# ----------------------------------------------------------------------
+import base64
+import shutil
+import subprocess
+
+OFFLINE_TIMES = (0.0, 0.37, 1.234, 2.5, 3.9, 7.77, 11.1)
+
+
+def _node(script, job):
+    """Run one of remote/offline's node helpers, or say why not."""
+    if not shutil.which("node"):
+        return None
+    p = subprocess.run(["node", os.path.join(HERE, "remote", "offline", script)],
+                       input=json.dumps(job), capture_output=True, text=True,
+                       cwd=HERE, timeout=300)
+    if p.returncode:
+        raise AssertionError("%s failed:\n%s" % (script, p.stderr[-2000:]))
+    return json.loads(p.stdout)
+
+
+def _f32(b64):
+    return np.frombuffer(base64.b64decode(b64), "<f4")
+
+
+def t_offline_engine_matches_python():
+    """Every preset, both languages, same answer.
+
+    The tolerance is half a count out of 255, which the float32
+    geometry in the bundle alone can use up; in practice the worst
+    preset lands three orders of magnitude inside it.
+    """
+    import mau5engine as E
+    import mau5offline
+    data = mau5offline.bundle()
+    names = sorted(E.REGISTRY)
+    jobs = [{"preset": nm, "params": {}, "t": t, "reset": (t == OFFLINE_TIMES[0])}
+            for nm in names for t in OFFLINE_TIMES]
+    res = _node("crosscheck.js", {"data": data, "jobs": jobs})
+    if res is None:
+        return note("offline: node not installed, the JS port went unchecked")
+    h = E.Helmet()
+    worst, where = 0.0, ""
+    k = 0
+    for nm in names:
+        inst = E.make(nm)
+        for t in OFFLINE_TIMES:
+            py = np.clip(np.asarray(inst.render(h, t), float), 0, 255)
+            js = np.clip(_f32(res[k]["f"]).reshape(-1, 3), 0, 255)
+            k += 1
+            d = float(np.abs(py - js).max())
+            if d > worst:
+                worst, where = d, "%s at t=%.3f" % (nm, t)
+    ok(worst <= 0.51, "the JS port differs from the Python by %.3f counts (%s)"
+       % (worst, where))
+    note("offline: %d presets match the Python to %.4f counts"
+         % (len(names), worst))
+
+
+def t_offline_guard_matches_python():
+    """The guard the phone runs is the guard the laptop runs.
+
+    Equality is on the current, which is the number that matters and
+    which comes out identical.  Individual LEDs are allowed one count:
+    the governor bisects on a sum of 622 terms, numpy adds them
+    pairwise and JavaScript adds them in order, and the last bit of
+    that sum can put a channel either side of a truncation boundary.
+    """
+    import mau5engine as E
+    import mau5offline
+    import mau5power
+    data = mau5offline.bundle()
+    seq = [("solid", 0.0), ("solid", 0.5), ("rainbow", 1.0), ("fire", 1.5),
+           ("plasma", 2.0), ("twinkle", 2.5), ("strobe", 3.0), ("eq", 3.5),
+           ("solid", 4.0), ("solid", 120.0)]
+    jobs = [{"preset": nm, "params": {}, "t": t, "now": t, "guard": True,
+             "reset": (i == 0)} for i, (nm, t) in enumerate(seq)]
+    res = _node("crosscheck.js", {"data": data, "jobs": jobs})
+    if res is None:
+        return note("offline: node not installed, the JS guard went unchecked")
+    h = E.Helmet()
+    g = mau5power.load(count=h.n)
+    worst_ma, worst_led = 0.0, 0.0
+    for i, (nm, t) in enumerate(seq):
+        py, rep = g.apply(np.asarray(E.make(nm).render(h, t), float), now=t)
+        js = _f32(res[i]["f"]).reshape(-1, 3)
+        worst_ma = max(worst_ma, abs(rep["sent_ma"] - res[i]["report"]["sent_ma"]))
+        worst_led = max(worst_led, float(np.abs(py.astype(float) - js).max()))
+    ok(worst_ma <= 0.1, "the two guards disagree by %.2f mA" % worst_ma)
+    ok(worst_led <= 1.0, "the two guards disagree by %.1f counts on an LED"
+       % worst_led)
+    note("offline: the JS guard tracks the Python to %.2f mA" % worst_ma)
+
+
+def t_offline_encoder_roundtrip():
+    """What the phone encodes is what the controller will show.
+
+    Decoded here by mau5fake's parser, which is written against WLED's
+    `i` syntax rather than against the encoder -- so this is two
+    independent readings of the same spec, not a function and its
+    inverse.  Includes the colour-order permutation, because an
+    encoder that quietly dropped it would light the ear rims green and
+    every other test would still pass.
+    """
+    import mau5engine as E
+    import mau5fake
+    import mau5power
+    import mau5wled
+    h = E.Helmet()
+    g = mau5power.load(count=h.n)
+    strips = json.load(open(os.path.join(HERE, "data", "cal", "strips.json")))["strips"]
+    frames = []
+    for nm, t in (("solid", 0.0), ("rainbow", 0.1), ("rainbow", 0.15),
+                  ("fire", 1.0), ("scanner", 1.2), ("strobe", 2.0),
+                  ("solid", 2.5)):
+        f, _ = g.apply(np.asarray(E.make(nm).render(h, t), float), now=t)
+        frames.append(f.astype(np.uint8))
+    pix = mau5wled.Pixels("0.0.0.0", count=h.n, strips=strips, guard=False)
+    chars = 0
+    # Two message limits: the one the player ships with, and one small
+    # enough to force every entry to be split.  A message over the
+    # firmware's JSON buffer is dropped in silence, so the packer
+    # exceeding its limit would show up as nothing at all until a
+    # helmet was in front of someone.
+    for limit in (3000, 512):
+        job = {"count": h.n, "strips": strips, "maxBody": limit,
+               "frames": [base64.b64encode(f.tobytes()).decode() for f in frames]}
+        bodies = _node("wiretest.js", job)
+        if bodies is None:
+            return note("offline: node not installed, the encoder went unchecked")
+        fake = mau5fake.Fake(count=h.n)
+        fake.frozen = True
+        for f, parts in zip(frames, bodies):
+            for b in parts:
+                ok(len(b) <= limit, "a %d byte message against a %d byte "
+                   "limit would be dropped by the controller" % (len(b), limit))
+                if limit == 3000:
+                    chars += len(b)
+                fake.apply_state(json.loads(b))
+            want = pix.apply_order(f)
+            ok(np.array_equal(fake.px, want),
+               "at a %d byte limit the controller would show %d LEDs wrong"
+               % (limit, int((fake.px != want).any(1).sum())))
+    note("offline: %d frames encode to %.0f bytes each, decoded exactly"
+         % (len(frames), chars / float(len(frames))))
+
+
+def t_offline_page_is_self_contained():
+    """A page that fetches anything is a page that is blank at a show."""
+    import mau5offline
+    path, raw, gz = mau5offline.build(verbose=False)
+    text = raw.decode()
+    for part in ("MAU5_DATA", "makeHelmet", "PowerGuard", "class Link"):
+        ok(part in text, "the built page is missing %s" % part)
+    ok("<!--@" not in text, "a template placeholder survived the build")
+    for bad in ("http://", "https://", "//cdn", "integrity="):
+        ok(bad not in text, "the built page references %s" % bad)
+    # Room on the controller is the constraint: WLED's filesystem is
+    # around 700 kB on the smaller partition layouts.
+    ok(len(gz) < 200 * 1024, "the page is %.0f kB gzipped, too big to be sure "
+       "it fits" % (len(gz) / 1024.0))
+    note("offline: the page is %.0f kB, %.0f kB gzipped"
+         % (len(raw) / 1024.0, len(gz) / 1024.0))
+
+
+def t_offline_limiter_matches_the_budget():
+    """The controller's own limiter is set from the same power model.
+
+    Offline there is no Pixels.send between a preset and the strips,
+    so WLED's automatic brightness limiter is the only clamp a bug in
+    the page cannot get past.  It has to be set, and it has to be set
+    to the number the rest of the suite believes in.
+    """
+    import mau5offline
+    import mau5power
+    power = json.load(open(os.path.join(HERE, "data", "cal", "power.json")))
+    cfg = mau5offline.wanted_cfg(power)
+    led = cfg["hw"]["led"]
+    want = power["budget_ma"] + power["count"] * mau5power.MA_PER_LED_STANDBY
+    eq(led["maxpwr"], int(round(want)), "maxpwr")
+    eq(led["ledma"], int(round(mau5power.MA_PER_LED_FULL_WHITE)), "ledma")
+    eq(cfg["ap"]["behav"], 2, "the access point must come up unconditionally")
+    ok("psk" not in cfg["ap"], "a default access point password must not ship "
+                               "in a public repository")
+
+
 GROUPS = {
     "map": [t_map, t_frame, t_masks, t_strip_orientation, t_ears_match],
     "presets": [t_presets, t_preset_params, t_text_bitmap, t_accepts],
@@ -847,6 +1042,11 @@ GROUPS = {
     "shows": [t_lockable_presets, t_beat_lock_lands_on_the_grid, t_shows, t_show_player, t_crossfade, t_beat_helpers,
               t_analysis_cache],
     "wire": [t_ddp_packet, t_lan_ip],
+    "offline": [t_offline_engine_matches_python,
+                t_offline_guard_matches_python,
+                t_offline_encoder_roundtrip,
+                t_offline_page_is_self_contained,
+                t_offline_limiter_matches_the_budget],
     "camera": [t_eye_after],
     "audio": [t_tempo_truth, t_beat_alignment],
 }

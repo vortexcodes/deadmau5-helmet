@@ -20,6 +20,17 @@ python3 mau5show.py list
 python3 mau5doctor.py --offline
 ```
 
+The phone player is in that category too. It is built from the map and
+the power model, so it can be made and driven anywhere:
+
+```bash
+python3 mau5offline.py build            # the page the controller will serve
+python3 mau5fake.py                     # a controller that is not there
+```
+
+Open `http://127.0.0.1:8770/mau5.htm` for the player and
+`http://127.0.0.1:8770/fake/view` for what the helmet would be showing.
+
 ## What needs to be on the home network
 
 The helmet is a WLED controller on the house LAN (it was 192.168.10.172,

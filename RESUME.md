@@ -100,3 +100,62 @@ scale) and monotonic in screen x, so nothing can read backwards.
 Worth knowing: `alignbar --axis z` now lights the whole ear at once.
 That is correct -- the ears really are at one depth -- but it means the
 depth sweep can no longer tell one part of an ear from another.
+
+## Offline mode (2026-10-28)
+
+Jones: "make sure we have a functional offline mode (where my phone can
+connect to the LED controller and play all the animations without
+being on a network)."
+
+Built and tested end to end against a fake controller; **not yet run
+against the helmet**, because the Mac is on 10.1.7.142/21 and the
+helmet is on 192.168.10.x. Three commands are waiting for a network:
+
+    python3 mau5offline.py config --host <ip> --ap-psk '<pick one>' --apply
+    python3 mau5offline.py deploy --host <ip>
+    python3 mau5offline.py check  --host <ip>
+
+`deploy` uploads the page and then reads it back and compares, so it
+tells you if the firmware will not serve a `.gz` under its plain name
+rather than leaving a broken helmet; it falls back to the
+uncompressed page by itself if that happens.
+
+**The page lives on the controller, and that was forced.** A browser
+cannot send UDP, so DDP is out. An https page cannot reach a plain-http
+192.168 address, so no GitHub Pages and no installable PWA. A
+plain-http page is not a secure context, so no service worker and no
+serving it from the laptop. The only HTTP server on that network is
+WLED, so the player goes on its filesystem: 51 kB gzipped, same origin
+as the API, nothing installed on the phone.
+
+**The engine and the guard are ports, verified as ports.**
+`test_mau5.py offline` renders all 34 presets in Python and in
+JavaScript at seven times each and compares (worst 0.0002 counts out
+of 255), drives both power guards with the same frames and clock
+(currents identical), and round-trips the wire encoder through
+`mau5fake`'s own `i` parser, including the colour-order permutation.
+The geometry is exported from `Helmet` rather than recomputed, so the
+port can only disagree about colour.
+
+### What to check the first time it runs on the helmet
+
+- **The dead man.** The player re-arms WLED's nightlight (instant
+  mode, 1 minute) every 20 s, so a phone that is dropped or dies
+  leaves the helmet lit for at most a minute. Nothing here could test
+  that nightlight behaves as the docs say. Start it, lock the phone,
+  and time how long the helmet stays on. Watch also for a brightness
+  twitch every 20 s -- the re-arm is an off-then-on, and if WLED
+  restores a brightness on the off it will show.
+- **The frame rate.** Everything about the rate is adaptive, so there
+  is no number to get wrong, but the one the ESP32 actually manages is
+  unknown. Expect 10-20 fps on `fire` and far more on the cheap ones.
+- **Whether the WebSocket echoes state.** The player uses inbound ws
+  messages as acknowledgements and paces itself by them; if the build
+  stays quiet it falls back to the timer after a second. Either works,
+  but which one happens is worth knowing.
+
+### What it deliberately does not do
+
+The five music shows. The cue lists are 13 kB and would go straight
+over; the analysis behind them is 250-670 kB a song at 40 Hz, and the
+phone would have to hold the clock. That is the next piece.
