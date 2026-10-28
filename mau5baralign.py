@@ -154,8 +154,11 @@ def report(h, res):
         out[lbl] = (r, resid.std(), len(idx))
         print("  %-11s %5d  %-9.3f r=%+.3f     sd %5.1f mm, 90th %5.1f mm"
               % (lbl, len(idx), sl, r, resid.std(), np.percentile(np.abs(resid), 90)))
-    print("\n  The shell is the control: its positions come from the CAD.")
-    print("  An ear matching it means the ear map is as good as the CAD's.")
+    print("\n  Read this as self-consistency, not accuracy.  The bar is drawn")
+    print("  from the map and sampled at each LED's measured pixel, so a map")
+    print("  that agrees with the measurement scores well whether or not the")
+    print("  measurement was right.  What it does catch is a map that")
+    print("  disagrees with itself -- which the CAD shell did, at sd 37 mm.")
     return out
 
 
