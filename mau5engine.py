@@ -736,9 +736,22 @@ class Countdown(Preset):
               # keep all five rows above the sparse band just over the
               # visor, or the bottom stroke of a 2 drops out
               "flash": (255, 255, 255), "y_hi": 166.0, "y_lo": 48.0,
-              "x_half": 50.0}
+              # 130 rather than 50: at 50 the digit occupies 100 mm of
+              # a 340 mm face and reads as a smudge near the crown.
+              # Past about 135 the outer column is foreshortened more
+              # than twice and the digit starts to look wrong.
+              "x_half": 130.0, "loop": 2.0}
 
     def render(self, h, t, music=None):
+        # Repeat rather than finish.  A one-shot preset leaves the
+        # helmet dark for as long as it is selected, which is
+        # indistinguishable from a controller that has stopped working
+        # -- and it was in fact mistaken for one.  loop is the pause
+        # after the flash before it counts again; set it to 0 for a
+        # single run.
+        span = self.p["from"] * self.p["step"] + 0.8
+        if self.p["loop"] > 0:
+            t = t % (span + self.p["loop"])
         n = int(self.p["from"]) - int(t / self.p["step"])
         if n <= 0:
             k = max(0.0, 1.0 - (t - self.p["from"] * self.p["step"]) / 0.8)

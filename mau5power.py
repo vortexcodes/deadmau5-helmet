@@ -156,11 +156,20 @@ class PowerGuard:
     """Clamps a frame to what the helmet can survive."""
 
     def __init__(self, count, regions, budget_ma, default_ceiling=32,
-                 thermal=None):
+                 thermal=None, link_ma=0.0):
         self.count = int(count)
         self.thermal = thermal
         self.regions = sorted(regions, key=lambda r: r.lo)
         self.budget_ma = float(budget_ma)
+        # What the weakest connector between the supply and the strips
+        # can carry, continuously, in total.  The budget above is about
+        # heat in the helmet and headroom at the supply; neither is the
+        # real ceiling if the current has to cross a contact that
+        # cannot take it.  A Dupont pin is rated about an amp, and this
+        # helmet was being allowed 1.5 A of LED current on top of 0.6 A
+        # of standby.  Two amps through a one amp contact trips nothing
+        # -- it just gets hot, and the first sign is a melted housing.
+        self.link_ma = float(link_ma or 0.0)
         self.default_ceiling = int(default_ceiling)
         self._ceil = np.full(self.count, float(default_ceiling), np.float32)
         self._shed = np.full(self.count, 4.0, np.float32)
@@ -185,6 +194,15 @@ class PowerGuard:
         return self.count * MA_PER_LED_STANDBY
 
     # -- the clamp ------------------------------------------------------
+    def link_limit_ma(self):
+        """LED current the weakest connector leaves room for, or None.
+
+        Standby crosses the same joint, so it comes off the top.
+        """
+        if not self.link_ma:
+            return None
+        return max(0.0, self.link_ma - self.standby_ma())
+
     def apply(self, buf, now=None):
         """Return (clamped frame, report).  Never raises on a bad frame.
 
@@ -216,6 +234,9 @@ class PowerGuard:
         # is applied before the global scale so the two compose rather
         # than fight: whichever is tighter at this instant wins.
         budget = self.budget_ma
+        link = self.link_limit_ma()
+        if link is not None:
+            budget = min(budget, link)
         if self.thermal is not None:
             allowed_ma = self.thermal.allowance_w() / 12.0 * 1000.0
             budget = min(budget, max(allowed_ma, 0.0))
@@ -274,6 +295,7 @@ class PowerGuard:
             "governor_hit": governed,
             "floor_hit": floored,
             "budget_ma": round(budget, 1),
+            "link_ma": self.link_ma or None,
             "thermal": self.thermal.state() if self.thermal else None,
         }
 
@@ -322,7 +344,8 @@ def load(path=DEFAULT, count=None):
                            t.get("max_w"), t.get("standby_w", 0.0),
                            t.get("ramp", 0.30))
     return PowerGuard(count or d["count"], regions, d["budget_ma"],
-                      d.get("default_ceiling", 32), thermal=th)
+                      d.get("default_ceiling", 32), thermal=th,
+                      link_ma=d.get("link_ma", 0.0))
 
 
 def save(guard, path=DEFAULT):

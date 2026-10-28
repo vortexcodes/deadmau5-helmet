@@ -372,6 +372,35 @@ def t_floor_holds_the_shape():
     eq(int(out[~h.tubes].max()), 0, "the floor lit LEDs the preset wanted dark")
 
 
+def t_connector_limit():
+    """The budget must respect the weakest connector, standby included.
+
+    The thermal budget is about heat in the helmet and headroom at the
+    supply.  Neither is the real ceiling when the current has to cross
+    a contact that cannot carry it, and the first sign that it cannot
+    is a melted housing rather than anything tripping.
+    """
+    import mau5power, mau5engine as E
+    h = E.Helmet()
+    g = mau5power.load(count=h.n)
+    eq(g.link_limit_ma(), None, "no limit configured should mean no limit")
+
+    buf = np.full((h.n, 3), 255.0)
+    g.link_ma = 1000.0
+    out, rep = g.apply(buf, now=0.0)
+    ok(rep["total_ma"] <= 1000.0 + 1.0,
+       "drew %.0f mA across a 1000 mA connector" % rep["total_ma"])
+    ok(rep["sent_ma"] <= g.link_limit_ma() + 1.0,
+       "LED current ignored the connector rating")
+
+    # and it must not be the binding limit when the wiring is ample
+    g2 = mau5power.load(count=h.n)
+    g2.link_ma = 8000.0
+    out2, rep2 = g2.apply(buf, now=0.0)
+    ok(rep2["sent_ma"] > rep["sent_ma"],
+       "a generous connector should not hold the frame back")
+
+
 def t_power_regions():
     """The power profile's regions must be the map's regions.
 
@@ -764,7 +793,7 @@ GROUPS = {
     "presets": [t_presets, t_preset_params, t_text_bitmap, t_accepts],
     "power": [t_power_budget, t_power_board_limit, t_guard_in_send,
               t_thermal, t_thermal_never_exceeds, t_power_regions,
-              t_floor_holds_the_shape],
+              t_floor_holds_the_shape, t_connector_limit],
     "colour": [t_colour_correction],
     "shows": [t_lockable_presets, t_beat_lock_lands_on_the_grid, t_shows, t_show_player, t_crossfade, t_beat_helpers,
               t_analysis_cache],

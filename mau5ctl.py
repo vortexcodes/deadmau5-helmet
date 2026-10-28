@@ -102,6 +102,7 @@ class Controller:
                 self.guard = None
         self.last_frame = np.zeros((self.h.n, 3), np.uint8)
         self._t0_sim = 0.0
+        self._output_on = None
 
         self.favourites = _load_favourites()
         self.last_power = None
@@ -215,11 +216,43 @@ class Controller:
             return self.player.frame(self.now())
         return np.zeros((self.h.n, 3))
 
+    def _set_output(self, want):
+        """Hand the helmet back when we have nothing to show.
+
+        Streaming black is not the same as being off, and the
+        difference matters more than it sounds.  A helmet being sent
+        622 black pixels forty times a second is indistinguishable,
+        from the outside, from a helmet with a broken data line or a
+        dead supply -- and it overrides whatever WLED would otherwise
+        be doing, so it stays dark through reboots and power cycles
+        too.  An evening was spent pulling apart wiring that was fine
+        because of exactly this.  So "off" stops the stream and tells
+        the controller to switch off, and selecting anything turns it
+        back on.
+        """
+        if self.wled is None or want == self._output_on:
+            self._output_on = want
+            return
+        try:
+            if want:
+                self.wled.realtime(True, brightness=255)
+            else:
+                self.wled.off()
+            self._output_on = want
+        except Exception as e:
+            self.helmet_note = "could not switch output: %s" % type(e).__name__
+
     def _run(self):
         period = 1.0 / self.fps
         nxt = time.monotonic()
         while not self.stop:
             try:
+                live = self.mode != "off"
+                self._set_output(live)
+                if not live:
+                    self.last_frame = np.zeros((self.h.n, 3), np.uint8)
+                    time.sleep(period)
+                    continue
                 buf = self._frame() * self.brightness
                 if self.pix is not None:
                     self.pix.send(buf)
@@ -269,6 +302,7 @@ class Controller:
             try:
                 self.wled.info(refresh=True)
                 if not self.helmet_ok:
+                    self._output_on = None       # a reboot forgets everything
                     self.wled.realtime(True, brightness=255)
                     self.helmet_note = "reconnected at %s" % time.strftime("%H:%M:%S")
                     print("  helmet back: re-armed realtime mode")
@@ -632,6 +666,15 @@ def main(argv=None):
                              "overheats.")
         print("power guard: %.0f mA budget, %d regions"
               % (pix.guard.budget_ma, len(pix.guard.regions)))
+        if pix.guard.link_ma:
+            print("             weakest connector rated %.0f mA, leaving %.0f mA "
+                  "for the LEDs" % (pix.guard.link_ma, pix.guard.link_limit_ma()))
+        else:
+            print("             no connector rating set.  The budget assumes the "
+                  "wiring can carry\n"
+                  "             %.1f A continuously; set link_ma in "
+                  "data/cal/power.json if it cannot."
+                  % ((pix.guard.budget_ma + pix.guard.standby_ma()) / 1000.0))
 
     ctl = Controller(pix, fps=a.fps, wled=(None if a.no_wled else w))
     if a.preset:
