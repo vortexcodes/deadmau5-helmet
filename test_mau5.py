@@ -212,19 +212,40 @@ def t_guard_in_send():
 
 
 def t_colour_correction():
+    """The permutation must match strips.json exactly, at the edges too.
+
+    Hardcoding which indices are swapped is what let this drift: the
+    span was re-measured two LEDs longer and the test still asserted
+    the old boundary, so it failed on the correct answer.  Read the
+    boundaries from the file and check either side of each one.
+    """
     import mau5wled
     p = mau5wled.Pixels("127.0.0.1", 622)
     ident = np.array([0, 1, 2])
     swapped = np.array([1, 0, 2])
-    for i in (0, 398, 491, 528, 621):
-        ok((p.perm[i] == ident).all(), "led %d should be identity" % i)
-    for i in (492, 500, 527):
-        ok((p.perm[i] == swapped).all(), "led %d should be R/G swapped" % i)
+    spans = json.load(open(os.path.join(HERE, "data", "cal", "strips.json")))["strips"]
+    ok(spans, "no colour-order spans configured")
+    inside = set()
+    for st in spans:
+        eq(st["order"], "GRB", "only a GRB swap is modelled here")
+        lo, hi = st["start"], st["start"] + st["count"] - 1
+        inside |= set(range(lo, hi + 1))
+        for i in (lo, (lo + hi) // 2, hi):
+            ok((p.perm[i] == swapped).all(), "led %d is inside %d..%d and "
+               "should be R/G swapped" % (i, lo, hi))
+        for i in (lo - 1, hi + 1):            # just outside, both ends
+            if 0 <= i < 622 and i not in inside:
+                ok((p.perm[i] == ident).all(),
+                   "led %d is outside %d..%d and should be untouched" % (i, lo, hi))
+    for i in (0, 398, 621):
+        ok(i in inside or (p.perm[i] == ident).all(),
+           "led %d should be identity" % i)
     buf = np.zeros((622, 3), np.uint8)
-    buf[500] = (200, 0, 0)
+    rim = sorted(inside)[len(inside) // 2]
+    buf[rim] = (200, 0, 0)
     buf[400] = (200, 0, 0)
     out = p.apply_order(buf)
-    eq(tuple(out[500]), (0, 200, 0), "rim red must leave as green")
+    eq(tuple(out[rim]), (0, 200, 0), "rim red must leave as green")
     eq(tuple(out[400]), (200, 0, 0), "tube red must leave unchanged")
 
 
