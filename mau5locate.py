@@ -89,10 +89,18 @@ def main(argv=None):
     ap.add_argument("--resume", action="store_true", help="skip ones already measured")
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--eye-port", type=int, default=8752)
+    ap.add_argument("--fiducial", type=int, default=25,
+                    help="re-measure the first LED every N, to catch the "
+                         "camera being nudged mid-run")
+    ap.add_argument("--max-drift", type=float, default=6.0,
+                    help="stop if the fiducial moves this many pixels")
     a = ap.parse_args(argv)
 
     rows = load(a.out) if a.resume else {}
-    todo = [i for i in range(a.lo, a.hi + 1) if i not in rows]
+    # --to is inclusive, but it still cannot exceed the chain: asking for
+    # index 622 of 622 lit nothing and took the run down at the last LED.
+    hi = min(a.hi, a.count - 1)
+    todo = [i for i in range(a.lo, hi + 1) if i not in rows]
     if not todo:
         print("nothing to do (%d already measured)" % len(rows)); return
 
@@ -107,13 +115,55 @@ def main(argv=None):
     st = mau5wled.Streamer(mau5wled.Pixels(w, a.count, guard=probe), fps=20)
     t0 = time.time()
     misses = []
+    drift_log = []
     try:
         t = time.time(); st.dark(); time.sleep(1.5)
         ref = np.asarray(Image.open(mau5eye.shot(
             os.path.join(HERE, "data", "cal", "_locate_dark.jpg"),
             port=a.eye_port, wait=30, after=t + 0.7)).convert("L")).astype(np.float32)
 
+        # A fiducial, re-measured every so often.  This run takes an
+        # hour, and if the camera or the helmet is nudged halfway
+        # through, the first half and the second half are in different
+        # frames and the file silently becomes two incompatible sets.
+        # That happened: fitting on LEDs 0-199 and testing on 200-398
+        # gave 141 px of error where fitting on even and testing on odd
+        # gave 38, which is the signature of a move rather than noise.
+        # Nothing downstream could tell, and the ear map derived from it
+        # was wrong by a third of the frame.
+        fid_led = a.lo
+        fid0 = None
+        drift = []
+
+        def measure(led):
+            buf = np.zeros((a.count, 3), np.uint8)
+            buf[led] = (a.level, a.level, a.level)
+            t = time.time(); st.show(buf); time.sleep(a.settle)
+            f = mau5eye.shot(os.path.join(HERE, "data", "cal", "_locate.jpg"),
+                             port=a.eye_port, wait=30, after=t + 0.4)
+            d = np.clip(np.asarray(Image.open(f).convert("L")).astype(np.float32) - ref,
+                        0, 255)
+            return centroid(d)
+
         for n, led in enumerate(todo):
+            if n % a.fiducial == 0:
+                c = measure(fid_led)
+                if c is not None:
+                    if fid0 is None:
+                        fid0 = (c["cx"], c["cy"])
+                    else:
+                        dx, dy = c["cx"] - fid0[0], c["cy"] - fid0[1]
+                        drift.append((led, dx, dy))
+                        drift_log.append((led, dx, dy))
+                        if (dx*dx + dy*dy) ** 0.5 > a.max_drift:
+                            print("\n  STOPPING: the fiducial (led %d) has moved "
+                                  "%.1f px since the run began." % (fid_led,
+                                  (dx*dx + dy*dy) ** 0.5))
+                            print("  Everything measured so far is in one frame and "
+                                  "everything after would be in another,\n"
+                                  "  so the run stops rather than writing a file that "
+                                  "looks fine and is not.")
+                            break
             buf = np.zeros((a.count, 3), np.uint8)
             buf[led] = (a.level, a.level, a.level)
             t = time.time(); st.show(buf); time.sleep(a.settle)

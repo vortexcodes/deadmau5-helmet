@@ -66,22 +66,60 @@ def sweep(h, steps, thick, level, settle, host, eye_port, out, margin=40.0):
     return lo, hi
 
 
+def own_pixels(meas, shape, radius):
+    """For each LED, the pixels nearer to it than to any other LED.
+
+    A square window round each centroid sounds fine until you measure
+    the spacing: on the shell the nearest neighbour is 6.6 px away and
+    the window is 6 px, so every sample is a blend of two to five LEDs
+    and the sweep reads each one lighting when its neighbours do.  The
+    shell's correlation sat at 0.90 against the ears' 0.98 for exactly
+    this reason, and no amount of map correction would have moved it.
+
+    Assigning each pixel to its nearest LED keeps the window large
+    where the LEDs are sparse and shrinks it to nothing where they
+    crowd, which is the right behaviour in both places.
+    """
+    H, W = shape
+    idx = sorted(meas)
+    pts = np.array([[meas[i]["cx"], meas[i]["cy"]] for i in idx], np.float32)
+    own = {}
+    for n, i in enumerate(idx):
+        cx, cy = pts[n]
+        x0, x1 = int(max(0, cx - radius)), int(min(W, cx + radius + 1))
+        y0, y1 = int(max(0, cy - radius)), int(min(H, cy + radius + 1))
+        if x1 <= x0 or y1 <= y0:
+            continue
+        yy, xx = np.mgrid[y0:y1, x0:x1]
+        d_self = (xx - cx) ** 2 + (yy - cy) ** 2
+        near = np.full(d_self.shape, np.inf, np.float32)
+        for m in range(len(idx)):
+            if m == n:
+                continue
+            ox, oy = pts[m]
+            if abs(ox - cx) > 3 * radius or abs(oy - cy) > 3 * radius:
+                continue
+            np.minimum(near, (xx - ox) ** 2 + (yy - oy) ** 2, out=near)
+        mask = d_self < near
+        if mask.sum() < 1:                     # utterly crowded: keep the peak
+            mask = d_self <= d_self.min()
+        own[i] = (y0, y1, x0, x1, mask)
+    return own
+
+
 def analyse(h, steps, lo, hi, out, meas, radius=6, clip=0.75):
     ref = np.asarray(Image.open(os.path.join(out, "dark.jpg")).convert("L")).astype(np.float32)
     S = np.stack([np.clip(np.asarray(Image.open(os.path.join(out, "s%02d.jpg" % k))
                                      .convert("L")).astype(np.float32) - ref, 0, 255)
                   for k in range(steps)])
     H, W = ref.shape
+    own = own_pixels(meas, (H, W), radius)
     res = {}
     for i in range(h.n):
-        if i not in meas:
+        if i not in own:
             continue
-        cx, cy = int(round(meas[i]["cx"])), int(round(meas[i]["cy"]))
-        x0, x1 = max(0, cx - radius), min(W, cx + radius + 1)
-        y0, y1 = max(0, cy - radius), min(H, cy + radius + 1)
-        if x1 <= x0 or y1 <= y0:
-            continue
-        prof = S[:, y0:y1, x0:x1].mean(axis=(1, 2))
+        y0, y1, x0, x1, mask = own[i]
+        prof = S[:, y0:y1, x0:x1][:, mask].mean(axis=1)
         if prof.max() < 8:
             continue
         # Clip hard.  Each ear is one translucent disc, so every LED on
@@ -121,6 +159,64 @@ def report(h, res):
     return out
 
 
+def kinks(h, res, min_step=9.0, min_side=3):
+    """Find strips where the error jumps partway along, and say where.
+
+    A global correlation says the map is good on average, which is
+    exactly what it was saying while a quarter of the digits were
+    dropping out.  The failure this is looking for is local: a strip
+    cut around the visor magnets has LEDs physically absent where the
+    CAD has some, so everything after the cut is displaced by a whole
+    pitch and everything before it is fine.  That is a step in the
+    residual, not a slope, and averaging hides it.
+
+    For each strip, try every split point and keep the one that best
+    explains the residual as two flat levels.  Report the step.
+    """
+    out = []
+    for g in sorted(set(h.group.tolist())):
+        idx = [i for i in sorted(res) if h.group[i] == g]
+        if len(idx) < 2 * min_side + 1:
+            continue
+        want = np.array([h.py[i] for i in idx])
+        got = np.array([res[i] for i in idx])
+        if np.ptp(want) < 1e-6:
+            continue
+        sl, ic = np.polyfit(want, got, 1)
+        r = got - (sl * want + ic)
+        best = None
+        for k in range(min_side, len(idx) - min_side):
+            a, b = r[:k], r[k:]
+            cost = float(a.var() * len(a) + b.var() * len(b))
+            if best is None or cost < best[0]:
+                best = (cost, k, float(b.mean() - a.mean()))
+        if best is None:
+            continue
+        _, k, step = best
+        flat = float(r.var() * len(r))
+        if abs(step) >= min_step and best[0] < flat * 0.6:
+            out.append({"group": int(g), "at": int(idx[k]),
+                        "before": int(idx[k - 1]), "step_mm": round(step, 1),
+                        "n": len(idx)})
+    out.sort(key=lambda d: -abs(d["step_mm"]))
+    return out
+
+
+def report_kinks(h, res, pitch=16.7):
+    ks = kinks(h, res)
+    print("\n  strips whose error jumps partway along "
+          "(a cut in the strip looks like this):")
+    if not ks:
+        print("    none above the threshold -- the map is locally consistent")
+        return ks
+    print("    %-6s %-14s %9s %9s" % ("strip", "jumps between", "step mm", "pitches"))
+    for d in ks:
+        print("    %-6d %4d -> %-6d %9.1f %9.2f"
+              % (d["group"], d["before"], d["at"], d["step_mm"],
+                 d["step_mm"] / pitch))
+    return ks
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -150,6 +246,7 @@ def main(argv=None):
     res = analyse(h, a.steps, lo, hi, a.out, meas)
     print("\n%d of %d LEDs answered the sweep" % (len(res), h.n))
     report(h, res)
+    report_kinks(h, res)
 
 
 if __name__ == "__main__":

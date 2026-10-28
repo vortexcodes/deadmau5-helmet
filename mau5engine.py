@@ -444,9 +444,60 @@ def _digit_bitmap(ch):
     return np.array([[c != " " for c in r] for r in rows], bool)
 
 
+def _glyph_bitmap(ch):
+    """One 5x7 character as a (7, 5) bool array."""
+    g = FONT5x7.get(ch.upper(), FONT5x7.get("?", (0, 0, 0, 0, 0)))
+    return np.array([[(c >> r) & 1 for c in g] for r in range(7)], bool)
+
+
 def _sprite_bitmap(name):
     rows = SPRITES[name]
     return np.array([[c != "." for c in r] for r in rows], bool)
+
+
+def paint(bm, rowf, colf, mask, wrap=None, reach=1.4, row_w=1.0):
+    """Draw a bitmap onto the LEDs, by gather and by scatter.
+
+    The gather is the obvious half: every LED looks up the cell it
+    falls in.  On its own it loses strokes, because the LEDs are not a
+    grid -- a quarter of the cells of a 7-row glyph on this dome
+    contain no LED at all, so a quarter of every letter silently does
+    not appear.  Held still, DEADMAU5 is unreadable and a 2 loses its
+    bottom bar; this is why the digits came out wrong.
+
+    The scatter is the other half: every *set* cell that caught no LED
+    of its own claims the nearest one instead.  Areas still fill from
+    the gather, and a one-cell-wide stem can no longer vanish into a
+    gap in the map.  A cell reaches at most `reach` cells, so a stroke
+    in a genuinely empty corner stays missing rather than dragging in
+    an LED from somewhere unrelated.
+    """
+    rows, cols = bm.shape
+    r = np.floor(rowf).astype(int)
+    c = np.floor(colf).astype(int)
+    cw = (c % cols) if wrap else c
+    ok = mask & (rowf >= 0) & (rowf < rows)
+    if not wrap:
+        ok &= (colf >= 0) & (colf < cols)
+    lit = np.zeros(mask.shape, bool)
+    idx = np.where(ok)[0]
+    if not len(idx):
+        return lit
+    lit[idx] = bm[r[idx], cw[idx]]
+
+    occupied = np.zeros((rows, cols), bool)
+    occupied[r[idx], cw[idx]] = True
+    missing = bm & ~occupied
+    if missing.any():
+        rr, cc = np.where(missing)
+        lr = rowf[idx]
+        lc = (colf[idx] % cols) if wrap else colf[idx]
+        d = np.hypot((lr[None, :] - (rr[:, None] + 0.5)) * row_w,
+                     lc[None, :] - (cc[:, None] + 0.5))
+        j = d.argmin(1)
+        take = d[np.arange(len(rr)), j] <= reach
+        lit[idx[j[take]]] = True
+    return lit
 
 
 class TextScroll(Preset):
@@ -473,16 +524,8 @@ class TextScroll(Preset):
         ry = (hi - h.py) / max(hi - lo, 1e-6) * rows
         rx = h.px / self.p["cell"] + t * self.p["speed"] / self.p["cell"]
 
-        r = np.floor(ry).astype(int)
-        c = np.floor(rx).astype(int)
-        if self.p["loop"]:
-            c = c % w
-            ok = (r >= 0) & (r < rows) & h.shell
-        else:
-            ok = (r >= 0) & (r < rows) & (c >= 0) & (c < w) & h.shell
-            c = np.clip(c, 0, w - 1)
-        lit = np.zeros(h.n, bool)
-        lit[ok] = bm[r[ok], c[ok]]
+        lit = paint(bm, ry, rx, h.shell & (h.py > 0),
+                    wrap=w if self.p["loop"] else None)
         out[lit] = self.p["color"]
         return out
 
@@ -502,10 +545,7 @@ class SpriteShow(Preset):
         lo, hi = self.p["y_lo"], self.p["y_hi"]
         ry = (hi - h.py) / max(hi - lo, 1e-6) * rows
         rx = (h.px + self.p["x_half"]) / (2 * self.p["x_half"]) * w
-        r, c = np.floor(ry).astype(int), np.floor(rx).astype(int)
-        ok = (r >= 0) & (r < rows) & (c >= 0) & (c < w) & h.shell
-        lit = np.zeros(h.n, bool)
-        lit[ok] = bm[r[ok], c[ok]]
+        lit = paint(bm, ry, rx, h.shell & (h.py > 0))
         out[lit] = self.p["color"]
         return out
 
@@ -732,15 +772,17 @@ class Countdown(Preset):
     """Big digits on the face, then everything.  Uses the 3x5 face so
     each cell is large enough to be sure of catching LEDs."""
     name = "countdown"
+    # The 3x5 face was chosen because a 5x7 glyph held still lost
+    # cells that happened to contain no LED.  paint()'s scatter removed
+    # that reason, and 3x5 turned out to be the worse problem: with
+    # cells that large a digit lights half the dome and the gaps that
+    # make it a numeral close up under the diffusion.  Measured over
+    # all ten digits, mean pairwise difference went from 37% to 69%
+    # and the worst-confusable pair from 7% to 25% on moving to 5x7,
+    # while the lit fraction dropped from 51% to 21%.
     params = {"from": 5, "step": 1.0, "color": (255, 40, 0),
-              # keep all five rows above the sparse band just over the
-              # visor, or the bottom stroke of a 2 drops out
-              "flash": (255, 255, 255), "y_hi": 166.0, "y_lo": 48.0,
-              # 130 rather than 50: at 50 the digit occupies 100 mm of
-              # a 340 mm face and reads as a smudge near the crown.
-              # Past about 135 the outer column is foreshortened more
-              # than twice and the digit starts to look wrong.
-              "x_half": 130.0, "loop": 2.0}
+              "flash": (255, 255, 255), "y_hi": 168.0, "y_lo": 40.0,
+              "x_half": 95.0, "loop": 2.0, "face": "5x7"}
 
     def render(self, h, t, music=None):
         # Repeat rather than finish.  A one-shot preset leaves the
@@ -756,16 +798,14 @@ class Countdown(Preset):
         if n <= 0:
             k = max(0.0, 1.0 - (t - self.p["from"] * self.p["step"]) / 0.8)
             return np.tile(np.array(self.p["flash"]) * k, (h.n, 1))
-        bm = _digit_bitmap(str(n)[-1])
+        bm = (_glyph_bitmap(str(n)[-1]) if self.p["face"] == "5x7"
+              else _digit_bitmap(str(n)[-1]))
         rows, w = bm.shape
         out = np.zeros((h.n, 3))
         hi, lo, xh = self.p["y_hi"], self.p["y_lo"], self.p["x_half"]
         ry = (hi - h.py) / max(hi - lo, 1e-6) * rows
         rx = (h.px + xh) / (2.0 * xh) * w
-        r, c = np.floor(ry).astype(int), np.floor(rx).astype(int)
-        m = (r >= 0) & (r < rows) & (c >= 0) & (c < w) & h.shell
-        lit = np.zeros(h.n, bool)
-        lit[m] = bm[r[m], c[m]]
+        lit = paint(bm, ry, rx, h.shell & (h.py > 0))
         out[lit] = self.p["color"]
         return out
 
