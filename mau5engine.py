@@ -49,9 +49,6 @@ class Helmet:
         self.u = np.array([r["u"] for r in rows], float)
         self.group = np.array([r["group"] for r in rows], int)
         self.region = np.array([r["region"] for r in rows], dtype=object)
-        # front azimuth: -180..180 with 0 straight ahead
-        self.fa = ((self.az + 180.0) % 360.0) - 180.0
-
         self.shell = self.region == "shell"
         self.ear1 = np.array([r.startswith("ear1") for r in self.region])
         self.ear2 = np.array([r.startswith("ear2") for r in self.region])
@@ -73,7 +70,30 @@ class Helmet:
         self.depth = -self.xyz[:, 1]
         self.nx = self._norm(self.xyz[:, 0])
         self.ny = self._norm(self.xyz[:, 2])
-        self.nfa = np.clip((self.fa + 90.0) / 180.0, 0, 1)
+
+        # Left-to-right, as an angle.  This used to be the azimuth about
+        # the head's own centre, clipped to the front hemisphere, and on
+        # a sphere that is right: a shell LED's screen x is R sin(az), so
+        # sweeping azimuth sweeps across the face and lingers where the
+        # LEDs bunch at the silhouette.
+        #
+        # The ears are not on that sphere.  They are flat plates mounted
+        # behind the head's centre, so azimuth about that centre runs
+        # BACKWARDS across them -- the edge nearest the face comes out
+        # further round than the outer edge -- and then the clip flattened
+        # the argument anyway: every LED of the left ear read exactly 0
+        # and every LED of the right ear exactly 1.  223 LEDs, 36% of the
+        # helmet and most of what anybody looks at, shared two values, so
+        # a sweep did not cross the ears at all.  It flashed them.
+        #
+        # So the angle is taken from one shell-radius in front instead,
+        # which is the same thing for the shell (r=0.985 against the old
+        # scale) and well defined for anything that is not on the sphere.
+        # It is monotonic in screen x, so nothing can read backwards, and
+        # the ears no longer depend on the one coordinate a single camera
+        # cannot measure.
+        self.fa = np.degrees(np.arctan2(self.px, np.abs(self.px[self.shell]).max()))
+        self.nfa = self._norm(self.fa)
         sh_el = self.el[self.shell]
         self.nel = np.clip((self.el - sh_el.min()) / (np.ptp(sh_el) or 1), 0, 1)
 

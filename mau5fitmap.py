@@ -11,10 +11,28 @@ known position and a measured camera centroid, which is enough to solve
 the projection; that projection is then inverted for the ear LEDs,
 whose centroids were measured the same way.
 
-One view cannot recover depth -- an orthographic camera sees the same
-picture wherever along its own axis a point sits.  Across and up are
-recovered exactly; depth is kept from the old model, where it only
-affects which blob the preview draws first.  No effect depends on it.
+One view cannot recover depth -- a camera sees the same picture
+wherever along its own axis a point sits.  Across and up come from the
+camera; depth has to come from a model, and the model used to be the
+parametric ear evaluated at the LED's index.
+
+That was wrong, and wrong in a way that showed.  Keeping the model's y
+while replacing its x and z mixes two different ideas of where an LED
+is: y said where the model thought LED k sat on the disc, x and z said
+where the camera saw it, and the model tracks the real ear at r=-0.36.
+The two disagreed by 36 mm rms -- three LED pitches -- and nothing
+reconciled them.
+
+It is not harmless either, whatever the note here used to claim.
+az_deg is atan2(x, -y), so a wrong depth is a wrong azimuth, and ten
+presets sweep along azimuth.  The error is worst where |x| is small,
+because that is where the arctangent is most sensitive to y: at the
+inner edge of each ear, against the skull, it reaches 19 degrees.
+That is the corner of the left ear that looked wrong.
+
+So depth now comes from the ear's own plane, evaluated at the measured
+x.  Every LED on a disc gets a depth consistent with where the camera
+actually saw it, which is the most a single view can honestly say.
 
     python3 mau5fitmap.py             # fit, report, write the new map
     python3 mau5fitmap.py --dry-run   # report only
@@ -143,12 +161,58 @@ def interpolate(byi, missing, lo, hi):
     return filled
 
 
+# Each ear is a disc.  Tilt is its rotation about the vertical, which
+# decides how depth varies across the disc -- and one view cannot
+# measure it: a tilt and an oval disc produce the same picture.
+#
+# The rim is the one thing that argues.  A circular disc tilted by
+# theta images as an ellipse with axes (R cos theta, R), so the
+# outline's shape is the tilt.  Fitted to the measured rims it comes
+# out 153x128 mm on the left and 157x136 on the right, at 4-5 mm rms:
+# both ears WIDER than they are tall.  A tilt about the vertical can
+# only make a disc narrower, so the rims give no evidence for one, and
+# forcing 26 degrees triples the residual.
+#
+# Flat it is, then -- not because the ears are certainly flat, but
+# because nothing measured says otherwise and a guessed tilt costs 15
+# degrees of azimuth.  Pitch cannot arbitrate: solving for the tilt
+# that makes the LED spacing most even moves the spread by 0.3%, which
+# is noise.  A second camera pose would settle it in one shot, and
+# until then this is one number to change.
+DISC_TILT_DEG = 0.0
+DISC_DEPTH_MM = 30.0           # the discs' depth behind the head centre
+
+
+def disc_depth(x, ear):
+    """Depth of a point on an ear disc, from its measured x."""
+    cx = -177.0 if ear == "ear1" else 177.0
+    tilt = math.radians(DISC_TILT_DEG * (-1 if ear == "ear1" else 1))
+    return DISC_DEPTH_MM + (x - cx) * math.tan(tilt)
+
+
+def solve_ear(fit, m, r, passes=3):
+    """Where one ear LED is: camera for across and up, plane for depth.
+
+    Chicken and egg -- the inversion needs a depth and the plane needs
+    an x -- so it is iterated.  It converges in two passes; the third
+    is there to show that it has.
+    """
+    ear = r["region"][:4]
+    y = r["y"]
+    for _ in range(passes):
+        x, z = invert(fit, m["cx"], m["cy"], y)
+        y = disc_depth(x, ear)
+    return x, y, z
+
+
 def invert(fit, cx, cy, y_hint):
     """Camera pixels back to (x, z) at an assumed depth.
 
-    One view fixes a ray, not a point, so depth has to come from
-    somewhere else; the old model's value is used.  Across and up are
-    then exact, which is all any effect reads.
+    One view fixes a ray, not a point, so the depth has to be supplied.
+    Across and up then follow -- but only as well as the depth does:
+    the camera is about a metre and a half away, so 36 mm of depth
+    error drags x and z several mm sideways as well.  Hence the second
+    pass in main(), which re-inverts once the plane is known.
     """
     Pn, xm, xs, cm, cs, project = fit
     # two linear equations in (x, z) once y is fixed -- solve by
@@ -189,7 +253,7 @@ def main(argv=None):
 
     moved = []
     for r in have:
-        x, z = invert(fit, meas[r["index"]]["cx"], meas[r["index"]]["cy"], r["y"])
+        x, y, z = solve_ear(fit, meas[r["index"]], r)
         d = float(np.hypot(x - r["x"], z - r["z"]))
         moved.append((d, r["index"], r["x"], r["z"], float(x), float(z)))
     moved.sort(reverse=True)
@@ -208,12 +272,17 @@ def main(argv=None):
     # Unmeasured ears keep their modelled position, flagged as such.
     byi = {r["index"]: r for r in rows}
     n_fix = 0
+    before = {r["index"]: r["y"] for r in have}
     for r in have:
-        x, z = invert(fit, meas[r["index"]]["cx"], meas[r["index"]]["cy"], r["y"])
+        x, y, z = solve_ear(fit, meas[r["index"]], r)
         tgt = byi[r["index"]]
-        tgt["x"], tgt["z"] = round(float(x), 2), round(float(z), 2)
+        tgt["x"], tgt["y"], tgt["z"] = (round(float(x), 2), round(float(y), 2),
+                                        round(float(z), 2))
         tgt["source"] = "measured"
         n_fix += 1
+    dy = np.array([byi[i]["y"] - before[i] for i in before])
+    print("  depth moved onto the disc plane: median %.0f mm, max %.0f mm"
+          % (np.median(np.abs(dy)), np.abs(dy).max()))
     for r in rows:
         x, y, z = r["x"], r["y"], r["z"]
         r["az_deg"] = round(math.degrees(math.atan2(x, -y)) % 360.0, 2)
@@ -229,6 +298,9 @@ def main(argv=None):
     missing = {r["index"] for r in ears if r["index"] not in meas}
     n_interp = interpolate(byi, missing, min(r["index"] for r in ears),
                            max(r["index"] for r in ears)) if missing else 0
+    for i in missing:                       # and onto the plane, like the rest
+        r = byi[i]
+        r["y"] = round(disc_depth(r["x"], r["region"][:4]), 2)
     for r in rows:
         x, y, z = r["x"], r["y"], r["z"]
         r["az_deg"] = round(math.degrees(math.atan2(x, -y)) % 360.0, 2)

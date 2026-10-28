@@ -633,6 +633,9 @@ if __name__ == "__main__":
     ap.add_argument("--count", type=int)
     ap.add_argument("--all", metavar="R,G,B", help="light every LED this colour")
     ap.add_argument("--one", type=int, metavar="N", help="light only LED N")
+    ap.add_argument("--range", metavar="LO-HI",
+                    help="light only LEDs LO..HI, for walking up to the "
+                         "helmet and seeing which ones they are")
     ap.add_argument("--color", default="255,255,255")
     ap.add_argument("--seconds", type=float, default=5.0)
     ap.add_argument("--off", action="store_true")
@@ -676,11 +679,18 @@ if __name__ == "__main__":
         w.off()
         sys.exit(0)
     col = tuple(int(x) for x in a.color.split(","))
-    if a.all or a.one is not None:
+    if a.all or a.one is not None or a.range:
         w.realtime(True)
         p = Pixels(w, a.count)
         buf = p.blank()
-        if a.one is not None:
+        if a.range:
+            lo, _, hi = a.range.partition("-")
+            lo, hi = int(lo), int(hi or lo)
+            if not 0 <= lo <= hi < p.count:
+                sys.exit("--range must be inside 0..%d" % (p.count - 1))
+            buf[lo:hi + 1] = col
+            print("LEDs %d..%d -> %s for %.0f s" % (lo, hi, col, a.seconds))
+        elif a.one is not None:
             buf[a.one] = col
             print("LED %d -> %s for %.0f s" % (a.one, col, a.seconds))
         else:
