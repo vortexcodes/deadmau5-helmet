@@ -372,6 +372,26 @@ def t_floor_holds_the_shape():
     eq(int(out[~h.tubes].max()), 0, "the floor lit LEDs the preset wanted dark")
 
 
+def t_off_does_not_stream_black():
+    """"Off" must hand the helmet back, not paint it black.
+
+    A helmet being sent black at forty frames a second looks exactly
+    like one with a dead supply, and it overrides whatever the
+    controller would otherwise show -- including across a reboot.  It
+    cost an evening of pulling wiring apart, so it gets a test.
+    """
+    import mau5ctl
+    src = open(os.path.join(HERE, "mau5ctl.py")).read()
+    ok("_set_output" in src, "the output switch is gone")
+    ok("def _set_output" in src, "no _set_output method")
+    # the frame loop must skip sending entirely when off
+    body = src[src.index("def _run(self"):]
+    body = body[:body.index("def _watchdog")]
+    ok("if not live:" in body and "continue" in body,
+       "the frame loop still renders while off")
+    ok("soft_start" in src, "no soft start on the way out of dark")
+
+
 def t_connector_limit():
     """The budget must respect the weakest connector, standby included.
 
@@ -793,7 +813,8 @@ GROUPS = {
     "presets": [t_presets, t_preset_params, t_text_bitmap, t_accepts],
     "power": [t_power_budget, t_power_board_limit, t_guard_in_send,
               t_thermal, t_thermal_never_exceeds, t_power_regions,
-              t_floor_holds_the_shape, t_connector_limit],
+              t_floor_holds_the_shape, t_connector_limit,
+              t_off_does_not_stream_black],
     "colour": [t_colour_correction],
     "shows": [t_lockable_presets, t_beat_lock_lands_on_the_grid, t_shows, t_show_player, t_crossfade, t_beat_helpers,
               t_analysis_cache],

@@ -103,6 +103,15 @@ class Controller:
         self.last_frame = np.zeros((self.h.n, 3), np.uint8)
         self._t0_sim = 0.0
         self._output_on = None
+        # Coming out of dark, climb into the load rather than landing on
+        # it.  Six hundred LEDs going from nothing to full in one frame
+        # is a step the supply has to answer instantly, and it is the
+        # moment this rig has always fallen over -- never while already
+        # running.  Half a second is nothing to watch and a very long
+        # time to a power supply.  It applies only on the way on, so a
+        # strobe still strobes.
+        self.soft_start = 0.5
+        self._soft_t0 = 0.0
 
         self.favourites = _load_favourites()
         self.last_power = None
@@ -236,6 +245,7 @@ class Controller:
         try:
             if want:
                 self.wled.realtime(True, brightness=255)
+                self._soft_t0 = time.monotonic()
             else:
                 self.wled.off()
             self._output_on = want
@@ -251,9 +261,23 @@ class Controller:
                 self._set_output(live)
                 if not live:
                     self.last_frame = np.zeros((self.h.n, 3), np.uint8)
+                    # ...and say so.  Leaving the last frame's figure on
+                    # screen reads as the helmet still pulling 19 W while
+                    # switched off, which is alarming and wrong.
+                    if self.guard is not None:
+                        sb = self.guard.standby_ma()
+                        self.last_power = {"sent_ma": 0.0, "standby_ma": sb,
+                                           "total_ma": sb, "amps": round(sb/1000.0, 2),
+                                           "watts": round(sb*12/1000.0, 1),
+                                           "thermal": (self.guard.thermal.state()
+                                                       if self.guard.thermal else None)}
                     time.sleep(period)
                     continue
                 buf = self._frame() * self.brightness
+                if self.soft_start > 0:
+                    k = (time.monotonic() - self._soft_t0) / self.soft_start
+                    if k < 1.0:
+                        buf = buf * max(0.0, k)
                 if self.pix is not None:
                     self.pix.send(buf)
                     self.last_power = self.pix.last_power

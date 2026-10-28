@@ -1,0 +1,90 @@
+{
+ "when": "2026-10-27T23:35:24",
+ "count": 622,
+ "highest_stable_led_ma": 2200.0,
+ "failed_at_led_ma": null,
+ "resets": 0,
+ "rows": [
+  {
+   "asked_ma": 600.0,
+   "level": 13,
+   "total_ma": 1222.0,
+   "watts": 14.7,
+   "alive": true,
+   "note": "",
+   "seen": 39.468963623046875
+  },
+  {
+   "asked_ma": 800.0,
+   "level": 17,
+   "total_ma": 1422.0,
+   "watts": 17.1,
+   "alive": true,
+   "note": "",
+   "seen": 38.98589324951172
+  },
+  {
+   "asked_ma": 1000.0,
+   "level": 22,
+   "total_ma": 1622.0,
+   "watts": 19.5,
+   "alive": true,
+   "note": "",
+   "seen": 38.74690246582031
+  },
+  {
+   "asked_ma": 1200.0,
+   "level": 26,
+   "total_ma": 1822.0,
+   "watts": 21.9,
+   "alive": true,
+   "note": "",
+   "seen": 38.820404052734375
+  },
+  {
+   "asked_ma": 1400.0,
+   "level": 30,
+   "total_ma": 2022.0,
+   "watts": 24.3,
+   "alive": true,
+   "note": "",
+   "seen": 38.99541091918945
+  },
+  {
+   "asked_ma": 1600.0,
+   "level": 35,
+   "total_ma": 2222.0,
+   "watts": 26.7,
+   "alive": true,
+   "note": "",
+   "seen": 38.860313415527344
+  },
+  {
+   "asked_ma": 1800.0,
+   "level": 39,
+   "total_ma": 2422.0,
+   "watts": 29.1,
+   "alive": true,
+   "note": "",
+   "seen": 38.673152923583984
+  },
+  {
+   "asked_ma": 2000.0,
+   "level": 43,
+   "total_ma": 2622.0,
+   "watts": 31.5,
+   "alive": true,
+   "note": "",
+   "seen": 38.65575408935547
+  },
+  {
+   "asked_ma": 2200.0,
+   "level": 47,
+   "total_ma": 2822.0,
+   "watts": 33.9,
+   "alive": true,
+   "note": "",
+   "seen": 38.75897216796875
+  }
+ ]
+}
