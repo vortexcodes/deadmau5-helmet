@@ -5,84 +5,71 @@
  "bpm": 140.0,
  "beats": 970,
  "analysis": "deadmau5 - Ghosts n Stuff (Nero Remix).analysis.npz",
- "fade": 0.6,
+ "fade": 0.45,
  "accent": true,
+ "pulse": 0.22,
  "cues": [
   {
    "start": 0.986,
+   "end": 14.7,
+   "preset": "wipe",
+   "params": {
+    "period": 3.429,
+    "a": [
+     255,
+     40,
+     0
+    ],
+    "b": [
+     255,
+     150,
+     0
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.246
+  },
+  {
+   "start": 14.7,
+   "end": 28.415,
+   "preset": "gradient",
+   "params": {
+    "period": 3.429,
+    "a": [
+     255,
+     40,
+     0
+    ],
+    "b": [
+     255,
+     150,
+     0
+    ]
+   },
+   "level": 1,
+   "shape": "fall",
+   "gain": 0.217
+  },
+  {
+   "start": 28.415,
    "end": 42.129,
    "preset": "scanner",
    "params": {
+    "period": 1.714,
     "color": [
      255,
      40,
      0
     ]
    },
-   "level": 1
+   "level": 1,
+   "shape": "build",
+   "gain": 2.84
   },
   {
    "start": 42.129,
-   "end": 83.271,
-   "preset": "wipe",
-   "params": {
-    "a": [
-     0,
-     180,
-     255
-    ],
-    "b": [
-     120,
-     0,
-     255
-    ]
-   },
-   "level": 1
-  },
-  {
-   "start": 83.271,
-   "end": 124.414,
-   "preset": "ripple",
-   "params": {
-    "period": 3.4,
-    "color": [
-     255,
-     0,
-     120
-    ]
-   },
-   "level": 0
-  },
-  {
-   "start": 124.414,
-   "end": 158.7,
-   "preset": "matrix",
-   "params": {
-    "color": [
-     0,
-     255,
-     140
-    ]
-   },
-   "level": 1
-  },
-  {
-   "start": 158.7,
-   "end": 192.985,
-   "preset": "earspin",
-   "params": {
-    "period": 2.4,
-    "color": [
-     255,
-     255,
-     255
-    ]
-   },
-   "level": 1
-  },
-  {
-   "start": 192.985,
-   "end": 220.414,
+   "end": 55.843,
    "preset": "chase",
    "params": {
     "period": 2.2,
@@ -92,40 +79,142 @@
      0
     ]
    },
-   "level": 1
+   "level": 1,
+   "shape": "build",
+   "gain": 2.266
   },
   {
-   "start": 220.414,
-   "end": 254.699,
-   "preset": "heartbeat",
+   "start": 55.843,
+   "end": 69.557,
+   "preset": "fire",
+   "params": {},
+   "level": 1,
+   "shape": "drop",
+   "overlay": {
+    "preset": "beatpulse",
+    "params": {
+     "floor": 0.0,
+     "color": [
+      255,
+      150,
+      0
+     ]
+    },
+    "band": "bass",
+    "gain": 0.9,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.35
+  },
+  {
+   "start": 69.557,
+   "end": 83.271,
+   "preset": "comet",
    "params": {
+    "period": 4.0,
     "color": [
      0,
      180,
      255
     ]
    },
-   "level": 0
+   "level": 1,
+   "shape": "steady",
+   "gain": 1.381
   },
   {
-   "start": 254.699,
-   "end": 288.985,
-   "preset": "wave",
+   "start": 83.271,
+   "end": 110.7,
+   "preset": "matrix",
    "params": {
-    "period": 5.0,
-    "length": 0.8,
     "color": [
      255,
      0,
      120
     ]
    },
-   "level": 0
+   "level": 0,
+   "shape": "build",
+   "gain": 1.085
   },
   {
-   "start": 288.985,
-   "end": 323.27,
-   "preset": "scanner",
+   "start": 110.7,
+   "end": 124.414,
+   "preset": "wipe",
+   "params": {
+    "period": 3.429,
+    "a": [
+     0,
+     255,
+     140
+    ],
+    "b": [
+     0,
+     90,
+     255
+    ]
+   },
+   "level": 0,
+   "shape": "build",
+   "gain": 0.2
+  },
+  {
+   "start": 124.414,
+   "end": 138.128,
+   "preset": "earspin",
+   "params": {
+    "period": 2.4,
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 1.524
+  },
+  {
+   "start": 138.128,
+   "end": 151.843,
+   "preset": "spiral",
+   "params": {
+    "period": 6.0
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.251
+  },
+  {
+   "start": 151.843,
+   "end": 158.7,
+   "preset": "sparkle",
+   "params": {},
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.589
+  },
+  {
+   "start": 158.7,
+   "end": 172.414,
+   "preset": "comet",
+   "params": {
+    "period": 4.0,
+    "color": [
+     255,
+     0,
+     120
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 1.602
+  },
+  {
+   "start": 172.414,
+   "end": 186.128,
+   "preset": "matrix",
    "params": {
     "color": [
      0,
@@ -133,13 +222,149 @@
      140
     ]
    },
-   "level": 1
+   "level": 1,
+   "shape": "build",
+   "gain": 1.832
+  },
+  {
+   "start": 186.128,
+   "end": 192.985,
+   "preset": "scanner",
+   "params": {
+    "period": 3.429,
+    "color": [
+     0,
+     255,
+     140
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 2.128
+  },
+  {
+   "start": 192.985,
+   "end": 206.699,
+   "preset": "wipe",
+   "params": {
+    "period": 3.429,
+    "a": [
+     0,
+     255,
+     140
+    ],
+    "b": [
+     0,
+     90,
+     255
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.273
+  },
+  {
+   "start": 206.699,
+   "end": 220.414,
+   "preset": "chase",
+   "params": {
+    "period": 2.2,
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.874
+  },
+  {
+   "start": 220.414,
+   "end": 254.699,
+   "preset": "heartbeat",
+   "params": {
+    "bpm": 140.0,
+    "color": [
+     255,
+     255,
+     255
+    ]
+   },
+   "level": 0,
+   "shape": "build",
+   "gain": 0.712
+  },
+  {
+   "start": 254.699,
+   "end": 288.985,
+   "preset": "eq",
+   "params": {},
+   "level": 0,
+   "shape": "drop",
+   "overlay": {
+    "preset": "beatpulse",
+    "params": {
+     "floor": 0.0,
+     "color": [
+      255,
+      150,
+      0
+     ]
+    },
+    "band": "bass",
+    "gain": 0.9,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.284
+  },
+  {
+   "start": 288.985,
+   "end": 302.699,
+   "preset": "comet",
+   "params": {
+    "period": 4.0,
+    "color": [
+     0,
+     180,
+     255
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 1.381
+  },
+  {
+   "start": 302.699,
+   "end": 316.413,
+   "preset": "sparkle",
+   "params": {},
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.589
+  },
+  {
+   "start": 316.413,
+   "end": 323.27,
+   "preset": "matrix",
+   "params": {
+    "color": [
+     0,
+     255,
+     140
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 1.832
   },
   {
    "start": 323.27,
-   "end": 357.556,
+   "end": 336.985,
    "preset": "wipe",
    "params": {
+    "period": 3.429,
     "a": [
      255,
      255,
@@ -151,34 +376,84 @@
      255
     ]
    },
-   "level": 1
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.2
   },
   {
-   "start": 357.556,
-   "end": 384.984,
-   "preset": "comet",
+   "start": 336.985,
+   "end": 350.699,
+   "preset": "spiral",
    "params": {
-    "period": 4.0,
+    "period": 6.0
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.251
+  },
+  {
+   "start": 350.699,
+   "end": 357.556,
+   "preset": "chase",
+   "params": {
+    "period": 2.2,
     "color": [
      255,
      40,
      0
     ]
    },
-   "level": 1
+   "level": 1,
+   "shape": "steady",
+   "gain": 2.266
   },
   {
-   "start": 384.984,
-   "end": 414.127,
-   "preset": "tubepulse",
+   "start": 357.556,
+   "end": 371.27,
+   "preset": "scanner",
    "params": {
+    "period": 3.429,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 1,
+   "shape": "steady",
+   "gain": 2.849
+  },
+  {
+   "start": 371.27,
+   "end": 384.984,
+   "preset": "earspin",
+   "params": {
+    "period": 2.4,
     "color": [
      0,
      180,
      255
     ]
    },
-   "level": 0
+   "level": 1,
+   "shape": "steady",
+   "gain": 1.595
+  },
+  {
+   "start": 384.984,
+   "end": 414.127,
+   "preset": "tubepulse",
+   "params": {
+    "period": 6.857,
+    "color": [
+     0,
+     180,
+     255
+    ]
+   },
+   "level": 0,
+   "shape": "fall",
+   "gain": 0.613
   }
  ]
 }

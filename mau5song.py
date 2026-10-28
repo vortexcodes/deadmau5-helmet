@@ -115,6 +115,118 @@ def onset_envelope(a, sr):
     return np.maximum(flux, 0.0).astype(np.float64), sr / float(HOP), t0
 
 
+# Where to split the spectrum for lighting.  Not musical bands -- these
+# are "what the eye should answer to": the kick, the body of the track,
+# and the hats and air on top.  A single loudness curve cannot tell a
+# breakdown with a loud pad from a drop with a loud kick, and they
+# should not look the same.
+BANDS = (("bass", 30.0, 170.0), ("mid", 170.0, 2200.0), ("high", 2200.0, 10000.0))
+
+
+def spectrogram(a, sr):
+    """One STFT, shared by everything that wants the spectrum."""
+    n = 1 + (len(a) - N_FFT) // HOP
+    idx = np.arange(N_FFT)[None, :] + HOP * np.arange(n)[:, None]
+    win = np.hanning(N_FFT).astype(np.float32)
+    mag = np.abs(np.fft.rfft(a[idx] * win, axis=1))
+    freqs = np.fft.rfftfreq(N_FFT, 1.0 / sr)
+    t0 = (N_FFT / 2.0 - HOP / 2.0) / float(sr) + ONSET_BIAS_S
+    return mag, freqs, sr / float(HOP), t0
+
+
+def band_curves(a, sr, out_fps, duration):
+    """Per-band loudness and punch, sampled at the show's frame rate.
+
+    Three curves instead of one, because a lighting cue wants to know
+    *what* got loud.  Hats driving a sparkle and a kick driving a pulse
+    are the difference between a show that follows the track and one
+    that merely gets brighter when the track does.
+
+    Each band is normalised against its own distribution: the high band
+    carries a twentieth of the energy of the bass and would otherwise
+    never register.
+    """
+    mag, freqs, fps, t0 = spectrogram(a, sr)
+    logm = np.log1p(mag * 8.0)
+    n = int(math.ceil(duration * out_fps))
+    t = np.arange(n) / float(out_fps)
+    et = t0 + np.arange(len(mag)) / float(fps)
+    out = {}
+    for name, lo, hi in BANDS:
+        sel = (freqs >= lo) & (freqs < hi)
+        e = logm[:, sel].mean(1)
+        f = np.concatenate([[0.0], np.maximum(0.0, np.diff(logm[:, sel], axis=0)).sum(1)])
+        f -= np.convolve(f, np.ones(41) / 41.0, mode="same")
+        f = np.maximum(f, 0.0)
+        ei = np.interp(t, et, e, left=0.0, right=0.0)
+        fi = np.interp(t, et, f, left=0.0, right=0.0)
+        p5, p97 = np.percentile(ei, 5), np.percentile(ei, 97)
+        ei = np.clip((ei - p5) / max(p97 - p5, 1e-6), 0, 1)
+        fi = np.clip(fi / max(np.percentile(fi, 98), 1e-9), 0, 1)
+        decay = math.exp(-1.0 / (0.10 * out_fps))
+        for i in range(1, n):
+            if fi[i] < fi[i - 1] * decay:
+                fi[i] = fi[i - 1] * decay
+        out[name] = (ei.astype(np.float32), fi.astype(np.float32))
+    return out
+
+
+def chroma(a, sr, bars):
+    """A 12-bin pitch-class profile per bar, for following the harmony.
+
+    Not key detection -- that needs more care than it would earn here.
+    This is enough to notice *that* the harmony moved, which is what a
+    palette change should hang on: holding one colour through a key
+    change is a large part of why a show looks pasted on.
+    """
+    mag, freqs, fps, t0 = spectrogram(a, sr)
+    keep = (freqs > 55.0) & (freqs < 2000.0)
+    f = freqs[keep]
+    pc = np.round(12 * np.log2(f / 440.0) + 69).astype(int) % 12
+    m = mag[:, keep]
+    et = t0 + np.arange(len(m)) / float(fps)
+    out = []
+    for i in range(len(bars)):
+        lo = bars[i]
+        hi = bars[i + 1] if i + 1 < len(bars) else lo + (bars[1] - bars[0] if len(bars) > 1 else 2.0)
+        sel = (et >= lo) & (et < hi)
+        if not sel.any():
+            out.append(np.zeros(12, np.float32)); continue
+        v = np.zeros(12, np.float64)
+        block = m[sel]
+        for k in range(12):
+            v[k] = block[:, pc == k].sum()
+        v = v / max(v.sum(), 1e-9)
+        out.append(v.astype(np.float32))
+    return np.array(out) if out else np.zeros((0, 12), np.float32)
+
+
+def shape_of(energy_per_bar, window=4):
+    """Label each bar: 'build' if the energy is climbing, 'drop' at the
+    first loud bar after one, 'fall' when it collapses, else 'steady'.
+
+    A drop is the single most important moment in a track for lighting
+    and the old builder had no idea where they were -- it changed effect
+    on section boundaries, which land near drops but not on them.
+    """
+    e = np.asarray(energy_per_bar, float)
+    n = len(e)
+    out = ["steady"] * n
+    if n < window + 2:
+        return out
+    for i in range(window, n):
+        prev = e[i - window:i]
+        rising = np.all(np.diff(prev) > -0.02) and (prev[-1] - prev[0]) > 0.12
+        if rising:
+            out[i - 1] = "build"
+        jump = e[i] - e[i - 1]
+        if jump > 0.18 and e[i] > np.percentile(e, 60):
+            out[i] = "drop"
+        if (e[i - 1] - e[i]) > 0.22:
+            out[i] = "fall"
+    return out
+
+
 def frame_curves(a, sr, env, env_fps, env_t0, out_fps, duration):
     """The two per-frame curves an effect can ride: loudness and onset punch.
 

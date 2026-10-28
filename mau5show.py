@@ -24,6 +24,7 @@ import argparse
 import json
 import math
 import os
+import random
 import time
 
 import numpy as np
@@ -69,13 +70,17 @@ class Music:
         self.path, self.fps = path, fps
         if cache and os.path.exists(cache):
             z = np.load(cache)
-            if int(z["fps"]) == fps:
+            if int(z["fps"]) == fps and int(z.get("v", 1)) >= CACHE_V:
                 self.duration = float(z["duration"]); self.bpm = float(z["bpm"])
                 self.beats = z["beats"]; self.bars = z["bars"]
                 self.levels = z["levels"]; self.energy = z["energy"]
                 self.onset = z["onset"]
                 self.sections = [tuple(int(v) for v in r) for r in z["sections"]]
                 self.lock_conf = float(z["lock"]) if "lock" in z else float("nan")
+                self.band = {k: (z["b_%s_e" % k], z["b_%s_p" % k])
+                             for k, _, _ in mau5song.BANDS}
+                self.chroma = z["chroma"]
+                self.shape = [str(x) for x in z["shape"]]
                 self.bands = True
                 return
         an = mau5song.analyse(path, verbose=verbose)
@@ -94,6 +99,10 @@ class Music:
         # where the beats are is worse than letting it run free: the
         # effect then lands wrong on purpose rather than at random.
         self.lock_conf = float(an.get("lock", float("nan")))
+        self.band = mau5song.band_curves(an["audio"], an["sr"], fps, self.duration)
+        self.chroma = mau5song.chroma(an["audio"], an["sr"], self.bars)
+        bar_e = np.array([self.level_at(float(t)) for t in self.bars])
+        self.shape = mau5song.shape_of(bar_e)
         self.bands = True                      # Equaliser may ask for bands
         if cache:
             np.savez_compressed(
@@ -101,7 +110,30 @@ class Music:
                 beats=self.beats, bars=self.bars, levels=self.levels,
                 energy=self.energy, onset=self.onset,
                 sections=np.array(self.sections, int),
-                lock=self.lock_conf)
+                lock=self.lock_conf, v=CACHE_V, chroma=self.chroma,
+                shape=np.array(self.shape, dtype="U6"),
+                **{("b_%s_%s" % (k, w)): self.band[k][i]
+                   for k, _, _ in mau5song.BANDS
+                   for i, w in ((0, "e"), (1, "p"))})
+
+    def band_at(self, t, name="bass", punch=False):
+        """0..1 for one band at one instant: loudness, or its punch."""
+        b = getattr(self, "band", None)
+        if not b or name not in b:
+            return self.level_at(t)
+        arr = b[name][1 if punch else 0]
+        i = int(t * self.fps)
+        if i < 0 or i >= len(arr):
+            return 0.0
+        return float(arr[i])
+
+    def bar_shape(self, t):
+        """'build' | 'drop' | 'fall' | 'steady' for the bar containing t."""
+        sh = getattr(self, "shape", None)
+        if not sh or not len(self.bars):
+            return "steady"
+        i = int(np.searchsorted(self.bars, t) - 1)
+        return sh[i] if 0 <= i < len(sh) else "steady"
 
     def beat_index(self, t):
         """Continuous position on the beat grid, fractional beats.
@@ -157,31 +189,259 @@ class Music:
         return out
 
 
-def build(track, fps=40, out=None):
+# How long one idea should last, in bars, by how busy the section is.
+# The old builder held a single effect for a whole section -- often
+# forty seconds -- which is the main reason the shows looked
+# repetitive.  A phrase is the unit a listener already hears.
+PHRASE_BARS = {0: 16, 1: 8, 2: 8, 3: 4}
+
+# Effects that suit a particular moment, over and above the level
+# pools.  A build wants something that travels, a drop wants impact,
+# a fall wants something that decays.
+SHAPE_POOLS = {
+    "build": [("scanner", {"bounce": False}), ("wipe", {}), ("comet", {}),
+              ("chase", {}), ("matrix", {})],
+    "drop":  [("strobe", {"hz": 8.0}), ("lightning", {"every": 0.8}),
+              ("police", {}), ("eq", {}), ("beatpulse", {}), ("fire", {})],
+    "fall":  [("breathe", {}), ("ripple", {}), ("twinkle", {}),
+              ("gradient", {}), ("tubepulse", {})],
+}
+
+# Second layers, each riding a frequency band.  Sparse and fast, so
+# they add detail without becoming the picture.
+OVERLAYS = {
+    "high": [("sparkle", {"density": 0.10}), ("twinkle", {"density": 0.08}),
+             ("confetti", {"rate": 9.0})],
+    "bass": [("beatpulse", {"floor": 0.0}), ("tubepulse", {})],
+    "mid":  [("eq", {}), ("vu", {})],
+}
+
+
+_HELMET = None
+
+
+def _H():
+    global _HELMET
+    if _HELMET is None:
+        _HELMET = E.Helmet()
+    return _HELMET
+
+
+def _phrases(m):
+    """Split the track into musical phrases with a level and a shape.
+
+    Sections give the arrangement; phrases give something to change on.
+    A phrase inherits its section's level and takes the strongest
+    shape any of its bars carried, so a build or a drop inside a long
+    section is not averaged away.
+    """
+    out = []
+    nb = len(m.bars)
+    for b0, b1, lvl in m.sections:
+        step = PHRASE_BARS[int(np.clip(lvl, 0, 3))]
+        b = b0
+        while b < b1:
+            e = min(b + step, b1)
+            if b1 - e < step // 2:            # absorb a stub rather than keep it
+                e = b1
+            shapes = [m.shape[i] for i in range(b, min(e, len(m.shape)))]
+            shape = "steady"
+            for want in ("drop", "build", "fall"):
+                if want in shapes:
+                    shape = want
+                    break
+            t0 = float(m.bars[b]) if b < nb else 0.0
+            t1 = float(m.bars[e]) if e < nb else m.duration
+            if t1 > t0:
+                out.append({"b0": b, "b1": e, "level": int(np.clip(lvl, 0, 3)),
+                            "shape": shape, "t0": t0, "t1": t1})
+            b = e
+    return out
+
+
+def _palette_regions(m, thresh=0.80):
+    """Bar -> palette index, changing only where the harmony moves.
+
+    Cycling the palette every section is arbitrary and looks it.
+    Changing it when the chord content actually shifts makes the
+    colour feel like it belongs to the music rather than to a counter.
+    """
+    ch = getattr(m, "chroma", None)
+    n = len(m.bars)
+    if ch is None or len(ch) < 2:
+        return [0] * n
+    d = np.linalg.norm(np.diff(ch, axis=0), axis=1)
+    cut = np.percentile(d, thresh * 100)
+    region, out = 0, [0]
+    run = 0
+    for i in range(1, len(ch)):
+        run += 1
+        if d[i - 1] > cut and run >= 8:       # not every bar, please
+            region += 1
+            run = 0
+        out.append(region)
+    out += [out[-1]] * (n - len(out))
+    return [r % len(PALETTES) for r in out[:n]]
+
+
+def _pick(pool, recent, rng, bias=None):
+    """Choose from a pool, avoiding what was just used."""
+    best, best_s = None, -1e9
+    for i, (name, kw) in enumerate(pool):
+        score = rng.random()
+        if name in recent:
+            score -= 2.0 + 0.5 * (len(recent) - recent.index(name))
+        if bias and name in bias:
+            score += 1.5
+        if score > best_s:
+            best, best_s = (name, kw), score
+    return best
+
+
+def _musical_params(name, kw, m, phrase):
+    """Give a periodic effect a period that is a whole number of bars.
+
+    Beat-locking already snaps the phase, but it can only snap to what
+    it is given: a preset whose period is a strange number of beats
+    gets quantised hard and loses its character.  Handing it a musical
+    period in the first place means the lock has nothing to correct.
+    """
+    kw = dict(kw)
+    spb = 60.0 / max(m.bpm, 1e-6)
+    bar = spb * 4.0
+    cls = E.REGISTRY[name]
+    lvl = phrase["level"]
+    if "period" in cls.params and "period" not in kw:
+        bars = {0: 4.0, 1: 2.0, 2: 1.0, 3: 0.5}[lvl]
+        if phrase["shape"] == "build":
+            bars = max(0.25, bars / 2.0)
+        kw["period"] = round(bar * bars, 3)
+    if "hz" in cls.params and "hz" not in kw:
+        kw["hz"] = round(1.0 / (spb / {0: 1, 1: 1, 2: 2, 3: 4}[lvl]), 3)
+    if "bpm" in cls.params and "bpm" not in kw:
+        kw["bpm"] = round(m.bpm, 2)
+    if "every" in cls.params and "every" not in kw:
+        kw["every"] = round(bar / 2.0, 3)
+    return kw
+
+
+# What a phrase should average, on a 0-255 scale, by how busy it is.
+# Effects differ by a factor of sixty in how much of the helmet they
+# fill -- lightning averages 2, plasma averages 134 -- so without this
+# the brightest thing on the helmet is whichever effect happened to be
+# chosen, and the music barely shows through at all.  Normalising each
+# cue to a target lets level, dynamics and the beat do the work.
+CUE_TARGET = {0: 18.0, 1: 32.0, 2: 55.0, 3: 80.0}
+SHAPE_GAIN = {"drop": 1.3, "build": 1.0, "fall": 0.8, "steady": 1.0}
+
+
+def cue_gain(h, name, params, overlay, level, shape, samples=24, period=4.0):
+    """A per-cue multiplier that evens out how much effects fill.
+
+    Measured over a spread of times rather than one frame, because a
+    strobe is dark for most of its cycle and would otherwise be scaled
+    to the moon.  Clamped, because an effect that lights four LEDs
+    should stay an effect that lights four LEDs.
+    """
+    try:
+        pre = E.make(name, **{k: (tuple(v) if isinstance(v, list) else v)
+                              for k, v in params.items()})
+    except Exception:
+        return 1.0
+    vals = [float(np.clip(pre.render(h, period * i / samples, None), 0, 255).mean())
+            for i in range(samples)]
+    mean = float(np.mean(vals))
+    if overlay:
+        mean += 0.5 * cue_mean(h, overlay["preset"], overlay.get("params", {}),
+                               samples, period) * float(overlay.get("gain", 1.0))
+    want = CUE_TARGET[int(np.clip(level, 0, 3))] * SHAPE_GAIN.get(shape, 1.0)
+    if mean < 0.5:
+        return 1.0
+    return round(float(np.clip(want / mean, 0.2, 5.0)), 3)
+
+
+def cue_mean(h, name, params, samples=24, period=4.0):
+    try:
+        pre = E.make(name, **{k: (tuple(v) if isinstance(v, list) else v)
+                              for k, v in params.items()})
+    except Exception:
+        return 0.0
+    return float(np.mean([
+        float(np.clip(pre.render(h, period * i / samples, None), 0, 255).mean())
+        for i in range(samples)]))
+
+
+def build(track, fps=40, out=None, seed=None, verbose=False):
+    """Turn a track into a show, phrase by phrase.
+
+    Three things the previous version did not do.  It changes on
+    phrases rather than sections, so one idea lasts eight bars instead
+    of forty seconds.  It knows where the builds and the drops are and
+    answers them, rather than changing effect on a section boundary
+    that lands near a drop but not on it.  And it layers: a second,
+    sparse effect rides a frequency band over the top, so the hats can
+    glitter over a slow swell.
+    """
     os.makedirs(SHOWS, exist_ok=True)
     base = os.path.splitext(os.path.basename(track))[0]
     m = Music(track, fps=fps, cache=os.path.join(SHOWS, base + ".analysis.npz"))
-    cues = []
-    for k, (b0, b1, lvl) in enumerate(m.sections):
-        t0 = float(m.bars[b0]) if b0 < len(m.bars) else 0.0
-        t1 = float(m.bars[b1]) if b1 < len(m.bars) else m.duration
-        pool = POOLS[int(np.clip(lvl, 0, 3))]
-        name, kw = pool[k % len(pool)]
-        pal = PALETTES[k % len(PALETTES)]
-        kw = dict(kw)
+    rng = random.Random(seed if seed is not None else
+                        abs(hash(base)) % (2 ** 31))
+    pal_of = _palette_regions(m)
+    phrases = _phrases(m)
+    recent, cues = [], []
+
+    for ph in phrases:
+        lvl, shape = ph["level"], ph["shape"]
+        pool = list(POOLS[lvl])
+        bias = [n for n, _ in SHAPE_POOLS.get(shape, [])]
+        if shape in SHAPE_POOLS:
+            pool = pool + SHAPE_POOLS[shape]
+        name, kw = _pick(pool, recent, rng, bias=bias)
+        recent = ([name] + recent)[:5]
+
+        pal = PALETTES[pal_of[min(ph["b0"], len(pal_of) - 1)]]
+        kw = _musical_params(name, kw, m, ph)
         cls = E.REGISTRY[name]
-        if "color" in cls.params:
+        if "color" in cls.params and "color" not in kw:
             kw["color"] = pal[0]
         if "a" in cls.params and "b" in cls.params:
-            kw["a"], kw["b"] = pal[0], pal[1]
-        cues.append({"start": round(t0, 3), "end": round(t1, 3),
-                     "preset": name, "params": kw, "level": int(lvl)})
+            kw.setdefault("a", pal[0]); kw.setdefault("b", pal[1])
+
+        cue = {"start": round(ph["t0"], 3), "end": round(ph["t1"], 3),
+               "preset": name, "params": kw, "level": lvl, "shape": shape}
+
+        # A second layer wherever there is room for one.  Not on the
+        # quietest phrases: a breakdown earns its space.
+        if lvl >= 2 or shape == "drop":
+            band = "high" if lvl >= 2 else "bass"
+            if shape == "drop":
+                band = "bass"
+            oname, okw = _pick(OVERLAYS[band], recent[:2], rng)
+            if oname != name:
+                okw = dict(okw)
+                ocls = E.REGISTRY[oname]
+                if "color" in ocls.params:
+                    okw["color"] = pal[1]
+                cue["overlay"] = {"preset": oname, "params": okw, "band": band,
+                                  "gain": 0.9 if shape == "drop" else 0.7,
+                                  "floor": 0.1, "mix": "add"}
+        cue["gain"] = cue_gain(_H(), name, kw, cue.get("overlay"),
+                               lvl, shape, period=4 * 60.0 / max(m.bpm, 1e-6))
+        cues.append(cue)
+
     show = {"track": os.path.basename(track), "fps": fps,
             "duration": round(m.duration, 2), "bpm": round(m.bpm, 2),
             "beats": len(m.beats), "analysis": base + ".analysis.npz",
-            "fade": 0.6, "accent": True, "cues": cues}
+            "fade": 0.45, "accent": True, "pulse": 0.22, "cues": cues}
     out = out or os.path.join(SHOWS, base + ".json")
     json.dump(show, open(out, "w"), indent=1)
+    if verbose:
+        import collections
+        print("  %d phrases, %d distinct effects, %d with an overlay"
+              % (len(cues), len({c["preset"] for c in cues}),
+                 sum(1 for c in cues if c.get("overlay"))))
+        print("  shapes:", dict(collections.Counter(c["shape"] for c in cues)))
     return show, out
 
 
@@ -196,6 +456,10 @@ def build(track, fps=40, out=None):
 # many, so this is a sensible place to start rather than a constant
 # anyone should trust to three figures.
 LOCK_MIN = 0.18
+
+# Bump when the analysis gains a field, so old caches are rebuilt
+# rather than loaded with half the curves missing.
+CACHE_V = 2
 
 
 class Player:
@@ -225,6 +489,20 @@ class Player:
         # once a bar and reads as slow; a little lift on each beat is
         # what makes it look driven by the track rather than beside it.
         self.pulse = float(show.get("pulse", 0.22))
+        # How far the whole picture drops in the quiet parts.  Without
+        # this a show runs at one level from end to end and the only
+        # thing that changes is which effect is on screen, which is
+        # why it reads as pasted over the track rather than driven by
+        # it.  Measured on Strobe, brightness correlated -0.34 with the
+        # music before and +0.24 with this alone -- the sign was wrong,
+        # the loud effects having landed in the quiet sections.  The
+        # rest of the gap is cue_gain below: how much of the helmet an
+        # effect fills swamps how bright the music is.
+        #
+        # It also costs nothing.  The guard clamps the top anyway, so
+        # lowering the floor buys contrast and spends less power.
+        self.dyn = float(show.get("dynamics", 0.72))
+        self.dyn_gamma = float(show.get("dynamics_gamma", 0.7))
         # Lock unless the show says otherwise, or the analysis never
         # found the beat in the first place.
         want = show.get("lock")
@@ -252,12 +530,47 @@ class Player:
         c = self.cue_at(t)
         return self._preset(c) if c else None
 
-    def _render(self, cue, t):
-        """One cue at time t, on the beat grid where that is meaningful."""
+    def _one(self, name, params, t):
+        key = (name, json.dumps(params, sort_keys=True))
+        if key not in self._cache:
+            self._cache[key] = E.make(name, **{
+                k: (tuple(v) if isinstance(v, list) else v)
+                for k, v in params.items()})
+        pre = self._cache[key]
         te = t
         if self.lock and self.music is not None:
-            te, _ = E.lock_time(self.music, cue["preset"], cue["params"], t)
-        return self._preset(cue).render(self.h, te, self.music)
+            te, _ = E.lock_time(self.music, name, params, t)
+        return pre.render(self.h, te, self.music)
+
+    def _render(self, cue, t):
+        """One cue at time t: its base effect, plus any overlay.
+
+        A cue used to be a single effect held for a whole section, and
+        that is most of why the old shows looked repetitive -- forty
+        seconds of one idea, then a hard switch to another.  An overlay
+        is a second effect composited on top, usually something sparse
+        and fast riding a frequency band, so the hats can glitter over
+        a slow swell without either of them having to be the whole
+        picture.
+        """
+        out = self._one(cue["preset"], cue.get("params", {}), t)
+        g = float(cue.get("gain", 1.0))
+        if g != 1.0:
+            out = out * g
+        ov = cue.get("overlay")
+        if not ov:
+            return out
+        gain = float(ov.get("gain", 1.0))
+        band = ov.get("band")
+        if band and self.music is not None:
+            drive = self.music.band_at(t, band, punch=bool(ov.get("punch", True)))
+            gain *= float(ov.get("floor", 0.15)) + (1.0 - float(ov.get("floor", 0.15))) * drive
+        lay = self._one(ov["preset"], ov.get("params", {}), t) * gain
+        if ov.get("mix", "add") == "over":
+            m = lay.max(1) > 4
+            out = out.copy(); out[m] = lay[m]
+            return out
+        return np.maximum(out, lay) if ov.get("mix") == "max" else out + lay
 
     def frame(self, t):
         cur = self.cue_at(t)
@@ -277,6 +590,13 @@ class Player:
         if self.music is not None:
             lvl = cur.get("level", 0)
             ph = self.music.beat_phase(t)
+            if self.dyn > 0:
+                # bass and overall together: a breakdown with a loud pad
+                # should not read as loud as a drop with a kick under it
+                e = (0.6 * self.music.band_at(t, "bass")
+                     + 0.4 * self.music.level_at(t))
+                k = (1.0 - self.dyn) + self.dyn * float(e) ** self.dyn_gamma
+                out = out * k
             # A short lift on every beat, scaled by how loud the section
             # is -- a breakdown should breathe, a drop should hit.
             if self.pulse > 0 and lvl >= 1:
