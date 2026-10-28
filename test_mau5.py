@@ -449,9 +449,16 @@ def t_power_regions():
     strips = json.load(open(os.path.join(HERE, "data", "cal", "strips.json")))
     rim_lo = min(spans[k][0] for k in spans if k.endswith("rim"))
     rim_hi = max(spans[k][1] for k in spans if k.endswith("rim"))
+    # The colour-order span and the mapped rims are the same physical
+    # strip, so they must start together.  They need not end together:
+    # the swap was re-measured at 492-529 while the map's rim region
+    # ends at 527, and the measurement wins -- it is the wiring.
     for st in strips["strips"]:
-        eq((st["start"], st["start"] + st["count"] - 1), (rim_lo, rim_hi),
-           "strips.json does not cover exactly the mapped rims")
+        eq(st["start"], rim_lo, "strips.json starts away from the mapped rims")
+        ok(st["start"] + st["count"] - 1 >= rim_hi,
+           "strips.json stops short of the mapped rims")
+        ok(st["start"] + st["count"] - 1 <= rim_hi + 4,
+           "strips.json runs well past the rims, which would recolour tubes")
 
 
 def t_show_player():

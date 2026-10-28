@@ -1,10 +1,10 @@
 {
- "_comment": "Physical colour order per span, relative to the WLED bus (GRB).  Measured with the camera on 2026-10-27: pure red was sent to every 3-LED block from 471 to 536 and the emitted hue read back.  Red came back red up to 491, green from 492 to 527, and red again from 528.  That band is the two ear rims, which sit next to each other in the chain -- ear1's rim runs straight into ear2's -- which is why a single wiring difference turns both ear outlines green.",
+ "_comment": "Physical colour order per span, relative to the WLED bus (GRB).  Re-measured 2026-10-27 with mau5hue, which asks each LED for red and then for green and compares how much red came back -- a single red frame is not enough, because the camera's white balance drifts between shots and turns the answer over.  The swapped span is 492-529, two LEDs longer than the 492-527 measured earlier; those two were the green corner on the ear outline.",
  "count": 622,
  "strips": [
   {
    "start": 492,
-   "count": 36,
+   "count": 38,
    "order": "GRB",
    "name": "ear rims (both)"
   }
