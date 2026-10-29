@@ -45,7 +45,7 @@ import subprocess
 import mau5wled
 
 
-def start_tunnel(port, timeout=45):
+def start_tunnel(port, timeout=45, scheme="http"):
     """A Cloudflare quick tunnel to the local relay, and its URL.
 
     Tailscale was the plan and the school blocks it: every
@@ -69,7 +69,7 @@ def start_tunnel(port, timeout=45):
             "cloudflared is not installed.\n"
             "  brew install cloudflared")
     proc = subprocess.Popen(
-        ["cloudflared", "tunnel", "--url", "http://127.0.0.1:%d" % port,
+        ["cloudflared", "tunnel", "--url", "%s://127.0.0.1:%d" % (scheme, port),
          "--no-autoupdate"],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1)
@@ -344,6 +344,9 @@ def main(argv=None):
     ap.add_argument("--tls", action="store_true")
     ap.add_argument("--tunnel", action="store_true",
                     help="open a Cloudflare tunnel and print a public URL")
+    ap.add_argument("--ssh", action="store_true",
+                    help="also tunnel this machine's SSH, so the far end can "
+                         "actually work on it rather than just look")
     ap.add_argument("--url-file",
                     default=os.path.join(HERE, "data", "cal", "relay_url.txt"),
                     help="where to leave the current public URL, because a "
@@ -385,8 +388,8 @@ def main(argv=None):
         except Exception as e:
             print("  could not start https (%s); serving plain http" % e)
 
-    tunnel = None
-    public = None
+    tunnel = public = None
+    ssh_tunnel = ssh_host = None
     if a.tunnel:
         if a.tls:
             raise SystemExit("--tunnel and --tls together would make "
@@ -400,9 +403,30 @@ def main(argv=None):
             with open(a.url_file, "w") as f:
                 f.write("%s/%s\n" % (public,
                                       ("?t=" + a.token) if a.token else ""))
+                if ssh_host:
+                    f.write("ssh host: %s\n" % ssh_host)
             os.chmod(a.url_file, 0o600)
         except OSError:
             pass
+
+    if a.ssh:
+        # Tailscale would have been the obvious way to get a shell
+        # here and it is blocked at the other end: without Cloudflare
+        # WARP the school resets every *.tailscale.com, and with WARP
+        # on, WARP and Tailscale are both whole-device VPNs and will
+        # not share the machine.  Cloudflare rides over WARP happily,
+        # being nothing but outbound https.
+        import socket as _s
+        probe = _s.socket()
+        probe.settimeout(2)
+        if probe.connect_ex(("127.0.0.1", 22)) != 0:
+            print("  nothing is listening on port 22 -- turn Remote Login on\n"
+                  "  (System Settings -> General -> Sharing -> Remote Login),\n"
+                  "  then run this again with --ssh")
+        else:
+            print("  opening an SSH tunnel...")
+            ssh_tunnel, ssh_host = start_tunnel(22, scheme="ssh")
+        probe.close()
 
     ip = mau5wled.lan_ip()
     q = ("?t=" + a.token) if a.token else ""
@@ -410,8 +434,12 @@ def main(argv=None):
     print("mau5relay")
     print("  on this network   %s://%s:%d/%s" % (scheme, ip, a.port, q))
     if tail:
-        print("  from anywhere     %s://%s:%d/%s   <- the tailnet address,"
-              " the one to keep" % (scheme, tail, a.port, q))
+        print("  on the tailnet    %s://%s:%d/%s" % (scheme, tail, a.port, q))
+        print("                    (useless from the school network: it "
+              "resets every\n                    *.tailscale.com without "
+              "Cloudflare WARP, and with WARP\n                    on, WARP "
+              "and Tailscale will not share a Mac.  Use the\n"
+              "                    tunnel below from there.)")
     else:
         print("  from anywhere     no tailnet found.  `tailscale ip -4` on "
               "this machine\n                    should print a 100.x address "
@@ -424,6 +452,13 @@ def main(argv=None):
               "as an app from here.\n                    Public the moment it "
               "exists: the token is the only guard,\n                    and "
               "the hostname changes every time this restarts.")
+    if ssh_host:
+        who = os.environ.get("USER", "you")
+        print("  shell             %s" % ssh_host)
+        print("                    from the other machine:")
+        print("                      ssh -o ProxyCommand='cloudflared access "
+              "ssh --hostname %%h' \\\n                          %s@%s"
+              % (who, ssh_host.replace("https://", "")))
     print("\n  routes: /  the dashboard      /cam.jpg  the newest frame")
     print("          /status                /helmet/json/...  the controller")
     print("          /app/mau5.htm          the player, served from here")
@@ -434,8 +469,9 @@ def main(argv=None):
     except KeyboardInterrupt:
         print("\n  stopped.")
     finally:
-        if tunnel is not None:
-            tunnel.terminate()
+        for pr in (tunnel, ssh_tunnel):
+            if pr is not None:
+                pr.terminate()
     return 0
 
 

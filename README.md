@@ -632,13 +632,29 @@ only thing in the way.
 
 ### Getting to it from outside the house
 
-**Tailscale was the plan and the school blocks it.** Measured from
-that network: every `*.tailscale.com` host completes the TCP
-handshake and is then reset the moment the TLS ClientHello names it
-— `tailscale.com`, `login`, `controlplane` and the DERP relays alike,
-while github.com and example.com are fine. That is SNI filtering of
-the whole domain, and since `controlplane` is what Tailscale needs to
-coordinate at all, there is nothing to configure around it.
+**Tailscale cannot work from the school network, and it is blocked
+twice over.** Measured both ways on the same machine:
+
+| | `tailscale.com` | `controlplane` |
+|---|---|---|
+| Cloudflare WARP off | reset | reset |
+| Cloudflare WARP on | 200 | 302 |
+
+With WARP off, every `*.tailscale.com` host completes the TCP
+handshake and is reset the moment the TLS ClientHello names it —
+DERP relays included — while github.com and example.com are fine.
+SNI filtering of the whole domain, and `controlplane` is the
+coordination server, so there is nothing to configure around it.
+
+With WARP on the hosts come back, and Tailscale still does not work:
+both are whole-device VPNs and macOS will not give them the same
+machine. The symptom is specific and worth recognising — the client
+reports `BackendState: Running`, `InNetworkMap: true`, a valid key
+and `Online: false`, with `InMagicSock: false`, `InEngine: false` and
+"unable to connect to the coordination server". The login is fine;
+the data plane never comes up.
+
+Tailscale works normally from a phone hotspot, if it is ever wanted.
 
 Cloudflare is open from the same network, so that is the route:
 
