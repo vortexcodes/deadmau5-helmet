@@ -48,6 +48,12 @@ WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 class Fake:
     """What the controller believes about itself."""
 
+    # A WebSocket message that does not fit in one TCP segment is
+    # dropped by the firmware without a word: 1428 bytes lands, 1448
+    # does not, and the MSS is 1436.  HTTP has no such limit -- a whole
+    # 622-LED frame arrives in one 6.2 kB POST.
+    WS_SEGMENT = 1436
+
     def __init__(self, count=622, lag_ms=0.0, max_json=8192, ws_echo=True,
                  ws=True, can_freeze=True):
         self.count = count
@@ -102,6 +108,17 @@ class Fake:
                 self._set_i(arr)
 
     def _set_i(self, arr):
+        """Apply one `i` write the way the real firmware does.
+
+        Including the part that was wrong here for a week: WLED 0.15.4
+        **blanks the rest of the segment** first.  Measured on the
+        helmet by writing LEDs 0-99, then 100-199, and reading the
+        strip back -- only the second hundred was lit.  While this
+        class accumulated instead, a player that split a frame across
+        messages, or sent deltas, passed every test here and showed
+        roughly a fifth of each frame on the helmet.
+        """
+        self.px[:] = 0
         i = 0
         at = 0
         while i < len(arr):
@@ -389,14 +406,23 @@ def make_handler(fake, geo, proxy=None):
                         continue
                     buf = b"".join(parts)
                     parts = []
+                    # The firmware drops a message that did not fit in
+                    # one TCP segment, and says nothing.  Measured:
+                    # 1428 bytes of payload lands, 1448 does not.
+                    if len(buf) + 6 > fake.WS_SEGMENT:
+                        fake.stats["oversize"] = fake.stats.get("oversize", 0) + 1
+                        fake._reject("over one TCP segment (%d bytes)" % len(buf),
+                                     buf)
+                        continue
                     fake.take(buf)
-                    if fake.ws_echo:
-                        # WLED answers a state message by broadcasting
-                        # the new state back.  It is the only thing a
-                        # sender can use as an acknowledgement, so the
-                        # fake has to do it or the player's pacing goes
-                        # untested -- and it costs the real controller
-                        # time, which is worth seeing here too.
+                    # WLED answers some state messages by broadcasting
+                    # the new state, and answers an `i` write with
+                    # nothing at all -- measured, 665 pixel messages
+                    # drew about six bytes each.  Echoing everything
+                    # here is what let the player ship a credit window
+                    # built on acknowledgements that never arrive.
+                    quiet = b'"i"' in buf
+                    if fake.ws_echo and not quiet:
                         out = json.dumps(fake.state()).encode()
                         hdr = b"\x81"
                         if len(out) < 126:

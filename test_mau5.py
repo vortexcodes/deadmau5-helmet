@@ -963,33 +963,54 @@ def t_offline_encoder_roundtrip():
         f, _ = g.apply(np.asarray(E.make(nm).render(h, t), float), now=t)
         frames.append(f.astype(np.uint8))
     pix = mau5wled.Pixels("0.0.0.0", count=h.n, strips=strips, guard=False)
-    chars = 0
-    # Two message limits: the one the player ships with, and one small
-    # enough to force every entry to be split.  A message over the
-    # firmware's JSON buffer is dropped in silence, so the packer
-    # exceeding its limit would show up as nothing at all until a
-    # helmet was in front of someone.
-    for limit in (3000, 512):
-        job = {"count": h.n, "strips": strips, "maxBody": limit,
-               "frames": [base64.b64encode(f.tobytes()).decode() for f in frames]}
-        bodies = _node("wiretest.js", job)
-        if bodies is None:
-            return note("offline: node not installed, the encoder went unchecked")
+    job = {"count": h.n, "strips": strips,
+           "frames": [base64.b64encode(f.tobytes()).decode() for f in frames]}
+    res = _node("wiretest.js", job)
+    if res is None:
+        return note("offline: node not installed, the encoder went unchecked")
+    bodies, ws_limit = res["bodies"], res["wsLimit"]
+    eq(len(bodies), len(frames), "one body per frame")
+
+    # Every frame is whole, and every frame is decoded by the same
+    # parser the controller uses, starting from a blanked segment --
+    # because that is what the firmware does to anything an `i` write
+    # does not mention.  A player that sent deltas passed the old
+    # version of this test and showed a fifth of each frame.
+    small = 0
+    for f, b in zip(frames, bodies):
         fake = mau5fake.Fake(count=h.n)
         fake.frozen = True
-        for f, parts in zip(frames, bodies):
-            for b in parts:
-                ok(len(b) <= limit, "a %d byte message against a %d byte "
-                   "limit would be dropped by the controller" % (len(b), limit))
-                if limit == 3000:
-                    chars += len(b)
-                fake.apply_state(json.loads(b))
-            want = pix.apply_order(f)
-            ok(np.array_equal(fake.px, want),
-               "at a %d byte limit the controller would show %d LEDs wrong"
-               % (limit, int((fake.px != want).any(1).sum())))
-    note("offline: %d frames encode to %.0f bytes each, decoded exactly"
-         % (len(frames), chars / float(len(frames))))
+        fake.px[:] = 255                      # prove the write blanks first
+        fake.apply_state(json.loads(b))
+        want = pix.apply_order(f)
+        ok(np.array_equal(fake.px, want),
+           "the controller would show %d LEDs wrong"
+           % int((fake.px != want).any(1).sum()))
+        ok(len(b) <= fake.WS_SEGMENT - 6 or len(b) > ws_limit,
+           "a %d byte body is over the player's websocket limit of %d but "
+           "under the segment size, so it would be sent and dropped"
+           % (len(b), ws_limit))
+        if len(b) <= ws_limit:
+            small += 1
+    note("offline: %d frames, %.0f bytes each, decoded exactly; %d of them "
+         "fit one websocket message"
+         % (len(frames), sum(len(b) for b in bodies) / float(len(bodies)), small))
+
+
+def t_offline_oversize_is_caught():
+    """The limit is the firmware's, not ours, so measure against it."""
+    import mau5fake
+    f = mau5fake.Fake(count=622)
+    f.frozen = True
+    ok(mau5fake.Fake.WS_SEGMENT == 1436,
+       "the measured TCP segment size is 1436; anything else needs re-measuring")
+    # Blanking, the behaviour that invalidated deltas.
+    f.apply_state({"seg": {"id": 0, "i": [0, 100, "FF0000"]}})
+    eq(int((f.px.max(1) > 0).sum()), 100, "a range write lights its range")
+    f.apply_state({"seg": {"id": 0, "i": [100, 200, "00FF00"]}})
+    eq(int((f.px.max(1) > 0).sum()), 100,
+       "a second write blanks the first, as WLED 0.15.4 does")
+    ok(f.px[0].max() == 0, "LED 0 should have gone dark")
 
 
 def t_offline_page_is_self_contained():
@@ -1045,6 +1066,7 @@ GROUPS = {
     "offline": [t_offline_engine_matches_python,
                 t_offline_guard_matches_python,
                 t_offline_encoder_roundtrip,
+                t_offline_oversize_is_caught,
                 t_offline_page_is_self_contained,
                 t_offline_limiter_matches_the_budget],
     "camera": [t_eye_after],

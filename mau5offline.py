@@ -86,6 +86,7 @@ def bundle():
         "f32": {k: _b64(v, "<f4") for k, v in {
             "px": h.px, "py": h.py, "depth": h.depth, "nx": h.nx, "ny": h.ny,
             "nfa": h.nfa, "nel": h.nel, "u": h.u, "fa": h.fa,
+            "ea": h.ea, "er": h.er,
             "xyz": h.xyz.reshape(-1),
         }.items()},
         "i16": {"group": _b64(h.group, "<i2")},
@@ -138,7 +139,7 @@ def build(verbose=True):
 
     html = _read("player.html")
     parts = {"DATA": data_js}
-    for js in ("engine.js", "guard.js", "wire.js", "ui.js"):
+    for js in ("engine.js", "guard.js", "wire.js", "audio.js", "ui.js"):
         parts[js.split(".")[0].upper()] = _read(js)
     missing = [k for k in re.findall(r"<!--@(\w+)-->", html) if k not in parts]
     if missing:
@@ -281,7 +282,33 @@ def deploy(host=None, gzipped=True, verbose=True):
 # ----------------------------------------------------------------------
 # configuration: the two things offline mode needs that a show does not
 # ----------------------------------------------------------------------
-def wanted_cfg(power, ap_ssid=None, ap_psk=None):
+def bus_budgets(buses, total_ma, per_led_ma):
+    """Spread one current budget over however many output buses there are.
+
+    Measured on the helmet's own controller (WLED 0.15.4): the limiter
+    that actually runs is the *per bus* one.  Writing the global
+    ``hw.led.maxpwr`` changes ``info.leds.maxpwr`` and nothing else --
+    asking for 1390 mA of white drew 1178 mA with the global set to
+    700.  Moving the same number onto the bus clamps immediately and
+    linearly, and the reported draw comes out at the cap less one
+    milliamp per LED, which is WLED reserving the same standby figure
+    ``mau5power`` uses.  So the cap to write is the budget *including*
+    standby, and the firmware subtracts the standby itself.
+
+    The global is written as well.  It is inert here but it is what
+    older builds read, and a number that disagrees with the bus would
+    be worse than one that is merely ignored.
+    """
+    out, n = [], sum(max(1, int(b.get("len") or 0)) for b in buses) or 1
+    for b in buses:
+        c = dict(b)
+        c["maxpwr"] = int(round(total_ma * max(1, int(b.get("len") or 0)) / n))
+        c["ledma"] = int(round(per_led_ma))
+        out.append(c)
+    return out
+
+
+def wanted_cfg(power, ap_ssid=None, ap_psk=None, buses=None):
     """The configuration changes offline mode depends on.
 
     Two of them, and neither is cosmetic.
@@ -306,9 +333,11 @@ def wanted_cfg(power, ap_ssid=None, ap_psk=None):
     import mau5power
     ma = int(round(power["budget_ma"] + power["count"]
                    * mau5power.MA_PER_LED_STANDBY))
+    led = {"maxpwr": ma, "ledma": int(round(mau5power.MA_PER_LED_FULL_WHITE))}
+    if buses:
+        led["ins"] = bus_budgets(buses, ma, mau5power.MA_PER_LED_FULL_WHITE)
     cfg = {"ap": {"behav": 2},        # 2 = always on, not only when lost
-           "hw": {"led": {"maxpwr": ma,
-                          "ledma": int(round(mau5power.MA_PER_LED_FULL_WHITE))}}}
+           "hw": {"led": led}}
     if ap_ssid:
         cfg["ap"]["ssid"] = ap_ssid
     if ap_psk:
@@ -329,10 +358,23 @@ def _flat(d, p=""):
 def config(host=None, apply=False, ap_ssid=None, ap_psk=None):
     w = _find(host)
     power = json.load(open(os.path.join(CAL, "power.json")))
-    want = wanted_cfg(power, ap_ssid, ap_psk)
     cur = w.cfg()
+    buses = ((cur.get("hw") or {}).get("led") or {}).get("ins") or []
+    want = wanted_cfg(power, ap_ssid, ap_psk, buses)
     changes = []
+    for i, b in enumerate(want["hw"]["led"].get("ins") or []):
+        have = buses[i] if i < len(buses) else {}
+        for k in ("maxpwr", "ledma"):
+            if have.get(k) != b[k]:
+                changes.append(("bus %d %s" % (i, k), have.get(k), b[k]))
     for k, v in _flat(want).items():
+        if k.endswith(".ins"):
+            continue
+        # 0.15 keeps no global ledma: it accepts the write, stores
+        # nothing and reads back 0 for ever.  Reporting that as an
+        # outstanding change would mean `config` never came up clean.
+        if k == "hw.led.ledma" and buses:
+            continue
         if k.endswith(".psk"):
             changes.append((k, "(unchanged or unset)", "(set)"))
             continue
@@ -349,7 +391,9 @@ def config(host=None, apply=False, ap_ssid=None, ap_psk=None):
     for k, a, b in changes:
         print("  %-14s %-22s %s" % (k, a, b))
     print("\n  maxpwr is the budget plus standby, in mA at 12 V -- the same\n"
-          "  number data/cal/power.json gives the software guard.")
+          "  number data/cal/power.json gives the software guard.  The bus\n"
+          "  figure is the one WLED 0.15 enforces; the global is for older\n"
+          "  builds and is inert here.")
     if not apply:
         print("\nnothing changed.  Re-run with --apply.")
         return 0
@@ -367,7 +411,8 @@ def check(host=None):
     w = _find(host)
     info, cfg = w.info(True), w.cfg()
     power = json.load(open(os.path.join(CAL, "power.json")))
-    want = wanted_cfg(power)
+    buses = ((cfg.get("hw") or {}).get("led") or {}).get("ins") or []
+    want = wanted_cfg(power, buses=buses)
     rows, bad = [], 0
 
     def row(ok, what, detail):
@@ -388,12 +433,27 @@ def check(host=None):
         "%s characters (length only; set yours with --ap-psk)"
         % (ap.get("pskl") or 0))
 
-    led = (cfg.get("hw") or {}).get("led") or {}
+    # The bus is what 0.15 enforces -- see bus_budgets.  Checking the
+    # global instead passed on a helmet whose real limiter was 1800.
     wl = want["hw"]["led"]
-    row(led.get("maxpwr") == wl["maxpwr"], "brightness limiter set to the budget",
-        "maxpwr %s mA, wanted %s" % (led.get("maxpwr"), wl["maxpwr"]))
-    row(int(led.get("ledma") or 0) > 0, "limiter knows the per-LED current",
-        "ledma %s mA, wanted %s" % (led.get("ledma"), wl["ledma"]))
+    wb = wl.get("ins") or []
+    cap = sum(int(b.get("maxpwr") or 0) for b in buses)
+    # Measured, not assumed: WLED's estimator does not count pixels
+    # painted into a frozen segment, so the limiter it drives does not
+    # clamp them either -- /json/info reports a flat idle 120 mA while
+    # the page is painting a full rainbow.  The cap is still worth
+    # setting, because it does cover everything the controller renders
+    # itself, which is what a stray tap in WLED's own UI produces.  It
+    # is not what keeps the phone honest; the guard in the page is.
+    row(bool(wb) and all(buses[i].get("maxpwr") == b["maxpwr"]
+                         for i, b in enumerate(wb)),
+        "limiter set, for WLED's own effects",
+        "bus caps total %s mA, wanted %s" % (cap, wl["maxpwr"]))
+    row(bool(wb) and all(int(buses[i].get("ledma") or 0) == b["ledma"]
+                         for i, b in enumerate(wb)),
+        "limiter knows the per-LED current",
+        "ledma %s mA, wanted %s"
+        % ([b.get("ledma") for b in buses], wl["ledma"]))
 
     try:
         with urllib.request.urlopen(w.base + "/" + PAGE, timeout=10) as r:

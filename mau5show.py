@@ -176,6 +176,36 @@ class Music:
             return 0.0
         return float(np.clip(self.energy[i], 0, 1))
 
+    def pitch_at(self, t):
+        """Where the harmony sits, as a hue in 0..1.  One turn is one
+        octave, so the colour follows the chords and ignores the
+        bassline walking between octaves.
+
+        A circular mean of the bar's pitch-class profile rather than
+        its loudest bin: a track sitting between two neighbouring
+        classes should give a colour between them, not flap.
+        """
+        ch = getattr(self, "chroma", None)
+        if ch is None or not len(ch) or not len(self.bars):
+            return 0.0
+        i = int(np.clip(np.searchsorted(self.bars, t) - 1, 0, len(ch) - 1))
+        a = 2 * np.pi * np.arange(12) / 12.0
+        v = np.asarray(ch[i], float)
+        return float((math.atan2(float((v * np.sin(a)).sum()),
+                                 float((v * np.cos(a)).sum()))
+                      / (2 * np.pi)) % 1.0)
+
+    def centroid_at(self, t):
+        """Spectral brightness in 0..1: 0 is all bass, 1 is all air."""
+        b = getattr(self, "band", None)
+        if not b:
+            return 0.5
+        lo = self.band_at(t, "bass")
+        mid = self.band_at(t, "mid")
+        hi = self.band_at(t, "high")
+        tot = lo + mid + hi
+        return float(np.clip((0.5 * mid + hi) / tot, 0, 1)) if tot > 1e-6 else 0.5
+
     def bands_at(self, t, n):
         """Cheap pseudo-spectrum: the energy curve smeared across bands
         with a per-band lag, which looks like a spectrum analyser

@@ -78,6 +78,12 @@ class FakeMusic:
         k = np.arange(n)
         return np.clip(0.25 + 0.7 * np.abs(np.sin(2 * np.pi * (t * 0.7 + k / 5.0))), 0, 1)
 
+    def pitch_at(self, t):
+        return (t * 0.09) % 1.0
+
+    def centroid_at(self, t):
+        return 0.5 + 0.4 * float(np.sin(t * 0.63))
+
 
 def period_of(preset):
     for key in ("period", "every", "cycle"):

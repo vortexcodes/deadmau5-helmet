@@ -1,7 +1,7 @@
 // wiretest.js -- encode frames under node so test_mau5.py can decode
 // them with the controller's own parser and compare.  Reads
-// {count, strips, frames:[base64 uint8 rgb]} and writes the JSON
-// bodies the player would send, in order.
+// {count, strips, frames:[base64 uint8 rgb]} and writes, for each
+// frame, the single JSON body the player would send.
 'use strict';
 const W = require('./wire.js');
 
@@ -22,10 +22,7 @@ process.stdin.on('end', () => {
       permed[b + 1] = cur[b + link.perm[b + 1]];
       permed[b + 2] = cur[b + link.perm[b + 2]];
     }
-    const items = W.encode(permed, link.prev, n);
-    const parts = W.pack(items, job.maxBody || 3000);
-    out.push(parts.map(p => JSON.stringify({ seg: { id: 0, i: p } })));
-    link.prev = permed;
+    out.push(W.bodyFor(W.encode(permed, n)));
   }
-  process.stdout.write(JSON.stringify(out));
+  process.stdout.write(JSON.stringify({ bodies: out, wsLimit: W.WS_LIMIT }));
 });

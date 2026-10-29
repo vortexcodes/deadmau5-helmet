@@ -39,6 +39,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   preset: null, inst: null, params: {}, running: false,
   t0: 0, bri: 255, fps: 0, cycle: 0, lastCycle: 0, interval: 40,
+  music: null,
 };
 
 // ----------------------------------------------------------------------
@@ -128,7 +129,7 @@ function tick() {
   }
 
   frame.fill(0);
-  state.inst.render(helmet, t, null, frame);
+  state.inst.render(helmet, t, state.music, frame);
   const rep = guard.apply(frame, frame, now / 1000);
   const sent = link.send(frame);
 
@@ -341,6 +342,104 @@ async function stop() {
   $('bar').style.width = '0%';
 }
 
+
+// ----------------------------------------------------------------------
+// listening
+// ----------------------------------------------------------------------
+// The analyser runs on its own clock and this only reads it, so the
+// numbers on screen stay right even when the link has dragged the
+// render rate down to single figures.
+const an = new M.Analyser();
+const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+// Presets whose look is driven by the music.  Everything else runs the
+// same with or without it, so turning sound on and seeing nothing
+// change would be the obvious thing to misread as broken.
+const REACTIVE = ['spectrum', 'pitchwheel', 'bloom', 'eq', 'vu',
+                  'beatpulse', 'heartbeat', 'sparkle'];
+
+function audioSource(kind) {
+  state.music = kind === 'none' ? null : M.LiveMusic(an);
+  for (const [id, k] of [['afile', 'file'], ['amic', 'mic'], ['aoff', 'none']]) {
+    $(id).classList.toggle('on', kind === k);
+  }
+  $('asrc').textContent = { file: 'track', mic: 'microphone', none: 'silent' }[kind];
+  if (kind !== 'none' && REACTIVE.indexOf(state.preset) < 0) choose('spectrum');
+}
+
+function audioWhy(msg) { $('why').textContent = msg || ''; }
+
+const spec = $('spec'), sx = spec.getContext('2d');
+
+function drawSpectrum() {
+  const w = spec.clientWidth, h = 46;
+  if (spec.width !== w * devicePixelRatio) {
+    spec.width = w * devicePixelRatio; spec.height = h * devicePixelRatio;
+  }
+  sx.clearRect(0, 0, spec.width, spec.height);
+  if (!an.running) return;
+  const nb = 24, v = an.bands(nb);
+  const bw = spec.width / nb;
+  for (let b = 0; b < nb; b++) {
+    const k = Math.max(0.01, v[b]);
+    const c = M.hsv((an.pitch + b / nb * 0.3) % 1, 1, 1);
+    sx.fillStyle = 'rgb(' + c.map(Math.round).join(',') + ')';
+    sx.fillRect(b * bw + 1, spec.height * (1 - k), bw - 2, spec.height * k);
+  }
+}
+
+function audioReadout() {
+  if (!an.running) {
+    $('alvl').textContent = '—'; $('apitch').textContent = '—';
+    $('abpm').textContent = '—';
+  } else {
+    $('alvl').textContent = (an.level * 100).toFixed(0) + '%';
+    $('apitch').textContent = NOTES[Math.round(an.pitch * 12) % 12];
+    $('abpm').textContent = an.bpm ? an.bpm.toFixed(0) : '—';
+  }
+  drawSpectrum();
+}
+setInterval(audioReadout, 150);
+
+$('afile').onclick = () => $('apick').click();
+$('apick').onchange = async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    const el = await an.useFile(f);
+    audioSource('file');
+    audioWhy('playing ' + f.name + ' out of this phone and reading it on the '
+             + 'way past, so the helmet is in time with what the room hears.');
+    el.onended = () => { an.stop(); audioSource('none'); };
+  } catch (err) {
+    audioSource('none');
+    audioWhy('could not play that file: ' + err.message);
+  }
+};
+
+$('amic').onclick = async () => {
+  try {
+    await an.useMic();
+    audioSource('mic');
+    audioWhy('');
+  } catch (err) {
+    audioSource('none');
+    audioWhy(err.message + '. A track picked with the button on the left '
+             + 'works here and needs no permission. For the microphone, open '
+             + 'this page over https from the laptop, or add '
+             + location.origin + ' to chrome://flags/#unsafely-treat-insecure-'
+             + 'origin-as-secure on this phone.');
+  }
+};
+
+$('aoff').onclick = () => { an.stop(); audioSource('none'); audioWhy(''); };
+
+if (!M.Analyser.micPossible()) {
+  $('amic').disabled = true;
+  $('amic').textContent = 'listen (needs https)';
+}
+audioSource('none');
+
 // ----------------------------------------------------------------------
 // wiring up
 // ----------------------------------------------------------------------
@@ -349,6 +448,7 @@ for (const name of Object.keys(D.presets)) {
   const b = document.createElement('button');
   b.textContent = name;
   b.dataset.name = name;
+  if (REACTIVE.indexOf(name) >= 0) b.classList.add('reactive');
   b.onclick = () => choose(name);
   grid.appendChild(b);
 }

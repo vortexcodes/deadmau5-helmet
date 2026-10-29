@@ -97,6 +97,27 @@ class Helmet:
         sh_el = self.el[self.shell]
         self.nel = np.clip((self.el - sh_el.min()) / (np.ptp(sh_el) or 1), 0, 1)
 
+        # Polar coordinates about the centre of whatever part the LED
+        # belongs to: angle `ea` in 0..1 anticlockwise, radius `er` in
+        # 0..1 out to that part's own edge.
+        #
+        # Per part, not per helmet, because the two things anybody wants
+        # to run round are the ear discs, and a single centre on the
+        # face puts both ears at nearly the same angle and nearly the
+        # same radius -- which is how `earspin` ended up riding `u`, the
+        # position along the strip.  That works for a rim, where the
+        # strip *is* the circle, and not at all for the tubes inside it.
+        self.ea = np.zeros(self.n)
+        self.er = np.zeros(self.n)
+        for _m in (self.shell, self.ear1, self.ear2):
+            if not _m.any():
+                continue
+            dx = self.px[_m] - self.px[_m].mean()
+            dy = self.py[_m] - self.py[_m].mean()
+            self.ea[_m] = (np.arctan2(dy, dx) / (2 * np.pi)) % 1.0
+            r = np.hypot(dx, dy)
+            self.er[_m] = r / (r.max() or 1.0)
+
     @staticmethod
     def _norm(a):
         lo, hi = a.min(), a.max()
@@ -203,6 +224,34 @@ def _beat(music, t, default=0.0):
     if music is None:
         return default
     return float(music.level_at(t))
+
+
+def _pitch(music, t, default=0.0):
+    """Where the harmony is sitting, as a hue in 0..1 that wraps.
+
+    One turn is one octave, so a tone and its octave are the same
+    colour -- which is the point.  A track that modulates up a fourth
+    moves the whole palette by a third of the wheel and the change
+    reads instantly; a bassline walking an octave does not move it at
+    all, which is also right.
+
+    Not every music source can answer.  A pre-analysed track has a
+    per-bar chroma, a live microphone has a spectral peak, and a
+    preset rendered with no music at all gets the caller's default --
+    usually a slow drift, so the thing still looks alive in a preview.
+    """
+    if music is None:
+        return default
+    f = getattr(music, "pitch_at", None)
+    return default if f is None else float(f(t))
+
+
+def _centroid(music, t, default=0.5):
+    """Spectral brightness in 0..1: 0 is all bass, 1 is all air."""
+    if music is None:
+        return default
+    f = getattr(music, "centroid_at", None)
+    return default if f is None else float(f(t))
 
 
 # ----------------------------------------------------------------------
@@ -925,13 +974,118 @@ class StripId(Preset):
                    self.p["sat"], self.p["value"])
 
 
+# ----------------------------------------------------------------------
+# Listening presets.
+#
+# These three are readouts rather than decorations: every one of them
+# is showing a measurement, and if the measurement is wrong it should
+# look wrong.  They take their drive from the same Music interface the
+# shows use, so the same preset runs off a pre-analysed track on the
+# laptop and off a live microphone on the phone with no change.
+# ----------------------------------------------------------------------
+
+class Spectrum(Preset):
+    """A spectrum analyser across the face: bars from the bands,
+    colour from the pitch, and a peak cap that falls.
+
+    The cap is what makes it readable.  Bars alone on a diffused dome
+    are a blur that gets brighter -- nine LEDs bloom across half the
+    sphere, so the top of a bar is not a visible edge.  A held peak
+    that decays slowly is a *moving* edge, and movement survives the
+    diffusion when a gradient does not.
+    """
+    name = "spectrum"
+    params = {"bands": 16, "spread": 0.30, "cap": 0.055, "fall": 0.75,
+              "tilt": 0.45, "sat": 1.0}
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self._hold, self._last = None, None
+
+    def render(self, h, t, music=None):
+        nb = max(1, int(self.p["bands"]))
+        if music is not None and getattr(music, "bands", None) is not None:
+            amp = np.clip(np.asarray(music.bands_at(t, nb), float), 0, 1)
+        else:
+            amp = 0.5 + 0.45 * np.sin(t * 2.1 + np.arange(nb) * 0.7)
+        if self._hold is None or len(self._hold) != nb or self._last is None \
+                or t < self._last:
+            self._hold = amp.copy()
+        else:
+            self._hold = np.maximum(amp, self._hold
+                                    - self.p["fall"] * (t - self._last))
+        self._last = t
+
+        band = np.clip((h.nfa * nb).astype(int), 0, nb - 1)
+        lvl, peak = amp[band], self._hold[band]
+        lit = h.nel <= lvl
+        tilt = self.p["tilt"]
+        v = np.where(lit, tilt + (1 - tilt) * h.nel / np.maximum(lvl, 1e-3), 0.0)
+        hue = (_pitch(music, t, (t * 0.11) % 1.0) + h.nfa * self.p["spread"]) % 1.0
+        out = hsv(hue, self.p["sat"], np.clip(v, 0, 1))
+        out[np.abs(h.nel - peak) <= self.p["cap"]] = (255, 255, 255)
+        return out
+
+
+class PitchWheel(Preset):
+    """The ears as a pitch wheel: one turn is one octave.
+
+    Each ear is a disc, so an angle round it is the obvious place to
+    put something cyclic, and pitch class is the only genuinely cyclic
+    thing a track has.  The wedge sits where the harmony is and the
+    shell carries the same hue as a bed, so the helmet reads as one
+    colour that moves with the chords rather than two ears doing
+    something of their own.
+    """
+    name = "pitchwheel"
+    params = {"width": 0.085, "shellmix": 0.22, "sat": 1.0, "floor": 0.10}
+
+    def render(self, h, t, music=None):
+        pc = _pitch(music, t, (t * 0.11) % 1.0)
+        lvl = self.p["floor"] + (1 - self.p["floor"]) * _beat(
+            music, t, 0.55 + 0.45 * math.sin(t * 1.7))
+        d = np.abs(((h.ea - pc + 0.5) % 1.0) - 0.5)
+        k = np.clip(1 - d / self.p["width"], 0, 1) ** 2
+        v = np.where(h.shell, self.p["shellmix"], k) * lvl
+        return hsv(np.full(h.n, pc), self.p["sat"], np.clip(v, 0, 1))
+
+
+class Bloom(Preset):
+    """Rings running outward from the middle of each part, on the beat.
+
+    Radius rather than height, because loudness read as a bar is what
+    `vu` already is, and because the ears are discs -- a ring is the
+    shape they are.  Hue comes from pitch and is pushed toward the
+    other side of the wheel as the spectrum brightens, so a hat-heavy
+    bar and a bass-heavy one are not the same colour at the same
+    loudness.
+    """
+    name = "bloom"
+    params = {"rings": 2, "width": 0.20, "span": 0.35, "sat": 1.0,
+              "floor": 0.05}
+
+    def render(self, h, t, music=None):
+        ph = (music.beat_phase(t) if music is not None else (t * 1.4) % 1.0)
+        lvl = _beat(music, t, 0.5 + 0.5 * math.sin(t * 2.0))
+        hue = (_pitch(music, t, (t * 0.11) % 1.0)
+               + self.p["span"] * _centroid(music, t, 0.5)) % 1.0
+        nr = max(1, int(self.p["rings"]))
+        k = np.zeros(h.n)
+        for i in range(nr):
+            r = (ph + i / float(nr)) % 1.0
+            k = np.maximum(k, np.clip(1 - np.abs(h.er - r) / self.p["width"],
+                                      0, 1) ** 2)
+        v = (self.p["floor"] + (1 - self.p["floor"]) * lvl) * k
+        return hsv(np.full(h.n, hue), self.p["sat"], np.clip(v, 0, 1))
+
+
 REGISTRY = {}
 for _c in (Solid, Breathe, RainbowSweep, Scanner, Wipe, Strobe, Twinkle,
            Comet, Ripple, Plasma, Fire, EarSpin, TubePulse, Police,
            Equaliser, BeatPulse, TextScroll, SpriteShow, Eyes, Matrix,
            Spiral, Pinwheel, Heartbeat, Confetti, Lightning, Wave,
            Gradient, Chase, VuMeter, Sparkle, Countdown, Split,
-           AlignBar, StripId):
+           AlignBar, StripId, Spectrum, PitchWheel, Bloom):
     REGISTRY[_c.name] = _c
 
 

@@ -63,110 +63,75 @@ function makePerm(count, strips) {
 // and a flat stretch costs two indices and six characters however
 // long it is.
 //
-// `prev` is the frame the controller is already showing; null means
-// nothing is known about it and the whole frame goes.
+// There used to be a `prev` here, and deltas against it, and a
+// packer that split a frame across as many messages as it needed.
+// All three were wrong about this firmware, and none of it showed up
+// against the simulator.  Measured on WLED 0.15.4, reading the strip
+// back with mau5peek rather than trusting the send:
 //
-// encode() returns entries rather than the flat array, because the
-// flat array cannot be split safely without parsing it back -- and
-// splitting it is not optional, since a message over the firmware's
-// JSON buffer is dropped without a word.
+//   An `i` write BLANKS the rest of the segment.  Send LEDs 0-99 and
+//   then 100-199 and only the second hundred is lit.  So a delta is
+//   not an optimisation, it is a frame with the rest of the helmet
+//   switched off, and splitting a frame across messages shows only
+//   whichever part arrived last.
+//
+//   A WebSocket message over one TCP segment is dropped in silence.
+//   1428 bytes lands, 1448 does not, and 1436 is the MSS.  Nothing is
+//   reported: the send succeeds and the pixels never change.
+//
+//   An HTTP POST has no such limit -- a whole 622-LED frame goes in
+//   one 6.2 kB request and arrives exactly -- but costs a round trip,
+//   and the controller manages about 7 a second on one connection,
+//   10 with three.
+//
+// So: one message per frame, always whole, and the transport is
+// chosen by how big the frame turned out.  Fifteen of the 37 presets
+// encode small enough for the WebSocket, where frames apply
+// correctly at 60 fps; the rest go by POST at about ten.  Quantising
+// colour to force the rest under the limit was measured too -- it
+// buys four presets at a visible cost, and was not taken.
 const RUN_MIN = 3;            // below this a range costs more than it saves
 
-function same(a, b, i) {
-  return a[i * 3] === b[i * 3] && a[i * 3 + 1] === b[i * 3 + 1]
-      && a[i * 3 + 2] === b[i * 3 + 2];
-}
+// Measured boundary is 1428; the margin is for the index digits at
+// the end of a long chain and for a firmware with a smaller MSS.
+const WS_LIMIT = 1400;
 
 function hexAt(buf, i) {
   return HEX[buf[i * 3]] + HEX[buf[i * 3 + 1]] + HEX[buf[i * 3 + 2]];
 }
 
-function encode(cur, prev, count) {
+function encode(cur, count) {
   const out = [];
-  let i = 0;
-  while (i < count) {
-    if (prev && same(cur, prev, i)) { i++; continue; }
-    let end = i;
-    while (end < count && !(prev && same(cur, prev, end))) end++;
-    let j = i;
-    let seq = null;                       // the run of singles being built
-    while (j < end) {
-      let k = j + 1;
-      while (k < end && cur[k * 3] === cur[j * 3]
-             && cur[k * 3 + 1] === cur[j * 3 + 1]
-             && cur[k * 3 + 2] === cur[j * 3 + 2]) k++;
-      if (k - j >= RUN_MIN) {
-        seq = null;
-        out.push({ a: j, b: k, c: hexAt(cur, j) });
-      } else {
-        if (!seq) { seq = { a: j, cols: [] }; out.push(seq); }
-        for (let q = j; q < k; q++) seq.cols.push(hexAt(cur, q));
-      }
-      j = k;
+  let j = 0, seq = null;
+  while (j < count) {
+    let k = j + 1;
+    while (k < count && cur[k * 3] === cur[j * 3]
+           && cur[k * 3 + 1] === cur[j * 3 + 1]
+           && cur[k * 3 + 2] === cur[j * 3 + 2]) k++;
+    if (k - j >= RUN_MIN) {
+      seq = null;
+      out.push({ a: j, b: k, c: hexAt(cur, j) });
+    } else {
+      if (!seq) { seq = { a: j, cols: [] }; out.push(seq); }
+      for (let q = j; q < k; q++) seq.cols.push(hexAt(cur, q));
     }
-    i = end;
+    j = k;
   }
   return out;
 }
 
-// What one entry costs inside the `i` array, counted exactly: every
-// token carries its own comma, and the envelope is a known constant.
-const ENVELOPE = '{"seg":{"id":0,"i":[]}}'.length;
-
-function numCost(n) { return String(n).length + 1; }
-const COL_COST = 9;                        // "RRGGBB" plus a comma
-
-// Split entries into messages no longer than `maxBody` characters.
-// Splitting is free: the segment is frozen, so the parts accumulate,
-// and a range or a run of singles both divide cleanly on any index.
-function pack(entries, maxBody) {
-  const room = Math.max(64, maxBody - ENVELOPE);
-  const out = [];
-  let part = [], size = 0;
-  const flush = () => { if (part.length) { out.push(part); part = []; size = 0; } };
+// The flat `i` array for one whole frame.
+function flatten(entries) {
+  const arr = [];
   for (const e of entries) {
-    if (e.cols) {
-      let at = e.a, q = 0;
-      while (q < e.cols.length) {
-        const head = numCost(at);
-        if (size + head + COL_COST > room) flush();
-        let take = 0;
-        let budget = room - size - head;
-        while (q + take < e.cols.length && budget >= COL_COST) {
-          budget -= COL_COST; take++;
-        }
-        part.push(at);
-        for (let z = 0; z < take; z++) part.push(e.cols[q + z]);
-        size += head + take * COL_COST;
-        q += take; at += take;
-        if (q < e.cols.length) flush();
-      }
-    } else {
-      let a = e.a;
-      while (a < e.b) {
-        const cost = numCost(a) + numCost(e.b) + COL_COST;
-        if (size + cost > room) {
-          // a single range can outgrow an empty message only if the
-          // room is absurd, so splitting it in half always terminates
-          if (!part.length) {
-            const mid = a + Math.max(1, Math.floor((e.b - a) / 2));
-            part.push(a, mid, e.c);
-            size += numCost(a) + numCost(mid) + COL_COST;
-            a = mid;
-            flush();
-            continue;
-          }
-          flush();
-          continue;
-        }
-        part.push(a, e.b, e.c);
-        size += cost;
-        a = e.b;
-      }
-    }
+    if (e.cols) { arr.push(e.a); for (const c of e.cols) arr.push(c); }
+    else arr.push(e.a, e.b, e.c);
   }
-  flush();
-  return out;
+  return arr;
+}
+
+function bodyFor(entries) {
+  return JSON.stringify({ seg: { id: 0, i: flatten(entries) } });
 }
 
 // ----------------------------------------------------------------------
@@ -183,34 +148,35 @@ class Link {
     // the ESP8266 one; 3 kB leaves room for both and for whatever a
     // future build decides, at the cost of an extra message on the
     // handful of frames that are bigger than that.
-    this.maxBody = opts.maxBody || 3000;
+    this.wsLimit = opts.wsLimit || WS_LIMIT;
     this.ws = null;
-    this.prev = null;                          // what the controller shows
     this.inflight = 0;
+    this.path = '-';
     // A WebSocket gives no backpressure worth the name: bufferedAmount
     // only rises once the far end's TCP window closes, which is long
-    // after an ESP32 has stopped keeping up.  WLED answers a state
-    // message by broadcasting the new state back, so those arrivals
-    // are an acknowledgement in everything but name, and counting
-    // them paces the sender properly.  If none ever arrive -- a build
-    // that does not echo -- the counter is abandoned and the timer
-    // alone does the pacing.
+    // after an ESP32 has stopped keeping up.  Where a build answers
+    // every message, those arrivals are an acknowledgement in
+    // everything but name and counting them paces the sender
+    // properly.
+    //
+    // Whether this build is one of those is decided by counting, not
+    // by seeing one arrive.  WLED answers a plain state post with the
+    // whole new state, which is where the idea came from, and answers
+    // an `i` write with nothing: measured on the helmet's own
+    // controller, 665 pixel messages drew 4 kB back, about six bytes
+    // each.  Treating that trickle as a credit window left two
+    // messages permanently outstanding and pinned the player at 4 fps
+    // against a controller that swallows 165 messages a second.  So
+    // the ratio has to hold up before the window is believed.
     this.pending = 0;
     this.acks = 0;
-    this.acked = null;                         // null = not yet known
     this.sent = 0; this.bytes = 0; this.failed = 0;
     this.rtt = 0;
     this.frozen = false;
-    // Only what changed is sent, which means the player is carrying a
-    // belief about what the controller is showing.  Nothing confirms
-    // that belief: WLED answers an HTTP post before it has parsed the
-    // body, and a WebSocket says nothing at all, so a message the
-    // firmware dropped -- too big for its buffer, arrived fragmented,
-    // lost in the air -- leaves a stale LED lit with no way to notice.
-    // Sending the whole frame every couple of seconds costs one large
-    // frame in fifty and makes every such divergence temporary.
-    this.resyncMs = opts.resyncMs === undefined ? 2000 : opts.resyncMs;
-    this._lastFull = 0;
+    // No resync timer any more, and nothing to resync.  Every frame
+    // carries the whole helmet, so a message the firmware drops costs
+    // one frame and the next one is correct again -- there is no
+    // belief about the controller's state left to go stale.
     this.deadmanMins = opts.deadmanMins === undefined ? 1 : opts.deadmanMins;
     this._lastDeadman = 0;
     this.onstatus = opts.onstatus || function () {};
@@ -258,7 +224,6 @@ class Link {
         this._opened = performance.now();
         ws.onmessage = () => {
           this.acks++;
-          this.acked = true;
           if (this.pending > 0) this.pending--;
         };
         ws.onclose = () => { if (this.ws === ws) this.ws = null; };
@@ -286,13 +251,30 @@ class Link {
 
   // Take the segment: solid effect, no transition, frozen so nothing
   // the controller runs on its own overwrites what we send.
+  // Is this build answering often enough for its answers to be a
+  // credit window?  Below half a reply per message it is not, and
+  // `pending` is cleared so a trickle of late replies cannot leave
+  // the sender permanently blocked.
+  paceByAcks() {
+    if (this.sent < 12) return false;
+    if (this.acks > this.sent * 0.5) return true;
+    this.pending = 0;
+    return false;
+  }
+
   async begin(bri) {
     await this.postJSON({
-      on: true, bri: bri === undefined ? 255 : bri,
+      // live:false releases a realtime lock.  Posting live:true to
+      // WLED locks realtime for 65 s, and the laptop's streamer does
+      // exactly that -- so a helmet last driven over DDP ignores
+      // every pixel this page sends for a minute after the laptop
+      // goes away, which is precisely the moment somebody switches
+      // to the phone and concludes offline mode is broken.
+      on: true, live: false,
+      bri: bri === undefined ? 255 : bri,
       transition: 0, tt: 0,
       seg: [{ id: 0, fx: 0, sx: 0, ix: 0, frz: true }],
     });
-    this.prev = null;
     await this.armDeadman(true);
     // Freeze is what stops the running effect painting over the
     // frames, and it arrived in WLED 0.13.  An older build takes the
@@ -333,7 +315,6 @@ class Link {
   // night at a show".
   async release() {
     this.frozen = false;
-    this.prev = null;
     const body = JSON.stringify({ on: false, nl: { on: false },
                                   seg: [{ id: 0, frz: false }] });
     // sendBeacon survives the page going away, which fetch does not.
@@ -357,73 +338,51 @@ class Link {
       tmp[b + 1] = frame[b + perm[b + 1]];
       tmp[b + 2] = frame[b + perm[b + 2]];
     }
+    const body = bodyFor(encode(tmp, n));
     const now = performance.now();
-    if (this.resyncMs && now - this._lastFull > this.resyncMs) {
-      this._lastFull = now;
-      this.prev = null;
-    }
-    const items = encode(tmp, this.prev, n);
-    if (!items.length) return 0;
-    const parts = pack(items, this.maxBody);
-    const t0 = now;
 
-    if (this.ws && this.ws.readyState === 1) {
-      if (this.ws.bufferedAmount > this.maxBody * 2) { this.failed++; return -1; }
+    if (this.ws && this.ws.readyState === 1 && body.length <= this.wsLimit) {
+      if (this.ws.bufferedAmount > this.wsLimit * 2) { this.failed++; return -1; }
       // Two messages outstanding is one in the controller and one on
       // its way; a third would only add latency nobody asked for.
-      if (this.acked && this.pending >= 2) { this.failed++; return -1; }
-      let chars = 0;
-      for (const p of parts) {
-        const s = JSON.stringify({ seg: { id: 0, i: p } });
-        this.ws.send(s);
-        chars += s.length;
-        this.pending++;
-      }
-      // Give a quiet build a second to prove it never echoes, then
-      // stop waiting for acknowledgements that are not coming.
-      if (this.acked === null && now - this._opened > 1000) this.acked = false;
-      this._keep(tmp);
-      this.sent++; this.bytes += chars;
-      this.rtt = this.rtt * 0.8 + (performance.now() - t0) * 0.2;
+      if (this.paceByAcks() && this.pending >= 2) { this.failed++; return -1; }
+      this.ws.send(body);
+      this.pending++;
+      this.path = 'ws';
+      this.sent++; this.bytes += body.length;
+      this.rtt = this.rtt * 0.8 + (performance.now() - now) * 0.2;
       this.armDeadman(false);
-      return chars;
+      return body.length;
     }
 
+    // Too big for a WebSocket message, or there is no socket.  One
+    // POST, the whole frame, one at a time: a second request in
+    // flight could land out of order, and since every frame is whole
+    // that would show an older one.
     if (this.inflight) { this.failed++; return -1; }
     this.inflight = 1;
-    let chars = 0;
-    const bodies = parts.map(p => JSON.stringify({ seg: { id: 0, i: p } }));
-    for (const b of bodies) chars += b.length;
+    this.path = 'http';
     (async () => {
       try {
-        for (const b of bodies) {
-          await fetch(this.url('/json/state'), {
-            method: 'POST', cache: 'no-store',
-            headers: { 'Content-Type': 'application/json' }, body: b,
-          });
-        }
-        this._keep(tmp);
-        this.sent++; this.bytes += chars;
-        this.rtt = this.rtt * 0.8 + (performance.now() - t0) * 0.2;
+        await fetch(this.url('/json/state'), {
+          method: 'POST', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' }, body: body,
+        });
+        this.sent++; this.bytes += body.length;
+        this.rtt = this.rtt * 0.8 + (performance.now() - now) * 0.2;
         this.armDeadman(false);
       } catch (e) {
         this.failed++;
-        this.prev = null;             // resync: assume it shows nothing
         this.onstatus({ error: String(e.message || e) });
       } finally {
         this.inflight = 0;
       }
     })();
-    return chars;
-  }
-
-  _keep(tmp) {
-    if (!this.prev || this.prev.length !== tmp.length) this.prev = new Uint8Array(tmp.length);
-    this.prev.set(tmp);
+    return body.length;
   }
 }
 
-const api = { Link, encode, pack, makePerm, ORDERS, ENVELOPE };
+const api = { Link, encode, flatten, bodyFor, makePerm, ORDERS, WS_LIMIT };
 root.MAU5 = Object.assign(root.MAU5 || {}, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 

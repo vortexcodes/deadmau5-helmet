@@ -62,6 +62,20 @@ function beat(music, t, dflt) {
   return music.levelAt(t);
 }
 
+// Where the harmony sits, as a hue in 0..1 that wraps, and how bright
+// the spectrum is.  Both are optional on a music source: a pre-analysed
+// track has them, a bare level meter does not, and a preset rendered
+// with none at all takes the caller's default.
+function pitch(music, t, dflt) {
+  if (!music || !music.pitchAt) return dflt === undefined ? 0 : dflt;
+  return music.pitchAt(t);
+}
+
+function centroid(music, t, dflt) {
+  if (!music || !music.centroidAt) return dflt === undefined ? 0.5 : dflt;
+  return music.centroidAt(t);
+}
+
 // ----------------------------------------------------------------------
 // the helmet
 // ----------------------------------------------------------------------
@@ -75,6 +89,7 @@ function makeHelmet(data) {
     px: data.px, py: data.py, depth: data.depth,
     nx: data.nx, ny: data.ny, nfa: data.nfa, nel: data.nel,
     u: data.u, fa: data.fa, group: data.group, xyz: data.xyz,
+    ea: data.ea, er: data.er,
   };
   const mk = () => new Uint8Array(n);
   h.shell = mk(); h.ear1 = mk(); h.ear2 = mk();
@@ -752,6 +767,81 @@ function make(name, params, h, fonts) {
   inst.render = spec.render;
   return inst;
 }
+
+
+// ----------------------------------------------------------------------
+// Listening presets.  Ports of Spectrum, PitchWheel and Bloom; see the
+// note above them in mau5engine.py for what each one is showing.
+// ----------------------------------------------------------------------
+
+def('spectrum', { bands: 16, spread: 0.30, cap: 0.055, fall: 0.75, tilt: 0.45, sat: 1.0 },
+  function (h, t, music, out) {
+    const nb = Math.max(1, Math.trunc(this.p.bands));
+    const amp = new Float64Array(nb);
+    if (music && music.bands) {
+      const a = music.bandsAt(t, nb);
+      for (let b = 0; b < nb; b++) amp[b] = clamp(a[b], 0, 1);
+    } else {
+      for (let b = 0; b < nb; b++) amp[b] = 0.5 + 0.45 * Math.sin(t * 2.1 + b * 0.7);
+    }
+    let hold = this.s.hold;
+    if (!hold || hold.length !== nb || this.s.last === null || t < this.s.last) {
+      hold = this.s.hold = Float64Array.from(amp);
+    } else {
+      const d = this.p.fall * (t - this.s.last);
+      for (let b = 0; b < nb; b++) hold[b] = Math.max(amp[b], hold[b] - d);
+    }
+    this.s.last = t;
+    const hue0 = pitch(music, t, fract(t * 0.11));
+    const tilt = this.p.tilt, sat = this.p.sat, cap = this.p.cap;
+    for (let i = 0; i < h.n; i++) {
+      const nfa = h.nfa[i], nel = h.nel[i];
+      let b = Math.trunc(nfa * nb);
+      if (b < 0) b = 0; else if (b > nb - 1) b = nb - 1;
+      const lvl = amp[b];
+      const v = nel <= lvl ? tilt + (1 - tilt) * nel / Math.max(lvl, 1e-3) : 0;
+      if (Math.abs(nel - hold[b]) <= cap) {
+        out[i * 3] = 255; out[i * 3 + 1] = 255; out[i * 3 + 2] = 255;
+      } else {
+        const c = hsv(hue0 + nfa * this.p.spread, sat, clamp(v, 0, 1));
+        out[i * 3] = c[0]; out[i * 3 + 1] = c[1]; out[i * 3 + 2] = c[2];
+      }
+    }
+  }, function () { return { hold: null, last: null }; });
+
+def('pitchwheel', { width: 0.085, shellmix: 0.22, sat: 1.0, floor: 0.10 },
+  function (h, t, music, out) {
+    const pc = pitch(music, t, fract(t * 0.11));
+    const lvl = this.p.floor + (1 - this.p.floor)
+      * beat(music, t, 0.55 + 0.45 * Math.sin(t * 1.7));
+    for (let i = 0; i < h.n; i++) {
+      const d = Math.abs(pmod(h.ea[i] - pc + 0.5, 1) - 0.5);
+      const k = clamp(1 - d / this.p.width, 0, 1);
+      const v = clamp((h.shell[i] ? this.p.shellmix : k * k) * lvl, 0, 1);
+      const c = hsv(pc, this.p.sat, v);
+      out[i * 3] = c[0]; out[i * 3 + 1] = c[1]; out[i * 3 + 2] = c[2];
+    }
+  });
+
+def('bloom', { rings: 2, width: 0.20, span: 0.35, sat: 1.0, floor: 0.05 },
+  function (h, t, music, out) {
+    const ph = music ? music.beatPhase(t) : fract(t * 1.4);
+    const lvl = beat(music, t, 0.5 + 0.5 * Math.sin(t * 2.0));
+    const hue = pitch(music, t, fract(t * 0.11))
+      + this.p.span * centroid(music, t, 0.5);
+    const nr = Math.max(1, Math.trunc(this.p.rings));
+    const base = this.p.floor + (1 - this.p.floor) * lvl;
+    for (let i = 0; i < h.n; i++) {
+      let k = 0;
+      for (let j = 0; j < nr; j++) {
+        const r = pmod(ph + j / nr, 1);
+        const q = clamp(1 - Math.abs(h.er[i] - r) / this.p.width, 0, 1);
+        if (q * q > k) k = q * q;
+      }
+      const c = hsv(hue, this.p.sat, clamp(base * k, 0, 1));
+      out[i * 3] = c[0]; out[i * 3 + 1] = c[1]; out[i * 3 + 2] = c[2];
+    }
+  });
 
 const api = { hsv, hashSin, paint, makeHelmet, make, accepts, REGISTRY,
               textBitmap, glyphBitmap, digitBitmap, spriteBitmap, fract, pmod };
