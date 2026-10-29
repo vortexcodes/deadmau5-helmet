@@ -113,6 +113,26 @@ def t_map():
     ok(max(hops) < 400, "a %.0f mm jump is longer than the helmet" % max(hops))
 
 
+def t_map_matches_walk():
+    """The cameras and the hand walk found the same strips.
+
+    Two instruments that share nothing -- an eye on the first night, two
+    calibrated views a day later -- put 67 of 68 shell strip boundaries
+    in the same place; the odd one is one LED at the chin.  A change to
+    the map that loses that agreement has broken something.
+    """
+    import mau5map
+    walk = json.load(open(os.path.join(HERE, "data", "cal", "walk_session.json")))
+    rows = mau5map.load()
+    shell = [r for r in rows if r["region"] == "shell"]
+    starts = {0} | {i for i in range(1, len(shell))
+                    if shell[i]["group"] != shell[i - 1]["group"]}
+    walked = {0} | {s["start"] for s in walk["sections"] if s["start"] < len(shell)}
+    eq(len(starts), 68, "shell strips")
+    ok(len(starts & walked) >= 66, "only %d of %d strip boundaries match the walk"
+       % (len(starts & walked), len(starts)))
+
+
 def t_frame():
     """The CAD frame is not the obvious one: +z is up and the face
     looks along -y.  Assuming +y was up once put every glyph on its
@@ -1331,7 +1351,7 @@ def t_offline_limiter_matches_the_budget():
 
 
 GROUPS = {
-    "map": [t_map, t_frame, t_masks, t_strip_orientation, t_ears_match,
+    "map": [t_map, t_map_matches_walk, t_frame, t_masks, t_strip_orientation, t_ears_match,
             t_map_adjustments],
     "presets": [t_presets, t_preset_params, t_text_bitmap, t_accepts],
     "power": [t_power_budget, t_power_board_limit, t_guard_in_send,

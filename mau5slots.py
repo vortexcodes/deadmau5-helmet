@@ -34,11 +34,12 @@ It converges to 398 shell LEDs in 398 distinct slots with exactly one
 empty (the top of strip B04), and two places where the wiring visits
 strips in a different order from the CAD's list: the channels broken by
 the ear mounts, where the data picks mirror-image orders on the two
-sides.  Each camera on its own gives the identical assignment.  So does
-the walk from the first calibration session, which recorded the same
-strip boundaries by eye, including the 11-LED strip, the two 1-LED
-strips at the mounts and the shell ending at 397 -- facts the map had
-been overriding with the CAD's 399.
+sides.  Each camera on its own, run through the whole thing from the
+CAD with no help from the other, gives the identical assignment.  So
+does the walk from the first calibration session: 67 of its 68 strip
+boundaries are exactly where the cameras put them, including the
+11-LED strip, the two 1-LED strips at the mounts and the shell ending
+at 397 -- facts the map had been overriding with the CAD's 399.
 
 The ears.  The cameras are not good enough to say where an ear is in
 depth.  The two views are only calibrated on the shell, the ear glows
@@ -705,11 +706,18 @@ def main(argv=None):
                        for s in empty)))
     changed = [nm[6:9] for nm, base in zip(shell.order, order) if nm != base]
     print("  wired out of CAD order: %s" % " ".join(changed))
+    # The check that makes it a measurement: each camera on its own,
+    # through the whole pipeline -- its own start from the CAD, its own
+    # camera fit, its own choice of order at the mounts.  Two views that
+    # never saw each other's answer should land on the same slots.
+    joint = [shell.slot[s] if s != shell.off else -1 for s in path]
     for name in meas:
-        alone, _ = shell.align({name: cams[name]}, {name: meas[name]}, 420)
-        agree = sum(1 for i in range(n_shell) if alone[i] == path[i])
-        print("  the %s camera alone picks the same slot for %d of %d"
-              % (name, agree, n_shell))
+        sh1, p1, _ = solve_shell(xyz, strips, order, {name: meas[name]}, verbose=False)
+        alone = [sh1.slot[s] if s != sh1.off else -1 for s in p1]
+        agree = sum(1 for a, b in zip(joint[:n_shell], alone[:n_shell]) if a == b)
+        same_order = sh1.order == shell.order
+        print("  the %s camera alone, start to finish: same slot for %d of %d%s"
+              % (name, agree, n_shell, "" if same_order else " (mount order differs)"))
 
     V, F = load_mesh()
     parts = mesh_parts(V, F)
