@@ -27,6 +27,14 @@ substitute for the camera when the question is *where* an LED is.
 
     python3 mau5peek.py --host 192.168.10.172
     python3 mau5peek.py --watch 10
+
+**Check what else is talking to the controller before believing a
+reading.**  A browser tab left open on the player streams a frame
+every few tens of milliseconds, and it will overwrite anything a
+script writes between the write and the look.  An hour went into
+two confident, wrong conclusions about the wire protocol that both
+evaporated when the tab was closed.  `/json/info` reports `ws`, the
+number of WebSocket clients; if it is not what you expect, stop.
 """
 
 from __future__ import annotations
@@ -114,20 +122,8 @@ class Peek:
         self.buf = self.buf[off + ln:]
         return op, payload
 
-    def drain(self):
-        """Throw away whatever is already on the socket.
-
-        The preview is a queue, not a question.  Asking for a frame
-        and reading the next binary one that arrives returns whatever
-        was already in flight -- which is the state *before* the thing
-        you just changed, and reads as a change that did not happen.
-        Everything pending is discarded first, so the frame that comes
-        back was composed after the request.
-        """
-        self.buf = b""
-        while select.select([self.sock], [], [], 0)[0]:
-            if not self.sock.recv(65536):
-                break
+    def _pending(self):
+        return bool(select.select([self.sock], [], [], 0)[0]) or bool(self.buf)
 
     def send_text(self, s):
         data = s.encode()
@@ -144,38 +140,49 @@ class Peek:
         self.sock.sendall(b"\x81" + head + mask + body)
 
     # -- the preview ----------------------------------------------------
-    def live(self, total=None, deadline=4.0):
-        """One preview frame: (step, [(r, g, b), ...]) for LEDs 0, step, 2*step...
+    def live(self, total=None, settle=0.5, deadline=5.0):
+        """The newest preview frame: (step, [(r, g, b), ...]).
 
-        `lv` has to be asked for again and again: the firmware serves
-        the preview for a while and then stops, so a tab left open
-        does not cost the strip a copy of itself forty times a second.
+        Two things make this harder than it looks, and both of them
+        quietly corrupted a morning's measurements before they were
+        understood.
 
-        Every write to /json/state also broadcasts the new state to
-        every WebSocket client, so the socket is usually carrying a
-        backlog of text frames when this is called.  Reading until a
-        binary one turns up -- rather than giving each request one
-        frame to be the right one -- is the difference between this
-        working and this timing out whenever anything else is talking
-        to the controller.
+        The preview is a queue, not a question.  Ask for a frame and
+        read the next binary message and you get whatever was already
+        in flight, which is the state *before* the thing you just
+        changed -- a change that did not happen, as far as the caller
+        can tell.  So frames are collected for a settling window and
+        the last one wins.
+
+        And a WebSocket stream cannot be flushed by throwing bytes
+        away.  An earlier version of this did exactly that, and when
+        it landed in the middle of a frame every later parse was
+        misaligned: the reader returned confident nonsense, which is
+        worse than failing.  Whole frames are parsed, always, and
+        discarded afterwards if they are stale.
         """
-        self.drain()
-        end, last = time.time() + deadline, 0.0
-        while time.time() < end:
-            if time.time() - last > 0.8:
+        stop = time.time() + settle
+        hard = time.time() + deadline
+        last, asked = None, 0.0
+        while time.time() < hard:
+            if time.time() - asked > 0.25:
                 self.send_text('{"lv":true}')
-                last = time.time()
+                asked = time.time()
             op, p = self._frame()
             if op == 0x08:
                 raise PeekError("controller closed the WebSocket")
             if op != 0x02 or len(p) < 5 or p[0:1] != b"L":
                 continue
-            body = p[2:]
-            rgb = [tuple(body[i:i + 3]) for i in range(0, len(body) - 2, 3)]
-            step = max(1, int(round((total or len(rgb)) / float(len(rgb)))))
-            return step, rgb
-        raise PeekError("no live frame in %.0fs -- is this build compiled "
-                        "with the web UI?" % deadline)
+            last = p
+            if time.time() >= stop:
+                break
+        if last is None:
+            raise PeekError("no live frame in %.0fs -- is this build compiled "
+                            "with the web UI?" % deadline)
+        body = last[2:]
+        rgb = [tuple(body[i:i + 3]) for i in range(0, len(body) - 2, 3)]
+        step = max(1, int(round((total or len(rgb)) / float(len(rgb)))))
+        return step, rgb
 
 
 def summarise(rgb):

@@ -1139,6 +1139,52 @@ def t_offline_shows_match_python():
          % (len(names), len(times), worst, where or "exact"))
 
 
+def t_offline_drive_matches_the_analysis():
+    """The carried-over analysis is the laptop's, to a byte of quantising.
+
+    mau5drive writes the envelopes at 20 Hz in eight bits, so this
+    cannot be exact and should not be: what it has to be is close
+    enough that a show driven by the file looks like the same show
+    driven by the analysis.  A byte is 1/255 and the curves are
+    multiplied into the frame, so the bar is a few counts.
+
+    The beat grid is not quantised at all -- it is the same float
+    times -- so beat_phase has to agree closely, and a drifting grid
+    would show up here before it showed up as a show that lands late.
+    """
+    import mau5drive
+    import mau5show
+    made = mau5drive.build(verbose=False)
+    if not made:
+        return note("offline: no analyses to carry over")
+    worst_lvl = worst_ph = 0.0
+    checked = 0
+    for name, info in sorted(made.items()):
+        show = json.load(open(os.path.join(HERE, "shows", name + ".json")))
+        npz = os.path.join(HERE, "shows", show["analysis"])
+        music = mau5show.Music(show.get("track", ""), fps=show.get("fps", 40),
+                               cache=npz)
+        path = os.path.join(HERE, "data", "offline", info["file"])
+        times = [t for t in (5.0, 30.0, 61.5, 120.0, 180.0)
+                 if t < music.duration - 1]
+        res = _node("drivetest.js", {"file": path, "times": times})
+        if res is None:
+            return note("offline: node not installed, the drive went unchecked")
+        eq(res["beats"], len(music.beats), "%s lost beats in packing" % name)
+        eq(res["bars"], len(music.bars), "%s lost bars in packing" % name)
+        for row in res["rows"]:
+            t = row["t"]
+            worst_lvl = max(worst_lvl, abs(row["level"] - music.level_at(t)))
+            worst_ph = max(worst_ph, abs(row["phase"] - music.beat_phase(t)))
+            eq(row["down"], bool(music.is_downbeat(t)),
+               "%s disagrees about a downbeat at %.1fs" % (name, t))
+            checked += 1
+    ok(worst_lvl < 0.03, "the carried level is %.3f off the analysis" % worst_lvl)
+    ok(worst_ph < 0.02, "the carried beat phase is %.3f off" % worst_ph)
+    note("offline: %d drive samples over %d tracks, level within %.3f, "
+         "beat phase within %.3f" % (checked, len(made), worst_lvl, worst_ph))
+
+
 def t_offline_page_is_self_contained():
     """A page that fetches anything is a page that is blank at a show."""
     import mau5offline
@@ -1147,8 +1193,19 @@ def t_offline_page_is_self_contained():
     for part in ("MAU5_DATA", "makeHelmet", "PowerGuard", "class Link"):
         ok(part in text, "the built page is missing %s" % part)
     ok("<!--@" not in text, "a template placeholder survived the build")
-    for bad in ("http://", "https://", "//cdn", "integrity="):
-        ok(bad not in text, "the built page references %s" % bad)
+    # Nothing the page needs to *render* may come from off the
+    # controller.  Calling an API when the user asks is a different
+    # thing, and the page has to work with no internet at all, which
+    # is what the host list below is checked against.
+    import re as _re
+    loads = _re.findall(r"""(?:src|href)\s*=\s*["']\s*(?:https?:)?//[^"']+"""
+                        r"""|@import[^;]*//[^;]*"""
+                        r"""|url\(\s*["']?(?:https?:)?//[^)]*""", text)
+    eq(loads, [], "the built page loads something from off the controller")
+    ok("integrity=" not in text, "the built page has a subresource hash")
+    hosts = sorted(set(_re.findall(r"https://([a-z0-9.-]+)/", text)))
+    eq(hosts, ["accounts.spotify.com", "api.spotify.com"],
+       "the page reaches hosts it did not before: %s" % hosts)
     # Room on the controller is the constraint: WLED's filesystem is
     # around 700 kB on the smaller partition layouts.
     ok(len(gz) < 200 * 1024, "the page is %.0f kB gzipped, too big to be sure "
@@ -1195,6 +1252,7 @@ GROUPS = {
                 t_offline_encoder_roundtrip,
                 t_offline_oversize_is_caught,
                 t_offline_shows_match_python,
+                t_offline_drive_matches_the_analysis,
                 t_offline_page_is_self_contained,
                 t_offline_limiter_matches_the_budget],
     "camera": [t_eye_after],

@@ -27,3 +27,6 @@ data/cal/tls/
 # in, so a committed copy would silently go stale the first time any
 # of those changed.
 data/offline/
+
+# a refresh token is a credential and this repository is public
+data/cal/spotify.json

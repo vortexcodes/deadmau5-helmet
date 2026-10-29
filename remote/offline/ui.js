@@ -39,7 +39,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   preset: null, inst: null, params: {}, running: false,
   t0: 0, bri: 255, fps: 0, cycle: 0, lastCycle: 0, interval: 40,
-  music: null, show: null, showT0: null,
+  music: null, show: null, showT0: null, drive: null, follow: false,
 };
 
 // ----------------------------------------------------------------------
@@ -128,14 +128,18 @@ function tick() {
     choose(names[(at + 1) % names.length], true);
   }
 
-  if (state.show && state.showT0 !== null) {
-    const st = (now - state.showT0) / 1000;
-    if (st >= state.show.duration) {
+  if (state.show && (state.showT0 !== null || an.el)) {
+    // The track, when there is one, IS the clock.  Reading the audio
+    // element's own currentTime cannot drift from the sound the room
+    // is hearing, which a wall clock started by hand always does --
+    // and it makes pause, seek and volume somebody else's problem.
+    const st = an.el ? an.el.currentTime : (now - state.showT0) / 1000;
+    if (st >= state.show.duration && !an.el) {
       stopShow();
       frame.fill(0);
       state.inst.render(helmet, t, state.music, frame);
     } else {
-      const cue = state.show.frame(st, state.music, frame);
+      const cue = state.show.frame(st, state.drive || state.music, frame);
       showClock(st, cue);
     }
   } else {
@@ -418,17 +422,9 @@ setInterval(audioReadout, 150);
 $('afile').onclick = () => $('apick').click();
 $('apick').onchange = async (e) => {
   const f = e.target.files && e.target.files[0];
+  e.target.value = '';
   if (!f) return;
-  try {
-    const el = await an.useFile(f);
-    audioSource('file');
-    audioWhy('playing ' + f.name + ' out of this phone and reading it on the '
-             + 'way past, so the helmet is in time with what the room hears.');
-    el.onended = () => { an.stop(); audioSource('none'); };
-  } catch (err) {
-    audioSource('none');
-    audioWhy('could not play that file: ' + err.message);
-  }
+  await playTrack(f);
 };
 
 // There is no way for a web page to tap another app's audio on a
@@ -512,11 +508,32 @@ function stopShow() {
   }
 }
 
-function pickShow(name) {
+async function pickShow(name) {
   state.show = name ? new M.ShowPlayer(D.shows[name], helmet, D) : null;
+  state.drive = null;
   stopShow();
   if (!name) {
     $('showat').textContent = 'pick a show, play the track, tap start on the first beat';
+    save();
+    return;
+  }
+  // The track's own analysis if it was uploaded: a real beat grid
+  // beats an estimate, and it needs no microphone, which is the one
+  // thing this page cannot have.
+  const file = (D.drive || {})[name];
+  if (file) {
+    $('showat').textContent = 'loading the track analysis…';
+    try {
+      state.drive = await M.loadDrive('', file);
+      $('showat').textContent = 'ready · ' + Math.round(state.drive.duration)
+        + 's, ' + state.drive.beats.length + ' beats, '
+        + state.drive.bpm.toFixed(0) + ' bpm — tap start on the first beat';
+    } catch (e) {
+      $('showat').textContent = 'no analysis on the controller for this one; '
+        + 'it will run off whatever the page can hear';
+    }
+  } else {
+    $('showat').textContent = 'ready — play the track, tap start on the first beat';
   }
   save();
 }
@@ -542,6 +559,157 @@ function pickShow(name) {
     }
   };
 }
+
+
+
+// -- the track itself ---------------------------------------------------
+// A show with no sound is half a show, and the page is the only thing
+// at a gig that knows when the track started.  So it plays it: the
+// audio element is the clock, the volume control and the scrub bar,
+// and the carried analysis supplies the drive.
+async function playTrack(file) {
+  try {
+    const el = await an.useFile(file);
+    audioSource('file');
+    an.setVolume(+$('vol').value / 100);
+    el.onended = () => { an.stop(); audioSource('none'); stopShow(); showPP(); };
+    // name the show after the file if one matches, so picking the mp3
+    // is the whole interaction
+    const hit = M.bestShow(file.name, [], D.shows);
+    if (hit && $('showpick').value !== hit.name) {
+      $('showpick').value = hit.name;
+      await pickShow(hit.name);
+    }
+    if (state.show) {
+      state.showT0 = performance.now();
+      $('showgo').textContent = 'stop';
+      $('showgo').classList.add('on');
+    }
+    if (!state.running) start();
+    showPP();
+    audioWhy('playing ' + file.name + ' out of this phone. The show follows '
+             + 'the track, so pause and seek work.');
+  } catch (err) {
+    audioWhy('could not play that file: ' + (err.message || err));
+  }
+}
+
+function showPP() {
+  const on = !!an.el;
+  $('showpp').disabled = !on;
+  $('showpp').textContent = (on && an.el.paused) ? 'play' : 'pause';
+}
+
+$('showtrack').onclick = () => { $('apick').dataset.forShow = '1'; $('apick').click(); };
+$('showpp').onclick = () => {
+  if (!an.el) return;
+  if (an.el.paused) an.el.play(); else an.el.pause();
+  showPP();
+};
+$('vol').oninput = (e) => {
+  an.setVolume(+e.target.value / 100);
+  $('volval').textContent = e.target.value;
+};
+setInterval(showPP, 700);
+
+// ----------------------------------------------------------------------
+// following Spotify
+// ----------------------------------------------------------------------
+// One number is wanted here and only one: progress_ms.  With it the
+// show stops being something you start on a downbeat and becomes
+// something that follows the track through a pause, a seek and a
+// skip.  Everything else -- which effect, how loud, where the beats
+// are -- is already on the controller.
+const sp = new M.Spotify();
+let spTimer = null, spSaidWhy = '';
+
+function spSay(msg) { $('spat').textContent = msg; }
+
+function spButton() {
+  $('spbtn').textContent = state.follow ? 'following Spotify'
+    : (sp.connected ? 'follow Spotify' : 'connect Spotify');
+  $('spbtn').classList.toggle('on', state.follow);
+}
+
+// A link of the form .../mau5.htm#sp=<id>.<token>, which is what
+// `mau5spotify.py handoff` prints.  The fragment is never sent to a
+// server, so the token reaches this page's localStorage and nothing
+// else -- not the controller, not the repository.  It is cleared
+// from the address bar straight away.
+(function takeHandoff() {
+  const m = /[#&]sp=([^&]+)/.exec(location.hash || '');
+  if (!m) return;
+  try {
+    sp.connect(decodeURIComponent(m[1]));
+    history.replaceState(null, '', location.pathname);
+    spSay('Spotify token stored on this phone.');
+  } catch (e) {
+    spSay(String(e.message || e));
+  }
+})();
+
+async function spTick() {
+  if (!state.follow) return;
+  try {
+    await sp.poll();
+  } catch (e) {
+    const why = String(e.message || e);
+    if (why !== spSaidWhy) { spSaidWhy = why; spSay('Spotify: ' + why); }
+    return;
+  }
+  spSaidWhy = '';
+  const tr = sp.track;
+  if (!tr) { spSay('Spotify: nothing playing'); return; }
+
+  const hit = M.bestShow(tr.name, tr.artists, D.shows);
+  if (!hit) {
+    spSay('playing "' + tr.name + '" — no show for that one');
+    return;
+  }
+  if (!state.show || $('showpick').value !== hit.name) {
+    $('showpick').value = hit.name;
+    await pickShow(hit.name);
+  }
+  const pos = sp.position();
+  if (pos === null) return;
+  // Snap when it is a long way out -- first lock, a seek, a skip --
+  // and ease otherwise, because a poll a second against a frame
+  // clock will always disagree by a few tens of milliseconds and
+  // snapping on that makes the show stutter once a second.
+  const want = performance.now() - pos * 1000;
+  if (state.showT0 === null || Math.abs(state.showT0 - want) > 250) {
+    state.showT0 = want;
+  } else {
+    state.showT0 += (want - state.showT0) * 0.15;
+  }
+  if (!state.running) start();
+  $('showgo').textContent = 'stop';
+  $('showgo').classList.add('on');
+  spSay((sp.playing ? '▶ ' : '❚❚ ') + tr.name + ' · '
+        + hit.name.replace(/^deadmau5 - /, '') + ' · ' + mmss(pos));
+}
+
+$('spbtn').onclick = async () => {
+  if (!sp.connected) {
+    const blob = prompt('Paste the line `python3 mau5spotify.py handoff` '
+                        + 'printed (client id, a dot, then the refresh token):');
+    if (!blob) return;
+    try { sp.connect(blob); } catch (e) { spSay(String(e.message || e)); return; }
+  }
+  state.follow = !state.follow;
+  spButton();
+  if (state.follow) {
+    spSay('asking Spotify…');
+    if (spTimer) clearInterval(spTimer);
+    spTimer = setInterval(spTick, 1000);
+    spTick();
+  } else {
+    if (spTimer) clearInterval(spTimer);
+    spTimer = null;
+    spSay('');
+  }
+};
+spButton();
 
 // ----------------------------------------------------------------------
 // wiring up

@@ -106,6 +106,22 @@ function hexAt(buf, i) {
 // frame depending on how much of the helmet is dark, and it moves
 // alignbar, eyes, pinwheel and text onto the websocket, where they
 // run at 60 fps instead of ten.
+// Black need not be sent: the write blanks the segment, so an LED
+// nobody mentions is already off.  Worth up to half a frame, and it
+// moves four more presets onto the websocket.
+//
+// Verified rather than assumed: four real show frames, from 24 to
+// 565 entries, read back off the strip at 622 of 622 exact both
+// with this on and with it off.
+//
+// It spent an hour switched off on the strength of measurements
+// that were all wrong in the same way -- a browser tab left open on
+// the player, quietly streaming its own show over every test write.
+// Two independent "findings" came out of that, and both evaporated
+// once the tab was closed.  The lesson is in mau5peek: check what
+// else is talking to the controller before believing it.
+const SKIP_BLACK = true;
+
 function encode(cur, count) {
   const out = [];
   let j = 0, seq = null;
@@ -114,7 +130,8 @@ function encode(cur, count) {
     while (k < count && cur[k * 3] === cur[j * 3]
            && cur[k * 3 + 1] === cur[j * 3 + 1]
            && cur[k * 3 + 2] === cur[j * 3 + 2]) k++;
-    if (cur[j * 3] === 0 && cur[j * 3 + 1] === 0 && cur[j * 3 + 2] === 0) {
+    if (SKIP_BLACK && cur[j * 3] === 0 && cur[j * 3 + 1] === 0
+        && cur[j * 3 + 2] === 0) {
       seq = null;
       j = k;
       continue;

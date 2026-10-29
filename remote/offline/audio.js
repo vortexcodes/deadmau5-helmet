@@ -79,6 +79,7 @@ class Analyser {
     this.timer = null;
     this.kind = 'none';
     this.err = '';
+    this.volume = 1.0;
 
     this.freq = null;               // Uint8Array, dB-ish 0..255
     this.time = null;
@@ -113,6 +114,16 @@ class Analyser {
   }
 
   get running() { return this.timer !== null; }
+
+  // The track is the only sound the helmet has, so it needs a volume
+  // that is not the phone's ringer and not buried in another app.
+  setVolume(v) {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.el) this.el.volume = this.volume;
+  }
+
+  get position() { return this.el ? this.el.currentTime : null; }
+  get paused() { return this.el ? this.el.paused : true; }
 
   _ctx() {
     if (!this.ctx) {
@@ -210,6 +221,7 @@ class Analyser {
     this.node.connect(ctx.destination);   // the phone still plays it
     this.el = el;
     this.kind = 'file';
+    el.volume = this.volume;
     await el.play();
     this._start();
     return el;

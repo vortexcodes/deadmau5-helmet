@@ -100,6 +100,7 @@ def bundle():
         "strips": json.load(open(os.path.join(CAL, "strips.json")))["strips"],
         "presets": _preset_specs(),
         "shows": _shows(),
+        "drive": _drive_index(),
         "lock": {"presets": {k: list(v) for k, v in E.LOCKABLE.items()},
                  "divisions": list(E.DIVISIONS)},
         "built": time.strftime("%Y-%m-%d"),
@@ -130,6 +131,21 @@ def _preset_specs():
 def _read(name):
     with open(os.path.join(SRC, name)) as f:
         return f.read()
+
+
+def _drive_index():
+    """Which analysis file belongs to which show, if they were built.
+
+    The drives are uploaded beside the page rather than baked into
+    it: all five are a quarter of a megabyte, the page is seventy
+    kilobytes, and only the show somebody picks needs fetching.
+    """
+    path = os.path.join(OUT, "drive.json")
+    try:
+        with open(path) as f:
+            return {k: v["file"] for k, v in json.load(f).items()}
+    except (ValueError, OSError):
+        return {}
 
 
 def _shows():
@@ -195,7 +211,7 @@ def build(verbose=True):
     html = _read("player.html")
     parts = {"DATA": data_js}
     for js in ("engine.js", "guard.js", "wire.js", "audio.js",
-               "show.js", "ui.js"):
+               "drive.js", "spotify.js", "show.js", "ui.js"):
         parts[js.split(".")[0].upper()] = _read(js)
     missing = [k for k in re.findall(r"<!--@(\w+)-->", html) if k not in parts]
     if missing:
@@ -203,11 +219,21 @@ def build(verbose=True):
                          % ", ".join(missing))
     page = re.sub(r"<!--@(\w+)-->", lambda m: parts[m.group(1)], html)
 
-    # A page that reaches out to a CDN is a page that is blank at a
-    # show.  Nothing may load from anywhere but the controller.
-    for url in re.findall(r"""["'(](https?:)?//[^"')\s]+""", page):
-        raise SystemExit("offline page references %s -- it must be self "
-                         "contained" % url)
+    # A page that *loads* something from a CDN is a page that is blank
+    # at a show, so nothing it needs to render may come from anywhere
+    # but the controller.  That is a rule about src, href, @import and
+    # url() -- not about every string containing "https", because the
+    # page does call Spotify's API when somebody asks it to, and that
+    # is an opt-in feature which the page works perfectly without.
+    bad = re.findall(r"""(?:src|href)\s*=\s*["']\s*(?:https?:)?//[^"']+"""
+                     r"""|@import[^;]*//[^;]*"""
+                     r"""|url\(\s*["']?(?:https?:)?//[^)]*""", page)
+    if bad:
+        raise SystemExit("offline page loads %s -- it must be self contained"
+                         % bad[0][:80])
+    reached = sorted(set(re.findall(r"https://([a-z0-9.-]+)/", page)))
+    if verbose and reached:
+        print("  reaches out, only when asked: %s" % ", ".join(reached))
 
     plain = os.path.join(OUT, PAGE)
     with open(plain, "w") as f:
@@ -332,6 +358,9 @@ def deploy(host=None, gzipped=True, verbose=True):
         raise SystemExit("read back %d bytes, expected %d -- the upload did "
                          "not land" % (len(got), len(raw)))
     print("verified: %s returns the %d-byte page" % (url, len(raw)))
+    n = deploy_drives(w)
+    if n:
+        print("  %.0f kB of track analysis alongside it" % (n / 1024.0))
     print("\n  on the helmet's access point that is  http://4.3.2.1/%s" % PAGE)
     return url
 
@@ -462,6 +491,49 @@ def config(host=None, apply=False, ap_ssid=None, ap_psk=None):
 # ----------------------------------------------------------------------
 # check
 # ----------------------------------------------------------------------
+def _listing(w):
+    """What is already on the controller, name -> size."""
+    try:
+        with urllib.request.urlopen(w.base + "/edit?list=/", timeout=15) as r:
+            return {e["name"].lstrip("/"): e.get("size", 0)
+                    for e in json.load(r) if e.get("type") == "file"}
+    except (urllib.error.URLError, ValueError, KeyError):
+        return {}
+
+
+def deploy_drives(w, verbose=True):
+    """Put the per-track analyses beside the page.
+
+    Only the ones that are not already there at the right size.  All
+    five are a quarter of a megabyte, and pushing that through the
+    file manager on every deploy is both slow and the thing that made
+    the controller reboot mid-upload -- it is a 240 MHz board holding
+    a multipart body in RAM.
+    """
+    idx = _drive_index()
+    if not idx:
+        return 0
+    have = _listing(w)
+    sent = skipped = 0
+    for show, fn in sorted(idx.items()):
+        gz = os.path.join(OUT, fn + ".gz")
+        if not os.path.exists(gz):
+            continue
+        with open(gz, "rb") as f:
+            blob = f.read()
+        if have.get(fn + ".gz") == len(blob):
+            skipped += 1
+            continue
+        _upload(w, "/" + fn + ".gz", blob, "application/octet-stream")
+        sent += len(blob)
+        time.sleep(1.0)                 # let the board breathe
+        if verbose:
+            print("  %-8s %6d bytes  %s" % (fn, len(blob), show[:40]))
+    if verbose and skipped:
+        print("  %d track analyses already there, unchanged" % skipped)
+    return sent
+
+
 def check(host=None):
     """Would the helmet work on its own, right now, with no laptop?"""
     plain, raw, gz = build(verbose=False)

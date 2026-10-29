@@ -53,6 +53,16 @@ Nobody has checked whether it actually hears the room. If it does,
 WLED's own sound-reactive effects work with no phone at all -- worth
 ten minutes.
 
+## Reading the strip back: one warning
+
+`mau5peek` is only as good as the quiet around it. A browser tab left
+open on the player streams frames continuously and will overwrite
+anything a script writes between the write and the look. That cost an
+hour and produced two confident, wrong conclusions about the wire
+protocol, both of which evaporated when the tab was closed. Before
+believing a reading, check `ws` in `/json/info` -- it is the number of
+WebSocket clients, and it should be 1 (yours).
+
 ## Shows run offline now
 
 The five cue lists are on the controller (27 kB). The analyses are not
@@ -69,6 +79,22 @@ The ported player matches `mau5show.Player` to **0.0005 counts out of
 What is lost is the clock -- nothing on the phone knows where in the
 track you are, so it is started by hand, which is how a lighting desk
 works anyway. If it drifts, tap stop and start again on a downbeat.
+
+## The track plays, and you can turn it up
+
+A show with no sound was half a show. The page now plays the track
+itself: tap **play the track** in the show panel, pick the mp3 off the
+phone, and the audio element becomes the clock, the volume control and
+the scrub bar at once. Picking a file called "deadmau5 - Strobe.mp3"
+selects the Strobe show by itself.
+
+The clock is read from the audio element rather than from a wall clock
+started by hand, so it cannot drift from what the room hears, and
+pause and seek work for nothing. Verified: pause holds the show at
+0:02 across three seconds, resume advances it, volume takes.
+
+The five tracks have to be *on the phone* -- 61 MB of mp3 will not fit
+on a controller with 900 kB. Copy them across once.
 
 ## Audio from another app
 

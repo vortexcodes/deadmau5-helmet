@@ -70,6 +70,8 @@ footer{position:fixed;left:0;right:0;bottom:0;background:#0b0b10f2;
 #showbox button{min-height:46px;border-radius:10px;border:1px solid var(--line);
   background:#191922;color:var(--fg);font:500 15px/1 inherit}
 #showbox button.on{background:#1b4fd8;border-color:#1b4fd8;color:#fff}
+#showbox button[disabled]{opacity:.4}
+#showbox input[type=range]{flex:1}
 button.reactive::after{content:"\00a0♪";opacity:.75}
 </style>
 </head>
@@ -96,6 +98,19 @@ button.reactive::after{content:"\00a0♪";opacity:.75}
     <button id="showgo" style="flex:1">start</button>
   </div>
   <div id="showat" class="dimline">pick a show, play the track, tap start on the first beat</div>
+  <div class="row" style="margin-top:8px">
+    <button id="showtrack" style="flex:2">play the track</button>
+    <button id="showpp" style="flex:1">pause</button>
+  </div>
+  <div class="row">
+    <span class="dim" style="font-size:12px">volume</span>
+    <input id="vol" type="range" min="0" max="100" step="1" value="100">
+    <b id="volval" style="font-size:12px;min-width:34px;text-align:right">100</b>
+  </div>
+  <div class="row" style="margin-top:2px">
+    <button id="spbtn" style="flex:1">follow Spotify</button>
+  </div>
+  <div id="spat" class="dimline"></div>
 </div>
 
 <div class="panel" id="audio">
@@ -147,6 +162,8 @@ minute if the phone stops talking altogether.
 <script><!--@GUARD--></script>
 <script><!--@WIRE--></script>
 <script><!--@AUDIO--></script>
+<script><!--@DRIVE--></script>
+<script><!--@SPOTIFY--></script>
 <script><!--@SHOW--></script>
 <script><!--@UI--></script>
 </body>
