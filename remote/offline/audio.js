@@ -100,6 +100,15 @@ class Analyser {
     this._bandCache = {};
     this._bandVal = {};
     this._wanted = new Set();
+    // bass / mid / high, the three the shows ask for by name, each
+    // with a punch alongside its energy.  Same split as mau5song.BANDS
+    // so an overlay riding "high" means the same thing here as it did
+    // when the cue list was written.
+    this.b3 = { bass: 0, mid: 0, high: 0 };
+    this.p3 = { bass: 0, mid: 0, high: 0 };
+    this._b3gain = { bass: new AutoGain(-60, -20), mid: new AutoGain(-60, -20),
+                     high: new AutoGain(-60, -20) };
+    this._b3prev = { bass: 0, mid: 0, high: 0 };
     this._pitchVec = new Float64Array(12);
   }
 
@@ -145,6 +154,47 @@ class Analyser {
     this.src = ctx.createMediaStreamSource(this.stream);
     this.src.connect(this.node);    // not to the speakers: that is feedback
     this.kind = 'mic';
+    this._start();
+  }
+
+  static tabPossible() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  }
+
+  // Whatever another app or tab is playing, where the browser will
+  // hand it over.  On a desktop that is a real answer to "follow what
+  // Spotify is doing"; on a phone it is not offered by any browser,
+  // and no amount of asking changes that -- there is no API for one
+  // page to tap another app's audio on Android or iOS.  The honest
+  // substitute on a phone is the microphone hearing the speaker.
+  async useTab() {
+    if (!Analyser.tabPossible()) {
+      throw new Error(window.isSecureContext
+        ? 'this browser will not share another app\'s audio'
+        : 'sharing audio needs a secure page, and this one is plain http');
+    }
+    this.stop();
+    const ctx = this._ctx();
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true, audio: true,
+    });
+    const audio = stream.getAudioTracks();
+    if (!audio.length) {
+      stream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+      throw new Error('that share carried no audio — pick a tab and tick '
+                      + '"share tab audio"');
+    }
+    // The video track is only there because some browsers refuse to
+    // share audio without one.  Stop it; the helmet does not care
+    // what is on screen and a live capture costs real battery.
+    stream.getVideoTracks().forEach(t => {
+      try { t.stop(); stream.removeTrack(t); } catch (e) {}
+    });
+    this.stream = stream;
+    this.src = ctx.createMediaStreamSource(stream);
+    this.src.connect(this.node);
+    this.kind = 'tab';
+    audio[0].addEventListener('ended', () => { this.stop(); });
     this._start();
   }
 
@@ -263,8 +313,35 @@ class Analyser {
       this.pitch = fract(this.pitch + d * 0.18);
     }
 
+    this._three(hz, bins);
     this._beats(flux, ctx.currentTime);
     for (const nb of this._wanted) this._bands(nb);
+  }
+
+  // The named bands.  Energy is the band against its own history --
+  // the top octave carries a twentieth of the bass and would never
+  // register otherwise -- and punch is how fast that energy just
+  // rose, which is what a hat or a kick is and what an overlay
+  // riding a band actually wants.
+  _three(hz, bins) {
+    const EDGES = { bass: [30, 170], mid: [170, 2200], high: [2200, 10000] };
+    for (const name of ['bass', 'mid', 'high']) {
+      const [lo, hi] = EDGES[name];
+      let s = 0, c = 0;
+      for (let i = 1; i < bins; i++) {
+        const f = i * hz;
+        if (f < lo) continue;
+        if (f > hi) break;
+        s += this.freq[i] / 255; c++;
+      }
+      const m = c ? s / c : 0;
+      const e = this._b3gain[name].push(20 * Math.log10(m + 1e-4));
+      this.b3[name] = e;
+      const d = e - this._b3prev[name];
+      this._b3prev[name] = e;
+      this.p3[name] = Math.max(d > 0 ? d * 6 : 0, this.p3[name] * 0.86);
+      if (this.p3[name] > 1) this.p3[name] = 1;
+    }
   }
 
   // Onsets by flux against its own recent distribution, then a tempo
@@ -371,6 +448,11 @@ function LiveMusic(an) {
     pitchAt() { return an.pitch; },
     centroidAt() { return an.centroid; },
     bandsAt(t, n) { return an.bands(n); },
+    bandAt(t, name, punch) {
+      const src = punch ? an.p3 : an.b3;
+      const v = src[name];
+      return v === undefined ? an.level : v;
+    },
     beatPhase() {
       if (!an.ctx) return 0;
       const p = an.period > 0 ? an.period : 0.5;

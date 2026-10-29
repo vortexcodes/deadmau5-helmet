@@ -53,6 +53,59 @@ Nobody has checked whether it actually hears the room. If it does,
 WLED's own sound-reactive effects work with no phone at all -- worth
 ten minutes.
 
+## Shows run offline now
+
+The five cue lists are on the controller (27 kB). The analyses are not
+-- two megabytes against nine hundred kilobytes free -- and turn out
+not to be needed: they existed to say where the beats and bands were,
+and the phone measures that from whatever it can hear.
+
+So: pick a show, start the track on whatever is playing it, tap
+**start** on the first beat. The cue list drives which effect is on
+screen; the room drives the brightness, the pulse and the overlays.
+The ported player matches `mau5show.Player` to **0.0005 counts out of
+255** across all five shows.
+
+What is lost is the clock -- nothing on the phone knows where in the
+track you are, so it is started by hand, which is how a lighting desk
+works anyway. If it drifts, tap stop and start again on a downbeat.
+
+## Audio from another app
+
+There is no way for a web page to tap another app's audio on a phone.
+No browser offers one, on Android or iOS. What works is the
+**microphone hearing the speaker** -- which does follow Spotify, and
+is what the page offers.
+
+The microphone needs a secure origin and the controller cannot be
+one. Two ways round it, both now in the page's own text:
+
+- **Android Chrome:** put `http://192.168.10.172` (and the AP address)
+  into `chrome://flags/#unsafely-treat-insecure-origin-as-secure`,
+  restart Chrome. Then the microphone works on the offline page.
+- **With the laptop there:** `python3 mau5offline.py serve --host
+  192.168.10.172 --tls` serves the same page over https and forwards
+  the pixels. Verified working and reaching the helmet.
+
+On a desktop there is also **what's playing**, which uses
+`getDisplayMedia` to follow a shared tab. Phones do not offer it.
+
+## Frame rate
+
+Two lossless improvements, both measured:
+
+- **Black is never sent.** The write blanks the segment, so an LED
+  nobody mentions is already off. Worth 0-49% of a frame, and it moves
+  `alignbar`, `eyes`, `pinwheel` and `text` onto the websocket.
+- **Two HTTP requests in flight** instead of one: 7.3 whole frames a
+  second becomes 9.7.
+
+Things that were measured and rejected: global colour quantisation
+(13 to 17 of 37 presets, at a visible cost), tolerant run-merging
+(same), and websocket fragmentation -- the firmware does not
+reassemble a fragmented message, so a 6 kB frame sent in six frames
+lands as nothing.
+
 ## Manual line calibration
 
     python3 mau5lines.py --host 192.168.10.172

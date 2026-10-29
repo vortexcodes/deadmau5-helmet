@@ -39,7 +39,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   preset: null, inst: null, params: {}, running: false,
   t0: 0, bri: 255, fps: 0, cycle: 0, lastCycle: 0, interval: 40,
-  music: null,
+  music: null, show: null, showT0: null,
 };
 
 // ----------------------------------------------------------------------
@@ -128,8 +128,20 @@ function tick() {
     choose(names[(at + 1) % names.length], true);
   }
 
-  frame.fill(0);
-  state.inst.render(helmet, t, state.music, frame);
+  if (state.show && state.showT0 !== null) {
+    const st = (now - state.showT0) / 1000;
+    if (st >= state.show.duration) {
+      stopShow();
+      frame.fill(0);
+      state.inst.render(helmet, t, state.music, frame);
+    } else {
+      const cue = state.show.frame(st, state.music, frame);
+      showClock(st, cue);
+    }
+  } else {
+    frame.fill(0);
+    state.inst.render(helmet, t, state.music, frame);
+  }
   const rep = guard.apply(frame, frame, now / 1000);
   const sent = link.send(frame);
 
@@ -360,10 +372,12 @@ const REACTIVE = ['spectrum', 'pitchwheel', 'bloom', 'eq', 'vu',
 
 function audioSource(kind) {
   state.music = kind === 'none' ? null : M.LiveMusic(an);
-  for (const [id, k] of [['afile', 'file'], ['amic', 'mic'], ['aoff', 'none']]) {
+  for (const [id, k] of [['afile', 'file'], ['amic', 'mic'],
+                         ['atab', 'tab'], ['aoff', 'none']]) {
     $(id).classList.toggle('on', kind === k);
   }
-  $('asrc').textContent = { file: 'track', mic: 'microphone', none: 'silent' }[kind];
+  $('asrc').textContent = { file: 'track', mic: 'microphone',
+                            tab: 'shared audio', none: 'silent' }[kind];
   if (kind !== 'none' && REACTIVE.indexOf(state.preset) < 0) choose('spectrum');
 }
 
@@ -417,18 +431,43 @@ $('apick').onchange = async (e) => {
   }
 };
 
+// There is no way for a web page to tap another app's audio on a
+// phone -- no browser offers one, on Android or on iOS.  What works
+// is the microphone hearing the speaker, and the microphone needs a
+// secure page.  This page is plain http because the controller
+// cannot serve anything else, so both are off until one of these is
+// done.  Say exactly which, because "permission denied" sends people
+// to the wrong settings screen.
+const INSECURE_FIX =
+  'A browser only gives a page a microphone on a secure origin, and '
+  + 'this page is plain http from the controller, so the API is absent '
+  + 'rather than refused. Two ways round it: on Android Chrome, put '
+  + location.origin + ' into chrome://flags/#unsafely-treat-insecure-'
+  + 'origin-as-secure once and restart Chrome — then Spotify out of the '
+  + 'speaker drives the helmet. Or, with the laptop there, open the '
+  + 'page it serves over https instead. Picking a track with the left '
+  + 'button needs none of this.';
+
 $('amic').onclick = async () => {
   try {
     await an.useMic();
     audioSource('mic');
-    audioWhy('');
+    audioWhy('listening. Anything the phone can hear drives the helmet — '
+             + 'including its own speaker, which is how you follow Spotify.');
   } catch (err) {
     audioSource('none');
-    audioWhy(err.message + '. A track picked with the button on the left '
-             + 'works here and needs no permission. For the microphone, open '
-             + 'this page over https from the laptop, or add '
-             + location.origin + ' to chrome://flags/#unsafely-treat-insecure-'
-             + 'origin-as-secure on this phone.');
+    audioWhy(err.message + '. ' + INSECURE_FIX);
+  }
+};
+
+$('atab').onclick = async () => {
+  try {
+    await an.useTab();
+    audioSource('tab');
+    audioWhy('following the audio you shared.');
+  } catch (err) {
+    audioSource('none');
+    audioWhy(err.message + '. ' + INSECURE_FIX);
   }
 };
 
@@ -438,7 +477,71 @@ if (!M.Analyser.micPossible()) {
   $('amic').disabled = true;
   $('amic').textContent = 'listen (needs https)';
 }
+if (!M.Analyser.tabPossible()) {
+  $('atab').disabled = true;
+  $('atab').textContent = "what's playing (needs https)";
+}
+if (!M.Analyser.micPossible() && !M.Analyser.tabPossible()) audioWhy(INSECURE_FIX);
 audioSource('none');
+
+
+// ----------------------------------------------------------------------
+// shows
+// ----------------------------------------------------------------------
+// Only the cue lists came over -- see show.js.  Nothing here knows
+// where in the track you are, so the clock starts when you say so and
+// the drive comes from whatever the phone can hear.
+function mmss(v) {
+  v = Math.max(0, Math.round(v));
+  return Math.floor(v / 60) + ':' + String(v % 60).padStart(2, '0');
+}
+
+function showClock(st, cue) {
+  if (!state.show) return;
+  $('showat').textContent = mmss(st) + ' / ' + mmss(state.show.duration)
+    + (cue ? ' · ' + cue.preset
+        + (cue.overlay ? ' + ' + cue.overlay.preset : '') : ' · (gap)');
+}
+
+function stopShow() {
+  state.showT0 = null;
+  $('showgo').textContent = 'start';
+  $('showgo').classList.remove('on');
+  if (state.show) {
+    $('showat').textContent = 'ready — play the track, tap start on the first beat';
+  }
+}
+
+function pickShow(name) {
+  state.show = name ? new M.ShowPlayer(D.shows[name], helmet, D) : null;
+  stopShow();
+  if (!name) {
+    $('showat').textContent = 'pick a show, play the track, tap start on the first beat';
+  }
+  save();
+}
+
+{
+  const sel = $('showpick');
+  for (const name of Object.keys(D.shows || {})) {
+    const o = document.createElement('option');
+    o.value = name;
+    o.textContent = name.replace(/^deadmau5 - /, '');
+    sel.appendChild(o);
+  }
+  sel.onchange = (e) => pickShow(e.target.value);
+  $('showgo').onclick = () => {
+    if (!state.show) return;
+    if (state.showT0 === null) {
+      state.showT0 = performance.now();
+      $('showgo').textContent = 'stop';
+      $('showgo').classList.add('on');
+      if (!state.running) start();
+    } else {
+      stopShow();
+    }
+  };
+}
 
 // ----------------------------------------------------------------------
 // wiring up
@@ -449,7 +552,7 @@ for (const name of Object.keys(D.presets)) {
   b.textContent = name;
   b.dataset.name = name;
   if (REACTIVE.indexOf(name) >= 0) b.classList.add('reactive');
-  b.onclick = () => choose(name);
+  b.onclick = () => { if (state.show) { $('showpick').value = ''; pickShow(''); } choose(name); };
   grid.appendChild(b);
 }
 

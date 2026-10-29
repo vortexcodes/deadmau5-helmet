@@ -1064,6 +1064,81 @@ def t_map_adjustments():
         os.unlink(path)
 
 
+class _ShowDrive:
+    """A music drive that is a pure function of t in both languages.
+
+    The shows are the one thing here with no simulator to check
+    against -- a cue list is 44 changes of effect over ten minutes and
+    nobody is going to eyeball that twice.  So the Python player and
+    the ported one are driven by the same arithmetic and compared
+    frame for frame.
+
+    lock_conf is NaN deliberately: offline there is no confident beat
+    grid to quantise to, so both sides must decide not to lock.
+    """
+    bands = True
+    bpm = 128.0
+    lock_conf = float("nan")
+
+    def level_at(self, t):
+        return 0.5 + 0.4 * math.sin(t * 1.7)
+
+    def beat_phase(self, t):
+        return (t * 2.13) % 1.0
+
+    def beat_index(self, t):
+        return t * 2.13
+
+    def is_downbeat(self, t):
+        return ((t * 0.53) % 1.0) < 0.05
+
+    def pitch_at(self, t):
+        return (t * 0.11) % 1.0
+
+    def centroid_at(self, t):
+        return 0.5 + 0.4 * math.sin(t * 0.63)
+
+    def bands_at(self, t, n):
+        return np.array([0.5 + 0.4 * math.sin(t * 0.9 + k * 0.6) for k in range(n)])
+
+    def band_at(self, t, name="bass", punch=False):
+        w = 1.1 if name == "bass" else (1.9 if name == "mid" else 2.7)
+        return 0.5 + 0.4 * math.sin(t * w + (0.3 if punch else 0.0))
+
+
+def t_offline_shows_match_python():
+    """The cue lists run the same on the phone as on the laptop."""
+    import mau5engine as E
+    import mau5offline
+    import mau5show
+    data = mau5offline.bundle()
+    if not data.get("shows"):
+        return note("offline: no shows to check")
+    h = E.Helmet()
+    drive = _ShowDrive()
+    times = [3.0, 17.5, 41.25, 88.0, 150.5]
+    names = sorted(data["shows"])
+    res = _node("showtest.js", {"data": data, "shows": names, "times": times})
+    if res is None:
+        return note("offline: node not installed, the shows went unchecked")
+    worst, where = 0.0, ""
+    for name in names:
+        show = dict(data["shows"][name])
+        show["cues"] = show["cues"]
+        py = mau5show.Player(show, helmet=h, music=drive)
+        ok(not py.lock, "with no confident grid the laptop should not lock")
+        for k, t in enumerate(times):
+            a = np.asarray(py.frame(t), float)
+            b = np.asarray(res[name][k], float).reshape(-1, 3)
+            d = float(np.abs(a - b).max())
+            if d > worst:
+                worst, where = d, "%s at t=%.1f" % (name, t)
+    ok(worst < 0.01, "the ported show player differs by %.3f counts (%s)"
+       % (worst, where))
+    note("offline: %d shows, %d frames each, worst %.4f counts out of 255 (%s)"
+         % (len(names), len(times), worst, where or "exact"))
+
+
 def t_offline_page_is_self_contained():
     """A page that fetches anything is a page that is blank at a show."""
     import mau5offline
@@ -1119,6 +1194,7 @@ GROUPS = {
                 t_offline_guard_matches_python,
                 t_offline_encoder_roundtrip,
                 t_offline_oversize_is_caught,
+                t_offline_shows_match_python,
                 t_offline_page_is_self_contained,
                 t_offline_limiter_matches_the_budget],
     "camera": [t_eye_after],

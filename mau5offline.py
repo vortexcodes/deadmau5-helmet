@@ -99,6 +99,9 @@ def bundle():
         "power": json.load(open(os.path.join(CAL, "power.json"))),
         "strips": json.load(open(os.path.join(CAL, "strips.json")))["strips"],
         "presets": _preset_specs(),
+        "shows": _shows(),
+        "lock": {"presets": {k: list(v) for k, v in E.LOCKABLE.items()},
+                 "divisions": list(E.DIVISIONS)},
         "built": time.strftime("%Y-%m-%d"),
     }
     return d
@@ -129,6 +132,58 @@ def _read(name):
         return f.read()
 
 
+def _shows():
+    """The cue lists, and nothing else about a show.
+
+    A show is three things on the laptop: a cue list, an analysis of
+    the track, and the track.  Only the first fits here -- the five
+    analyses are two megabytes and the audio is sixty, against about
+    nine hundred kilobytes free on the controller.
+
+    It turns out only the first is needed.  The analysis existed to
+    tell the player where the beats and the bands were, and offline
+    the phone is already measuring exactly that from whatever it can
+    hear.  So the cue list rides along at eight to thirteen kilobytes
+    a show and the drive comes from the room.  The one thing lost is
+    the clock: nothing on the phone knows where in the track you are,
+    so the show is started by hand on the first beat.
+    """
+    out = {}
+    d = os.path.join(HERE, "shows")
+    if not os.path.isdir(d):
+        return out
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(d, fn)) as f:
+                sh = json.load(f)
+        except (ValueError, OSError):
+            continue
+        if not sh.get("cues"):
+            continue
+        cues = []
+        for c in sorted(sh["cues"], key=lambda c: c["start"]):
+            keep = {k: c[k] for k in ("start", "end", "preset", "params",
+                                      "level", "gain") if k in c}
+            if c.get("overlay"):
+                keep["overlay"] = c["overlay"]
+            cues.append(keep)
+        out[fn[:-5]] = {
+            "track": sh.get("track", fn[:-5]),
+            "duration": sh.get("duration", 0.0),
+            "bpm": sh.get("bpm", 120.0),
+            "fade": sh.get("fade", 0.0),
+            "accent": bool(sh.get("accent", False)),
+            "pulse": sh.get("pulse", 0.22),
+            "dynamics": sh.get("dynamics", 0.72),
+            "dynamics_gamma": sh.get("dynamics_gamma", 0.7),
+            "lock": sh.get("lock"),
+            "cues": cues,
+        }
+    return out
+
+
 def build(verbose=True):
     os.makedirs(OUT, exist_ok=True)
     data = bundle()
@@ -139,7 +194,8 @@ def build(verbose=True):
 
     html = _read("player.html")
     parts = {"DATA": data_js}
-    for js in ("engine.js", "guard.js", "wire.js", "audio.js", "ui.js"):
+    for js in ("engine.js", "guard.js", "wire.js", "audio.js",
+               "show.js", "ui.js"):
         parts[js.split(".")[0].upper()] = _read(js)
     missing = [k for k in re.findall(r"<!--@(\w+)-->", html) if k not in parts]
     if missing:
@@ -169,8 +225,9 @@ def build(verbose=True):
         print("%s   %6.1f kB" % (plain, len(raw) / 1024.0))
         print("%s   %6.1f kB  (what goes on the controller)"
               % (plain + ".gz", len(gz) / 1024.0))
-        print("  %d presets, %d LEDs, budget %.0f mA"
-              % (len(data["presets"]), data["n"], data["power"]["budget_ma"]))
+        print("  %d presets, %d shows, %d LEDs, budget %.0f mA"
+              % (len(data["presets"]), len(data["shows"]), data["n"],
+                 data["power"]["budget_ma"]))
     return plain, raw, gz
 
 
@@ -494,6 +551,9 @@ def main(argv=None):
     s.add_argument("--host", default=None,
                    help="forward the JSON API to a real controller instead "
                         "of the fake one, for a dress rehearsal")
+    s.add_argument("--tls", action="store_true",
+                   help="serve over https, which is the only way the page "
+                        "gets a microphone")
 
     s = sub.add_parser("deploy", help="upload the page to the controller")
     s.add_argument("--host", default=None)
@@ -515,7 +575,8 @@ def main(argv=None):
         return 0
     if a.cmd == "serve":
         import mau5fake
-        return mau5fake.serve(port=a.port, host=a.host)
+        return mau5fake.serve(port=a.port, host=a.host, tls=a.tls,
+                              bind="0.0.0.0" if (a.host or a.tls) else "127.0.0.1")
     # Being away from the helmet is the normal case for most of this
     # work, not an exception, so it reads as a sentence rather than a
     # traceback.

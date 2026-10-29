@@ -100,6 +100,12 @@ function hexAt(buf, i) {
   return HEX[buf[i * 3]] + HEX[buf[i * 3 + 1]] + HEX[buf[i * 3 + 2]];
 }
 
+// Black is never sent.  The write blanks the segment first, so an
+// LED nobody mentions is already off -- the firmware behaviour that
+// made deltas impossible pays for itself here.  Worth 0 to 49% of a
+// frame depending on how much of the helmet is dark, and it moves
+// alignbar, eyes, pinwheel and text onto the websocket, where they
+// run at 60 fps instead of ten.
 function encode(cur, count) {
   const out = [];
   let j = 0, seq = null;
@@ -108,6 +114,11 @@ function encode(cur, count) {
     while (k < count && cur[k * 3] === cur[j * 3]
            && cur[k * 3 + 1] === cur[j * 3 + 1]
            && cur[k * 3 + 2] === cur[j * 3 + 2]) k++;
+    if (cur[j * 3] === 0 && cur[j * 3 + 1] === 0 && cur[j * 3 + 2] === 0) {
+      seq = null;
+      j = k;
+      continue;
+    }
     if (k - j >= RUN_MIN) {
       seq = null;
       out.push({ a: j, b: k, c: hexAt(cur, j) });
@@ -151,6 +162,11 @@ class Link {
     this.wsLimit = opts.wsLimit || WS_LIMIT;
     this.ws = null;
     this.inflight = 0;
+    // Measured on the helmet: 7.3 whole frames a second over one
+    // connection, 9.7 over two, 10.3 over three and worse after that.
+    // Two is most of the gain, and since every frame is whole the
+    // worst a reordering can do is leave one 100 ms stale.
+    this.maxInflight = opts.maxInflight || 2;
     this.path = '-';
     // A WebSocket gives no backpressure worth the name: bufferedAmount
     // only rises once the far end's TCP window closes, which is long
@@ -338,7 +354,12 @@ class Link {
       tmp[b + 1] = frame[b + perm[b + 1]];
       tmp[b + 2] = frame[b + perm[b + 2]];
     }
-    const body = bodyFor(encode(tmp, n));
+    const items = encode(tmp, n);
+    // A frame with nothing lit encodes to nothing, and an empty `i`
+    // is a no-op that would leave the last frame burning.  One range
+    // says "all of it, off".
+    const body = items.length ? bodyFor(items)
+      : JSON.stringify({ seg: { id: 0, i: [0, n, '000000'] } });
     const now = performance.now();
 
     if (this.ws && this.ws.readyState === 1 && body.length <= this.wsLimit) {
@@ -359,8 +380,8 @@ class Link {
     // POST, the whole frame, one at a time: a second request in
     // flight could land out of order, and since every frame is whole
     // that would show an older one.
-    if (this.inflight) { this.failed++; return -1; }
-    this.inflight = 1;
+    if (this.inflight >= this.maxInflight) { this.failed++; return -1; }
+    this.inflight++;
     this.path = 'http';
     (async () => {
       try {
@@ -375,7 +396,7 @@ class Link {
         this.failed++;
         this.onstatus({ error: String(e.message || e) });
       } finally {
-        this.inflight = 0;
+        this.inflight--;
       }
     })();
     return body.length;

@@ -450,13 +450,21 @@ def _recv(sock, n):
 
 
 def serve(port=8770, host=None, lag_ms=0.0, max_json=8192, count=622,
-          ws_echo=True, ws=True, bind="127.0.0.1", can_freeze=True):
+          ws_echo=True, ws=True, bind="127.0.0.1", can_freeze=True,
+          tls=False):
     """Serve the player, against the fake or against a real controller.
 
     With --host the JSON API is forwarded to the real thing instead of
     answered here, so the page can be tried on the helmet before it is
     uploaded to it.  That still needs the laptop, so it is a test
     rig and not offline mode; offline mode is `mau5offline.py deploy`.
+
+    With --tls it is served over https, which is the only way the page
+    gets a microphone.  A browser hands over a microphone on a secure
+    origin and nowhere else, and the controller cannot be one -- WLED
+    speaks plain http and that is that.  So for anything that has to
+    listen, the laptop serves the page and forwards the pixels.  The
+    certificate is self-signed and the phone will object once.
     """
     import mau5offline
     mau5offline.build(verbose=True)
@@ -465,8 +473,28 @@ def serve(port=8770, host=None, lag_ms=0.0, max_json=8192, count=622,
     if host:
         bind = "0.0.0.0"
     srv = ThreadingHTTPServer((bind, port), make_handler(fake, _geo(), host))
+    scheme = "http"
+    if tls:
+        import ssl
+        import mau5eye
+        here = os.path.dirname(os.path.abspath(__file__))
+        crt = os.path.join(here, "data", "cal", "tls", "eye.crt")
+        key = os.path.join(here, "data", "cal", "tls", "eye.key")
+        ip = _my_ip()
+        try:
+            mau5eye.ensure_cert(crt, key, [ip] if ip else [])
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(crt, key)
+            srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+            scheme = "https"
+        except Exception as e:
+            print("  could not start https (%s); serving plain http" % e)
     where = "127.0.0.1" if bind == "127.0.0.1" else _my_ip()
-    print("\n  player     http://%s:%d/mau5.htm" % (where, port))
+    print("\n  player     %s://%s:%d/mau5.htm" % (scheme, where, port))
+    if scheme == "https":
+        print("             self-signed, so it warns once: Advanced -> "
+              "Proceed.\n             This is the build that can use the "
+              "microphone.")
     if host:
         print("  the JSON API is forwarded to %s -- the real helmet" % host)
     else:

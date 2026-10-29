@@ -61,10 +61,17 @@ PAGE = r"""<!doctype html>
 <div id="bar">
   <button class="go" id="go">START CAMERA</button>
   <select id="cam"></select>
-  <div class="note">Leave this page open and the camera pointed at the helmet.
-    Keep the screen from sleeping.</div>
+  <div class="note" id="note">Leave this page open and the camera pointed at the
+    helmet. Keep the screen from sleeping.</div>
 </div>
 <script>
+// A browser only hands over a camera on a secure page, and makes the
+// point by deleting navigator.mediaDevices rather than refusing the
+// call -- so from any machine that is not this one, the plain http
+// page fails with "undefined is not an object" and no hint at all.
+// localhost is the one exception, which is why it works here and
+// nowhere else.  Say so, and offer the link that does work.
+const SECURE = window.isSecureContext && navigator.mediaDevices;
 let stream=null, timer=null, n=0, fails=0;
 const v=document.getElementById('v'), d=document.getElementById('d'),
       s=document.getElementById('s'), sel=document.getElementById('cam');
@@ -109,6 +116,21 @@ async function push(){
   }catch(e){ fails++; if(fails>2) d.className='dot err'; }
 }
 
+if(!SECURE){
+  const tls = 'https://' + location.hostname + ':' + __TLSPORT__ + '/';
+  const go = document.getElementById('go');
+  go.disabled = true;
+  go.textContent = 'NEEDS A SECURE PAGE';
+  d.className = 'dot err';
+  s.textContent = 'not a secure context';
+  document.getElementById('note').innerHTML =
+    'This page is plain http, so the browser deletes the camera API '
+    + 'outright rather than asking you. Only localhost is exempt, which '
+    + 'is why it works on the laptop running this and nowhere else. Open '
+    + '<a href="' + tls + '" style="color:#38d39f">' + tls + '</a> and '
+    + 'accept the warning once &mdash; the certificate is self-signed by '
+    + 'the same laptop.';
+}
 document.getElementById('go').onclick=start;
 sel.onchange=()=>{ if(stream) start(); };
 navigator.mediaDevices?.addEventListener?.('devicechange', listCams);
@@ -140,7 +162,7 @@ class Eye:
             return self.frame, self.at, self.n
 
 
-def make_handler(eye):
+def make_handler(eye, tls_port=8753):
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -159,7 +181,8 @@ def make_handler(eye):
 
         def do_GET(self):
             if self.path in ("/", "/index.html"):
-                return self._send(PAGE.encode("utf-8"), "text/html; charset=utf-8")
+                page = PAGE.replace("__TLSPORT__", str(tls_port))
+                return self._send(page.encode("utf-8"), "text/html; charset=utf-8")
             if self.path.startswith("/latest"):
                 f, at, n = eye.get()
                 if not f:
@@ -297,7 +320,7 @@ def main(argv=None):
 
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     eye = Eye(a.out)
-    handler = make_handler(eye)
+    handler = make_handler(eye, a.tls_port)
     srv = ThreadingHTTPServer(("0.0.0.0", a.port), handler)
     ip = mau5wled.lan_ip()
 
