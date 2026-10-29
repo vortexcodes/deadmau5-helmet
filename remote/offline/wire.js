@@ -168,7 +168,14 @@ function bodyFor(entries) {
 class Link {
   constructor(opts) {
     opts = opts || {};
-    this.origin = opts.origin || '';          // '' = same host as the page
+    // '' means the same host as the page, which is the normal case:
+    // the controller serves the page.  Through mau5relay it is
+    // '/helmet', and every request carries the relay's token, because
+    // the relay is the only thing standing in front of a controller
+    // that has no authentication of its own.
+    this.origin = opts.origin || '';
+    this.token = opts.token || '';
+    this.headers = this.token ? { 'X-Mau5-Token': this.token } : {};
     this.count = opts.count | 0;
     this.perm = makePerm(this.count, opts.strips);
     // WLED parses a message into one fixed buffer and ignores
@@ -185,6 +192,9 @@ class Link {
     // worst a reordering can do is leave one 100 ms stale.
     this.maxInflight = opts.maxInflight || 2;
     this.path = '-';
+    // Which WLED preset to hand back to when the page lets go.  0 or
+    // null means switch off instead.
+    this.standby = opts.standby === undefined ? null : opts.standby;
     // A WebSocket gives no backpressure worth the name: bufferedAmount
     // only rises once the far end's TCP window closes, which is long
     // after an ESP32 has stopped keeping up.  Where a build answers
@@ -217,10 +227,24 @@ class Link {
     this._tmp = new Uint8Array(this.count * 3);
   }
 
-  url(path) { return this.origin + path; }
+  url(path, withToken) {
+    const u = this.origin + path;
+    // sendBeacon cannot carry a header, and the release beacon is the
+    // one request that absolutely must get through -- it is what
+    // stops the helmet holding a frame for ever.  So that one puts
+    // the token in the query, which the relay also accepts.
+    if (withToken && this.token) {
+      return u + (u.indexOf('?') < 0 ? '?' : '&') + 't='
+        + encodeURIComponent(this.token);
+    }
+    return u;
+  }
+
+  hdrs(extra) { return Object.assign({}, this.headers, extra || {}); }
 
   async getJSON(path) {
-    const r = await fetch(this.url(path), { cache: 'no-store' });
+    const r = await fetch(this.url(path),
+                          { cache: 'no-store', headers: this.hdrs() });
     if (!r.ok) throw new Error(path + ' -> ' + r.status);
     return r.json();
   }
@@ -228,7 +252,7 @@ class Link {
   async postJSON(obj) {
     const r = await fetch(this.url('/json/state'), {
       method: 'POST', cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.hdrs({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(obj),
     });
     if (!r.ok) throw new Error('state -> ' + r.status);
@@ -348,21 +372,36 @@ class Link {
   // night at a show".
   async release() {
     this.frozen = false;
-    const body = JSON.stringify({ on: false, nl: { on: false },
-                                  seg: [{ id: 0, frz: false }] });
+    // Two ways to let go, and the default is not "off".
+    //
+    // Off was the original, and it is what made people think the
+    // helmet had broken: close the page, or lock the phone, and the
+    // thing goes dark.  Handing back to one of WLED's own presets
+    // instead leaves it lit and animating with nothing driving it --
+    // no phone, no laptop, no network -- and the brightness limiter
+    // does cover that path, unlike the player's.
+    const body = JSON.stringify(
+      this.standby
+        ? { ps: this.standby, nl: { on: false }, seg: [{ id: 0, frz: false }] }
+        : { on: false, nl: { on: false }, seg: [{ id: 0, frz: false }] });
     // sendBeacon survives the page going away, which fetch does not.
     if (navigator.sendBeacon) {
       try {
-        navigator.sendBeacon(this.url('/json/state'),
+        navigator.sendBeacon(this.url('/json/state', true),
                              new Blob([body], { type: 'application/json' }));
-        return;
-      } catch (e) { /* fall through */ }
+        return true;
+      } catch (e) {}
     }
-    try { await this.postJSON(JSON.parse(body)); } catch (e) {}
+    try {
+      await fetch(this.url('/json/state'), {
+        method: 'POST', keepalive: true,
+        headers: this.hdrs({ 'Content-Type': 'application/json' }),
+        body: body,
+      });
+    } catch (e) {}
+    return true;
   }
 
-  // `frame` is the guard's output in true RGB.  Returns the number of
-  // characters sent, or -1 if the link was too busy to take it.
   send(frame) {
     const n = this.count, perm = this.perm, tmp = this._tmp;
     for (let i = 0; i < n; i++) {
@@ -404,7 +443,8 @@ class Link {
       try {
         await fetch(this.url('/json/state'), {
           method: 'POST', cache: 'no-store',
-          headers: { 'Content-Type': 'application/json' }, body: body,
+          headers: this.hdrs({ 'Content-Type': 'application/json' }),
+          body: body,
         });
         this.sent++; this.bytes += body.length;
         this.rtt = this.rtt * 0.8 + (performance.now() - now) * 0.2;

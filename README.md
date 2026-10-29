@@ -603,6 +603,71 @@ saw, and what was measured should stay told apart from what was
 judged by eye. Undo removes the last correction and puts the map back
 exactly.
 
+## Working on it from somewhere else
+
+The helmet, the camera and whatever is driving them all live on one
+home network, and the person working on it usually does not. That is
+the main reason a change used to take a day to try.
+
+`mau5relay.py` runs on a machine at home that can see all three, and
+puts one door in front of them:
+
+```bash
+python3 -c "import secrets;print(secrets.token_urlsafe(24))"   # a key
+python3 mau5relay.py --token <that> --host 192.168.10.172
+```
+
+| route | what it is |
+|---|---|
+| `/` | a dashboard: the live camera, helmet status, a link to the player |
+| `/cam.jpg` | the newest camera frame |
+| `/status` | camera age, frame count, helmet name, power, on/off |
+| `/helmet/json/...` | the controller's own API, proxied |
+| `/app/mau5.htm` | the player, served from here and pointed at `/helmet` |
+
+Every route needs `?t=<token>` or an `X-Mau5-Token` header, and it
+refuses to start without a token unless you insist: it proxies a
+controller that has no authentication of its own, so the token is the
+only thing in the way.
+
+**Getting to it is deliberately not this script's job.** Forward a
+port, run a Tailscale node, point a Cloudflare tunnel at it — all
+three work and they have very different security properties. A token
+on plain http across the open internet is a token somebody can read,
+so if the route is a forwarded port, use `--tls` at least.
+
+## Keeping it as an app, and what happens when you close it
+
+The page carries a manifest and icons drawn from the LED map itself,
+so "Add to Home screen" gives a real icon and a window with no
+address bar rather than a bookmark.
+
+It is not a full PWA and cannot be while the controller serves it: an
+installable app needs a service worker, a service worker needs a
+secure origin, and WLED speaks plain http. The page does not need one
+— it is already wholly on the controller — but the install banner
+will not appear, and you add it from the browser menu instead.
+
+**Closing the page used to stop the lights**, which read as a fault
+and was in fact the safety design: a frozen segment holds its last
+frame for ever, so the player arms a dead man and the helmet goes
+dark a minute after the phone stops talking.
+
+Now it hands back instead:
+
+```bash
+python3 mau5offline.py standby --host X --fx pacifica --bri 96 --apply
+```
+
+That saves a WLED preset and makes it the boot preset. Let go of the
+page — close it, lock the phone, walk off — and the controller picks
+up one of its own effects and keeps running with no phone, no laptop
+and no network. Plug the helmet in with nothing else around and it
+comes up in the same thing. The brightness limiter *does* cover that
+path; it is blind only to pixels painted into a frozen segment, which
+is the player's route, not this one. The page has a **keep glowing**
+switch if you want the old behaviour back.
+
 ## Offline mode: the helmet with no network and no laptop
 
 At a show there is no house WiFi worth trusting and no reason to be carrying

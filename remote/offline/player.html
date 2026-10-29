@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#07070a">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/i192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>mau5head</title>
 <style>
 :root{--bg:#07070a;--panel:#131319;--line:#26262f;--ink:#e9e9f0;--dim:#8a8a99;
@@ -136,6 +140,10 @@ button.reactive::after{content:"\00a0♪";opacity:.75}
 <div class="panel">
   <div class="row"><span>brightness</span><b id="brival">255</b>
     <input id="bri" type="range" min="8" max="255" step="1" value="255"></div>
+  <div class="row"><span>when this closes</span>
+    <label style="margin-left:auto;display:flex;gap:6px;align-items:center">
+      <input id="hand" type="checkbox" checked style="width:22px;height:22px">
+      <span class="dim" style="font-size:12px">keep glowing</span></label></div>
   <div class="row"><span>cycle</span>
     <select id="cycle">
       <option value="0">off</option>

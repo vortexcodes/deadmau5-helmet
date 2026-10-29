@@ -30,3 +30,8 @@ data/offline/
 
 # a refresh token is a credential and this repository is public
 data/cal/spotify.json
+
+# camera scratch: rewritten by every run, regenerable, never interesting
+data/cal/eye.jpg
+data/cal/_locate*.jpg
+data/cal/led_positions_pose2.csv

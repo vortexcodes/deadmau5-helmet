@@ -103,6 +103,7 @@ def bundle():
         "drive": _drive_index(),
         "lock": {"presets": {k: list(v) for k, v in E.LOCKABLE.items()},
                  "divisions": list(E.DIVISIONS)},
+        "standby": STANDBY_SLOT,
         "built": time.strftime("%Y-%m-%d"),
     }
     return d
@@ -358,6 +359,7 @@ def deploy(host=None, gzipped=True, verbose=True):
         raise SystemExit("read back %d bytes, expected %d -- the upload did "
                          "not land" % (len(got), len(raw)))
     print("verified: %s returns the %d-byte page" % (url, len(raw)))
+    deploy_extras(w)
     n = deploy_drives(w)
     if n:
         print("  %.0f kB of track analysis alongside it" % (n / 1024.0))
@@ -491,6 +493,34 @@ def config(host=None, apply=False, ap_ssid=None, ap_psk=None):
 # ----------------------------------------------------------------------
 # check
 # ----------------------------------------------------------------------
+# What an installed app needs beside the page.  A browser will not
+# read a manifest from a data: URL, so these are real files.
+EXTRAS = ("manifest.json", "i192.png", "i512.png", "i512m.png")
+
+
+def deploy_extras(w, verbose=True):
+    """The manifest and icons, so the phone can keep it as an app."""
+    import mau5icon
+    mau5icon.main([])
+    have = _listing(w)
+    sent = 0
+    for fn in EXTRAS:
+        path = os.path.join(OUT, fn)
+        if not os.path.exists(path):
+            continue
+        with open(path, "rb") as f:
+            blob = f.read()
+        if have.get(fn) == len(blob):
+            continue
+        ctype = "application/json" if fn.endswith(".json") else "image/png"
+        _upload(w, "/" + fn, blob, ctype)
+        sent += len(blob)
+        time.sleep(0.4)
+        if verbose:
+            print("  %-14s %6d bytes" % (fn, len(blob)))
+    return sent
+
+
 def _listing(w):
     """What is already on the controller, name -> size."""
     try:
@@ -532,6 +562,61 @@ def deploy_drives(w, verbose=True):
     if verbose and skipped:
         print("  %d track analyses already there, unchanged" % skipped)
     return sent
+
+
+# A handful of WLED's own effects that cover the whole helmet, move
+# slowly, and look like something rather than a test pattern.  They
+# are the controller's, not ours, which is the entire point: they
+# keep running when the phone is in a pocket.
+STANDBY_FX = {"pacifica": 101, "aurora": 38, "pride": 63,
+              "colorloop": 8, "breathe": 2, "solid": 0}
+
+STANDBY_SLOT = 1
+
+
+def standby(host=None, fx="pacifica", bri=96, boot=True, apply=False):
+    """Give the helmet something to do when nobody is driving it.
+
+    The complaint this answers: close the page and the lights stop.
+    They did, by design -- a frozen segment holds the last frame for
+    ever, so the player arms a dead man and the helmet goes dark a
+    minute after the phone stops talking.  Safe, and useless if what
+    you wanted was a lit helmet on a shelf.
+
+    So instead of switching off, the player hands back.  WLED's own
+    effects run on the controller with no phone, no laptop and no
+    network, and the brightness limiter does cover them -- it is
+    blind only to pixels painted into a frozen segment, which is the
+    player's path, not this one.  Saved as a preset so the handover
+    is one short message, and set as the boot preset so a helmet
+    that is simply plugged in comes up lit.
+    """
+    import mau5wled
+    w = _find(host)
+    fxid = STANDBY_FX.get(fx)
+    if fxid is None:
+        raise SystemExit("no standby effect %r.  Known: %s"
+                         % (fx, ", ".join(sorted(STANDBY_FX))))
+    print("%s  WLED %s" % (w.info().get("name", "?"), w.info().get("ver", "?")))
+    print("  standby: %s (fx %d) at brightness %d, preset %d%s"
+          % (fx, fxid, bri, STANDBY_SLOT, ", and on boot" if boot else ""))
+    if not apply:
+        print("\n  nothing changed.  Re-run with --apply.")
+        return 0
+    w._post("/json/state", {"on": True, "bri": int(bri), "transition": 7,
+                            "nl": {"on": False},
+                            "seg": [{"id": 0, "frz": False, "fx": fxid,
+                                     "sx": 110, "ix": 128, "pal": 0,
+                                     "on": True, "bri": 255}]})
+    time.sleep(0.6)
+    w._post("/json/state", {"psave": STANDBY_SLOT, "n": "mau5 standby"})
+    time.sleep(0.6)
+    if boot:
+        w._post("/json/cfg", {"def": {"ps": STANDBY_SLOT, "on": True,
+                                      "bri": int(bri)}})
+    print("\n  applied.  The helmet will hold this whenever the page lets go,")
+    print("  and come up in it when it is powered on.")
+    return 0
 
 
 def check(host=None):
@@ -638,6 +723,14 @@ def main(argv=None):
     s.add_argument("--ap-psk", default=None,
                    help="at least 8 characters; not stored in this repo")
 
+    s = sub.add_parser("standby", help="what the helmet does with no phone")
+    s.add_argument("--host", default=None)
+    s.add_argument("--fx", default="pacifica",
+                   help="one of: " + ", ".join(sorted(STANDBY_FX)))
+    s.add_argument("--bri", type=int, default=96)
+    s.add_argument("--no-boot", dest="boot", action="store_false", default=True)
+    s.add_argument("--apply", action="store_true")
+
     s = sub.add_parser("check", help="is offline mode actually ready")
     s.add_argument("--host", default=None)
 
@@ -659,6 +752,8 @@ def main(argv=None):
             return 0
         if a.cmd == "config":
             return config(a.host, a.apply, a.ap_ssid, a.ap_psk)
+        if a.cmd == "standby":
+            return standby(a.host, a.fx, a.bri, a.boot, a.apply)
         if a.cmd == "check":
             return check(a.host)
     except mau5wled.WLEDError as e:

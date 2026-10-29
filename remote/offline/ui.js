@@ -33,13 +33,22 @@ const helmet = M.makeHelmet(geo);
 const guard = new M.PowerGuard(D.power);
 const frame = new Float32Array(helmet.n * 3);
 
-const link = new M.Link({ count: helmet.n, strips: D.strips });
+// Served by the controller, the page and the API share an origin and
+// none of this applies.  Served through mau5relay -- which is how it
+// is reached from anywhere that is not the house -- the API lives
+// under /helmet and needs the relay's token.
+const Q = new URLSearchParams(location.search);
+const link = new M.Link({
+  count: helmet.n, strips: D.strips, standby: D.standby || null,
+  origin: Q.get('api') || '', token: Q.get('t') || '',
+});
 
 const $ = (id) => document.getElementById(id);
 const state = {
   preset: null, inst: null, params: {}, running: false,
   t0: 0, bri: 255, fps: 0, cycle: 0, lastCycle: 0, interval: 40,
   music: null, show: null, showT0: null, drive: null, follow: false,
+  handover: true,
 };
 
 // ----------------------------------------------------------------------
@@ -243,7 +252,8 @@ function save() {
   try {
     localStorage.setItem('mau5offline', JSON.stringify({
       preset: state.preset, params: state.params, bri: state.bri,
-      cycle: state.cycle,
+      cycle: state.cycle, handover: state.handover,
+      show: $('showpick') ? $('showpick').value : '',
     }));
   } catch (e) {}
 }
@@ -251,6 +261,7 @@ function save() {
 function restore() {
   try {
     const s = JSON.parse(localStorage.getItem('mau5offline') || '{}');
+    if (s.handover !== undefined) state.handover = !!s.handover;
     if (s.preset && D.presets[s.preset]) {
       state.params = s.params || {};
       state.cycle = s.cycle || 0;
@@ -725,6 +736,11 @@ for (const name of Object.keys(D.presets)) {
 }
 
 $('go').onclick = () => (state.running ? stop() : start());
+$('hand').onchange = (e) => {
+  state.handover = e.target.checked;
+  link.standby = state.handover ? (D.standby || null) : null;
+  save();
+};
 $('bri').oninput = (e) => {
   state.bri = +e.target.value;
   $('brival').textContent = state.bri;
@@ -745,6 +761,8 @@ choose(restore() || 'rainbow', true);
 $('bri').value = state.bri;
 $('brival').textContent = state.bri;
 $('cycle').value = state.cycle;
+$('hand').checked = state.handover;
+link.standby = state.handover ? (D.standby || null) : null;
 $('leds').textContent = helmet.n;
 $('budget').textContent = D.power.budget_ma;
 $('built').textContent = D.built;
