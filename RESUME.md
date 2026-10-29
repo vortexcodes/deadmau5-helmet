@@ -1,5 +1,30 @@
 # Where things stand (2026-10-29, 02:00)
 
+## The ears are wrong by three LED pitches, and now it is measured
+
+Independent of any triangulation, and the cleanest number yet. Solve
+each camera against the shell, project the map's own positions, and
+compare with where that camera actually saw each LED. One LED pitch
+is 16.7 mm:
+
+| | shell | ear1 | ear2 |
+|---|---|---|---|
+| pose 1 (the view the ears were fitted from) | 0.5 mm | 13.2 mm | 10.4 mm |
+| pose 2 (had no part in making the map) | **4.7 mm** | **47.4 mm** | **59.5 mm** |
+
+Pose 1 cannot fail on the ears, because they were derived from it,
+and it is still off by most of a pitch. Pose 2 never saw the map
+being made: the shell comes back to a third of a pitch and the ears
+to **three pitches**. That is the "ears are funky" complaint, with a
+number on it.
+
+It agrees with the triangulation, which independently put the ears
+50-60 mm from where the map has them. Two methods, same magnitude.
+The *direction* is still not measurable -- see below.
+
+`python3 mau5stereo.py --pose2 data/cal/led_positions_pose4.csv`
+prints this table every time now.
+
 ## The camera angle I need next: from the side
 
 Two poses now exist -- the old low one and last night's high, close

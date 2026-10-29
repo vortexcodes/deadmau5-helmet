@@ -101,8 +101,19 @@ def robust_camera(meas, rows, label, passes=3, clip=4.0, min_pts=250,
             print("    stopping: %d points, spread %.3f -- too flat to solve"
                   % (n, sp))
             break
+        med = float(np.median(res))
+        # A camera solved against real centroids does not fit them to a
+        # tenth of a pixel; centroid noise alone is a pixel or two.  A
+        # median that good means the fit has started describing the
+        # points rather than the camera, which is the same failure as
+        # the coplanar one and just as invisible downstream.  Keep the
+        # last honest fit and stop.
+        if med < 0.5 and k:
+            print("    stopping: median %.2f px is too good to be a "
+                  "measurement; keeping the previous fit" % med)
+            break
         best = (M, project, res, dict(use))
-        cut = max(clip * float(np.median(res)), 8.0)
+        cut = max(clip * med, 8.0)
         shell = [r for r in rows if r["region"] == "shell" and r["index"] in use]
         bad = set(shell[i]["index"] for i in np.where(res > cut)[0])
         if not bad:
@@ -195,6 +206,30 @@ def main(argv=None):
     M1, pr1, _, m1 = robust_camera(m1, rows, "pose 1")
     M2, pr2, _, m2 = robust_camera(m2, rows, "pose 2")
     both = sorted(set(m1) & set(m2))
+
+    # Before any triangulation: how far is the map's own answer from
+    # where each camera actually saw the LED?  Pose 1 is the view the
+    # ears were fitted from, so it cannot fail; pose 2 had no part in
+    # making the map and is therefore the only honest number here.
+    print("\n  the map against each camera (one LED pitch is 16.7 mm)")
+    X = np.array([[r["x"], r["y"], r["z"]] for r in rows], float)
+    for tag, M, project, meas in (("pose 1", M1, pr1, m1), ("pose 2", M2, pr2, m2)):
+        pred = project(X)
+        mid = X[:, 1].mean()
+        sc = float(np.hypot(*(project(np.array([[10., mid, 0.]]))[0]
+                              - project(np.array([[0., mid, 0.]]))[0])) / 10.0)
+        bits = []
+        for name, test in (("shell", lambda r: r["region"] == "shell"),
+                           ("ear1", lambda r: str(r["region"]).startswith("ear1")),
+                           ("ear2", lambda r: str(r["region"]).startswith("ear2"))):
+            sel = [k for k, r in enumerate(rows) if test(r) and r["index"] in meas]
+            if not sel:
+                continue
+            e = [float(np.hypot(*(pred[k] - np.array([meas[rows[k]["index"]]["cx"],
+                                                      meas[rows[k]["index"]]["cy"]]))))
+                 for k in sel]
+            bits.append("%s %.1f mm" % (name, float(np.median(e)) / max(sc, 1e-6)))
+        print("    %-8s %s" % (tag, "   ".join(bits)))
 
     byi = {r["index"]: r for r in rows}
     tri, thrown = {}, 0
