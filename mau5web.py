@@ -33,6 +33,50 @@ OUT = os.path.join(HERE, "data", "web")
 # and not drive.js: the point of the page is the visitor's own track,
 # analysed live, rather than ours analysed earlier.
 PARTS = ("engine.js", "guard.js", "audio.js", "show.js")
+MESH = "helmet.glb"
+
+
+def write_mesh(path):
+    """The CAD backdrop, repacked for a web page.
+
+    The same 57,000 triangles, with 16-bit indices instead of 32 -- the
+    mesh has 28,698 vertices, so nothing needs more -- which takes it
+    from a megabyte to 0.7 MB without touching the geometry.  The
+    simulator draws it so a visitor can see each LED sitting in the
+    slot or tube it was mapped to.
+    """
+    import struct
+    import numpy as np
+    import mau5slots
+    V, F = mau5slots.load_mesh()
+    if len(V) >= 65536:
+        raise SystemExit("mesh too large for 16-bit indices")
+    pos = V.astype("<f4").tobytes()
+    idx = F.astype("<u2").tobytes()
+    pad = (-len(idx)) % 4
+    blob = idx + b"\0" * pad + pos
+    doc = {
+        "asset": {"version": "2.0", "generator": "mau5web.py"},
+        "scene": 0, "scenes": [{"nodes": [0]}],
+        "nodes": [{"mesh": 0, "name": "mau5head"}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 1}, "indices": 0}]}],
+        "buffers": [{"byteLength": len(blob)}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(idx), "target": 34963},
+            {"buffer": 0, "byteOffset": len(idx) + pad, "byteLength": len(pos),
+             "target": 34962}],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5123, "count": int(F.size), "type": "SCALAR"},
+            {"bufferView": 1, "componentType": 5126, "count": len(V), "type": "VEC3",
+             "min": V.min(0).astype(float).tolist(), "max": V.max(0).astype(float).tolist()}],
+    }
+    js = json.dumps(doc, separators=(",", ":")).encode()
+    js += b" " * ((-len(js)) % 4)
+    with open(path, "wb") as f:
+        f.write(struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(blob)))
+        f.write(struct.pack("<II", len(js), 0x4E4F534A) + js)
+        f.write(struct.pack("<II", len(blob), 0x004E4942) + blob)
+    return os.path.getsize(path)
 
 
 def bundle():
@@ -55,6 +99,7 @@ def build(out=OUT, verbose=True):
         src = os.path.join(SRC_OFFLINE, p)
         shutil.copyfile(src, os.path.join(out, "mau5", p))
         total += os.path.getsize(src)
+    total += write_mesh(os.path.join(out, "mau5", MESH))
     shutil.copyfile(os.path.join(SRC_WEB, "simulator.js"),
                     os.path.join(out, "mau5-simulator.js"))
     shutil.copyfile(os.path.join(SRC_WEB, "simulator.html"),
@@ -68,6 +113,8 @@ def build(out=OUT, verbose=True):
         for p in PARTS:
             print("    mau5/%-16s %7.1f kB"
                   % (p, os.path.getsize(os.path.join(SRC_OFFLINE, p)) / 1024.0))
+        print("    mau5/%-16s %7.1f kB  (the CAD, for the helmet around the LEDs)"
+              % (MESH, os.path.getsize(os.path.join(out, "mau5", MESH)) / 1024.0))
         print("    mau5-simulator.js     %7.1f kB"
               % (os.path.getsize(os.path.join(SRC_WEB, "simulator.js")) / 1024.0))
         print("    mau5-simulator.html   %7.1f kB"
@@ -114,7 +161,7 @@ def main(argv=None):
             raise SystemExit("no such directory: %s" % dest)
         os.makedirs(os.path.join(dest, "mau5"), exist_ok=True)
         for rel in ["mau5-simulator.html", "mau5-simulator.js"] + \
-                   [os.path.join("mau5", p) for p in ("data.js",) + PARTS]:
+                   [os.path.join("mau5", p) for p in ("data.js", MESH) + PARTS]:
             shutil.copyfile(os.path.join(OUT, rel), os.path.join(dest, rel))
         print("\n  copied into %s" % dest)
     return 0

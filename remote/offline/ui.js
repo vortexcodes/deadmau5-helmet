@@ -433,9 +433,11 @@ setInterval(audioReadout, 150);
 $('afile').onclick = () => $('apick').click();
 $('apick').onchange = async (e) => {
   const f = e.target.files && e.target.files[0];
+  const forShow = e.target.dataset.forShow || '';
   e.target.value = '';
+  e.target.dataset.forShow = '';
   if (!f) return;
-  await playTrack(f);
+  await playTrack(f, forShow);
 };
 
 // There is no way for a web page to tap another app's audio on a
@@ -510,21 +512,36 @@ function showClock(st, cue) {
         + (cue.overlay ? ' + ' + cue.overlay.preset : '') : ' · (gap)');
 }
 
+// The song for each show, kept on this phone after the first time it
+// is chosen, so that "start" means the song plays.
+const tracks = new M.TrackCache();
+
 function stopShow() {
   state.showT0 = null;
   $('showgo').textContent = 'start';
   $('showgo').classList.remove('on');
-  if (state.show) {
-    $('showat').textContent = 'ready — play the track, tap start on the first beat';
-  }
+}
+
+function showRunning() {
+  $('showgo').textContent = 'stop';
+  $('showgo').classList.add('on');
+}
+
+async function showReadyText(name) {
+  const f = name ? await tracks.get(name) : null;
+  if ($('showpick').value !== name) return;          // changed meanwhile
+  $('showat').textContent = f
+    ? 'ready · ' + f.name + ' is on this phone — tap start'
+    : 'tap start and choose the song once; this phone keeps it';
 }
 
 async function pickShow(name) {
+  if (state.show && an.el) an.stop();       // a different show, a different song
   state.show = name ? new M.ShowPlayer(D.shows[name], helmet, D) : null;
   state.drive = null;
   stopShow();
   if (!name) {
-    $('showat').textContent = 'pick a show, play the track, tap start on the first beat';
+    $('showat').textContent = 'pick a show and tap start — its song plays and the lights follow';
     save();
     return;
   }
@@ -536,17 +553,24 @@ async function pickShow(name) {
     $('showat').textContent = 'loading the track analysis…';
     try {
       state.drive = await M.loadDrive('', file);
-      $('showat').textContent = 'ready · ' + Math.round(state.drive.duration)
-        + 's, ' + state.drive.beats.length + ' beats, '
-        + state.drive.bpm.toFixed(0) + ' bpm — tap start on the first beat';
     } catch (e) {
-      $('showat').textContent = 'no analysis on the controller for this one; '
-        + 'it will run off whatever the page can hear';
+      state.drive = null;     // runs off what the page hears instead
     }
-  } else {
-    $('showat').textContent = 'ready — play the track, tap start on the first beat';
   }
+  await showReadyText(name);
   save();
+}
+
+// Start means the song plays.  From this phone's copy if it has one;
+// otherwise ask for the file, once, and keep it.
+async function startShow() {
+  const name = $('showpick').value;
+  if (!name) return;
+  const f = await tracks.get(name);
+  if (f) { await playTrack(f, name); return; }
+  $('apick').dataset.forShow = name;
+  $('apick').click();
+  $('showat').textContent = 'choose the song for this show — it stays on this phone';
 }
 
 {
@@ -560,14 +584,25 @@ async function pickShow(name) {
   sel.onchange = (e) => pickShow(e.target.value);
   $('showgo').onclick = () => {
     if (!state.show) return;
-    if (state.showT0 === null) {
-      state.showT0 = performance.now();
-      $('showgo').textContent = 'stop';
-      $('showgo').classList.add('on');
-      if (!state.running) start();
+    if (state.showT0 === null && !an.el) {
+      startShow();
     } else {
+      // stop is stop: the song as well as the lights
+      if (an.el) { an.stop(); audioSource('none'); }
       stopShow();
+      showPP();
+      showReadyText($('showpick').value);
     }
+  };
+  // The one way to run a show silently, and it says so: for checking
+  // the lights in a quiet room, not for a show.
+  $('showsilent').onclick = () => {
+    if (!state.show) return;
+    if (an.el) { an.stop(); audioSource('none'); }
+    state.showT0 = performance.now();
+    showRunning();
+    $('showat').textContent = 'lights only — no song; start plays it with sound';
+    if (!state.running) start();
   };
 }
 
@@ -578,23 +613,31 @@ async function pickShow(name) {
 // at a gig that knows when the track started.  So it plays it: the
 // audio element is the clock, the volume control and the scrub bar,
 // and the carried analysis supplies the drive.
-async function playTrack(file) {
+// `forShow` is the show this file was chosen for, when it was chosen
+// from the show box; otherwise the file's own name picks the show, so
+// choosing the mp3 is the whole interaction either way.
+async function playTrack(file, forShow) {
   try {
+    const name = forShow || (M.bestShow(file.name, [], D.shows) || {}).name || '';
+    if (name && $('showpick').value !== name) {
+      $('showpick').value = name;
+      await pickShow(name);
+    }
     const el = await an.useFile(file);
     audioSource('file');
     an.setVolume(+$('vol').value / 100);
-    el.onended = () => { an.stop(); audioSource('none'); stopShow(); showPP(); };
-    // name the show after the file if one matches, so picking the mp3
-    // is the whole interaction
-    const hit = M.bestShow(file.name, [], D.shows);
-    if (hit && $('showpick').value !== hit.name) {
-      $('showpick').value = hit.name;
-      await pickShow(hit.name);
-    }
+    el.onended = () => {
+      an.stop(); audioSource('none'); stopShow(); showPP();
+      showReadyText($('showpick').value);
+    };
     if (state.show) {
       state.showT0 = performance.now();
-      $('showgo').textContent = 'stop';
-      $('showgo').classList.add('on');
+      showRunning();
+      if (name) {
+        const kept = await tracks.put(name, file);
+        $('showat').textContent = 'playing ' + file.name
+          + (kept ? ' — kept on this phone for next time' : '');
+      }
     }
     if (!state.running) start();
     showPP();
@@ -611,7 +654,10 @@ function showPP() {
   $('showpp').textContent = (on && an.el.paused) ? 'play' : 'pause';
 }
 
-$('showtrack').onclick = () => { $('apick').dataset.forShow = '1'; $('apick').click(); };
+$('showtrack').onclick = () => {
+  $('apick').dataset.forShow = $('showpick').value || '';
+  $('apick').click();
+};
 $('showpp').onclick = () => {
   if (!an.el) return;
   if (an.el.paused) an.el.play(); else an.el.pause();
