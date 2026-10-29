@@ -4,7 +4,7 @@
  "default_ceiling": 32,
  "thermal": {
   "sustained_w": 11.0,
-  "burst_j": 900.0,
+  "burst_j": 3000.0,
   "max_w": 25.5,
   "standby_w": 7.464,
   "ramp": 0.3

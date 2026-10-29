@@ -1,5 +1,47 @@
 # Where things stand (2026-10-29, 02:00)
 
+## The shows follow the music now
+
+Jones lifted the power rule: peaks may go up for effects and shows,
+as long as nothing stays raised for ten minutes or more. That is a
+leaky bucket, which `power.json` already models, so the lever is
+`thermal.burst_j` and nothing else -- not the region ceilings, not
+`budget_ma`.
+
+`mau5tune.py` is new and measures what was wrong. It renders a show
+end to end through the real engine and the real guard and reports
+how well the helmet's current tracks the track's loudness:
+
+| | follow | swing | mean |
+|---|---|---|---|
+| 900 J (before) | +0.23 | 0.71 | 522 mA |
+| 3000 J (now) | **+0.43** | 0.72 | 700 mA |
+
+Strobe went from **+0.02 to +0.42** -- from not tracking the music at
+all to tracking it properly.
+
+**Swing was never the problem.** An earlier run said it was, and that
+was a bug in the scoring tool: one power guard shared across all five
+shows, so each arrived with the previous show's thermal bucket
+already full and read as flat. Fresh guard per show.
+
+### Sizing it, and why the obvious number is wrong
+
+5100 J is exactly (19.5 - 11.0) W x 600 s and it **breaks the rule**.
+Full-bright content starts near 25 W, and the allowance eases towards
+sustained rather than stepping to it, so at ten minutes it is still
+drawing 14.3 W. Measured: 4000 J is the limit, 3000 J has margin.
+The rule is now a test -- `t_thermal_never_exceeds` asserts the draw
+at ten minutes of worst-case content, plus the energy invariant
+(delivered <= sustained x T + one bucket), which cannot rot the way
+the old hard-coded twenty-minute average did.
+
+### The next lever
+
+Every show peaks at exactly 1000 mA, which is `budget_ma`, not the
+thermal bucket. Raising it needs the controller's per-bus ABL raised
+to match, so it waits for hardware access.
+
 ## The ears are wrong by three LED pitches, and now it is measured
 
 Independent of any triangulation, and the cleanest number yet. Solve

@@ -366,9 +366,24 @@ def t_floor_holds_the_shape():
 
     buf = np.clip(E.make("rainbow").render(h, 1.0, None), 0, 255)
     out = rep = None
-    for t in range(0, 300, 1):                 # run it into the ground
-        out, rep = g.apply(buf, now=float(t))
-    ok(rep["thermal"]["full_pct"] > 95, "the bucket should be empty by now")
+    # Run it into the ground -- for as long as this bucket takes, not
+    # for a number that happened to suit the bucket of the day.
+    th = g.thermal
+    span = th.burst_j / max((th.max_w or th.sustained_w) - th.sustained_w, 0.1)
+    t = 0.0
+    for _ in range(int(span / 2.0) * 3 + 200):
+        out, rep = g.apply(buf, now=t)
+        t += 2.0
+        if rep["thermal"]["full_pct"] > 99:
+            break
+    ok(rep["thermal"]["full_pct"] > 95, "the bucket should be full by now, "
+       "it is %.0f%%" % rep["thermal"]["full_pct"])
+    # A full bucket is not a settled one: the allowance eases towards
+    # sustained rather than stepping to it, so give it a minute to
+    # arrive before asking what it settled at.
+    for _ in range(60):
+        out, rep = g.apply(buf, now=t)
+        t += 2.0
 
     for r in g.regions:
         if r.floor <= 0:
@@ -739,6 +754,13 @@ def t_thermal():
 
     The per-frame guard cannot tell a bright chorus from a bright half
     hour, and it is the half hour that melts hot glue.
+
+    How long that takes is a property of the configured bucket, not a
+    constant to write down here: this used to drive 400 seconds and
+    assert the allowance had fallen, which was true of a 900 J bucket
+    and quietly false the moment the bucket was resized.  So it runs
+    until the bucket is actually full, and gives up only if that never
+    happens.
     """
     import mau5power as P
     g = P.load()
@@ -746,48 +768,104 @@ def t_thermal():
     th = g.thermal
     buf = np.full((g.count, 3), 255, np.uint8)
     dark = np.zeros((g.count, 3), np.uint8)
+    step = 5.0                      # the largest dt the bucket will honour
+    cap = int(th.burst_j / max(th.max_w - th.sustained_w, 0.1) / step) * 6 + 200
+
     t, first, settled = 0.0, None, None
-    for step in range(400):
-        out, rep = g.apply(buf, now=t); t += 1.0
+    for _ in range(cap):
+        out, rep = g.apply(buf, now=t)
+        t += step
         led = rep["watts"] - th.standby_w
         if first is None:
             first = led
         settled = led
+        if th.level >= th.burst_j * 0.999:
+            break
+    ok(th.level >= th.burst_j * 0.999,
+       "the bucket never filled in %.0f s of full white -- it cannot ration"
+       % (cap * step))
     ok(first > settled * 2.5,
-       "it never eased off: %.1f W at the start, %.1f W after 400 s"
-       % (first, settled))
+       "it never eased off: %.1f W at the start, %.1f W once the bucket "
+       "was full" % (first, settled))
     ok(abs((settled + th.standby_w) - th.sustained_w) < 1.0,
        "settled at %.1f W total, expected about %.1f"
        % (settled + th.standby_w, th.sustained_w))
+
     # and quiet must give the headroom back
-    for step in range(900):
-        g.apply(dark, now=t); t += 1.0
+    drained = int(th.burst_j / max(th.sustained_w - th.standby_w, 0.1) / step) + 400
+    for _ in range(drained):
+        g.apply(dark, now=t)
+        t += step
+        if th.level <= 1e-6:
+            break
+    ok(th.level <= 1e-6, "a long rest did not drain the bucket: %.0f J left"
+       % th.level)
     out, rep = g.apply(buf, now=t)
     ok(rep["watts"] - th.standby_w > first * 0.95,
        "a burst after a long rest should be full brightness again, got %.1f W"
        % (rep["watts"] - th.standby_w))
     ok(th.level >= 0 and th.level <= th.burst_j + 1e-6, "bucket left out of range")
+    note("power: the bucket fills in %.0f s of full white and drains in %.0f s"
+         % (t and 0 or 0, 0) if False else
+         "power: %.0f J bucket, %.1f min of 19.5 W before it rations"
+         % (th.burst_j, th.burst_j / max(19.5 - th.sustained_w, 0.1) / 60))
 
 
 def t_thermal_never_exceeds():
-    """Whatever the content, sustained delivery must stay at or under
-    the configured ceiling."""
+    """Whatever the content, the helmet cannot cook itself.
+
+    The rule this encodes is Jones's: power may go up for effects and
+    shows, as long as it is not sustained for ten minutes or more.
+    That is exactly a leaky bucket, so the invariant is stated as
+    energy rather than as an average over some window -- an average
+    was what the old version checked, and resizing the bucket made it
+    fail while the helmet was behaving exactly as asked.
+
+    Over any run, delivered energy cannot exceed what the helmet can
+    shed for that long, plus one bucketful.  That holds for any
+    bucket size, so it cannot rot the way a hard-coded twenty minutes
+    did.
+    """
     import mau5power as P
     g = P.load()
     th = g.thermal
     rng = np.random.default_rng(11)
-    t, total_j = 0.0, 0.0
-    DUR = 1200
-    for step in range(DUR):
+    t, total_j, hot_s = 0.0, 0.0, 0.0
+    DUR, STEP = 3600, 2.0
+    for _ in range(int(DUR / STEP)):
         buf = rng.integers(150, 256, (g.count, 3), dtype=np.uint8)
         out, rep = g.apply(buf, now=t)
-        total_j += rep["watts"] * 1.0
-        t += 1.0
-    avg = total_j / DUR
-    ok(avg <= th.sustained_w + 1.5,
-       "20 minutes of bright content averaged %.1f W, ceiling is %.1f"
-       % (avg, th.sustained_w))
+        total_j += rep["watts"] * STEP
+        if rep["watts"] > th.sustained_w + 0.5:
+            hot_s += STEP
+        t += STEP
 
+    budget_j = th.sustained_w * DUR + th.burst_j
+    ok(total_j <= budget_j * 1.02,
+       "an hour of bright content delivered %.0f kJ; the helmet can shed "
+       "%.0f kJ in that time plus %.0f J of bucket"
+       % (total_j / 1000, th.sustained_w * DUR / 1000, th.burst_j))
+
+    # The other half of the rule, and the half an energy budget cannot
+    # state: it must not still be up there at ten minutes.  Measuring
+    # "time above sustained" instead does not work -- the allowance
+    # eases down towards sustained rather than stepping, so it lingers
+    # a hair above for ever and any such bound is arbitrary.
+    g2 = P.load()
+    t = 0.0
+    at_ten = None
+    for _ in range(int(660 / STEP)):
+        buf = rng.integers(150, 256, (g2.count, 3), dtype=np.uint8)
+        out, rep = g2.apply(buf, now=t)
+        t += STEP
+        if at_ten is None and t >= 600.0:
+            at_ten = rep["watts"]
+    ok(at_ten is not None and at_ten <= th.sustained_w + 1.5,
+       "after ten minutes of full-bright it was still drawing %.1f W; the "
+       "rule is that nothing stays raised for ten minutes or more"
+       % (at_ten or 0.0))
+    note("power: %.0f J bucket -> %.1f W at ten minutes of full-bright, "
+         "settling to %.0f" % (th.burst_j, at_ten, th.sustained_w))
 
 
 def t_strip_orientation():
