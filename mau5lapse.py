@@ -153,6 +153,161 @@ def add_frames(files, cap, hold, outdir, start, do_level, sub="",
     return start, kept
 
 
+def accumulate(files, outdir, start, hold=1, gain=1.0, keep_above=0.0,
+               bg=None, caption_fmt="Localisation \u00b7 %d of %d LEDs measured"):
+    """Each frame adds its LED to the ones before it.
+
+    This is the calibration's own explanation of itself.  Every frame
+    in the localisation pass has exactly one LED lit, so taking a
+    running maximum draws the helmet in its own light, one pixel at a
+    time, in the order the chain is wired -- and what you end up with
+    is not an artist's impression of the map, it is the map, measured.
+
+    A maximum rather than a sum: the frames overlap in bloom and a
+    sum turns the dense parts of the dome into a white blob about
+    forty LEDs in.
+    """
+    acc = None
+    n = 0
+    for path in files:
+        try:
+            im = Image.open(path).convert("RGB")
+        except Exception:
+            continue
+        a = np.asarray(im, np.float32)
+        if bg is not None:
+            a = np.clip(a - bg, 0, 255)
+        if float(a.max()) < keep_above:
+            continue
+        acc = a if acc is None else np.maximum(acc, a)
+        n += 1
+        out = np.clip(acc * gain, 0, 255).astype(np.uint8)
+        frame = Image.fromarray(out)
+        if frame.size != SIZE:
+            frame = frame.resize(SIZE, Image.LANCZOS)
+        caption(frame, "Localisation \u00b7 every LED lit alone, once",
+                caption_fmt % (n, 622))
+        for i in range(hold):
+            frame.save(os.path.join(outdir, "%06d.jpg" % (start + i)), quality=88)
+        start += hold
+    return start, n, acc
+
+
+def trace_map(tmp, start, fps, cal=CAL, per_frame=2.2, tail=10):
+    """Draw the measured map, one LED at a time, in wiring order.
+
+    The accumulation of the raw frames was the obvious way to do this
+    and it is a white blob by the two hundredth LED: each one blooms
+    across a third of the shell and a running maximum piles that up.
+    What is actually interesting is not the glow, it is the
+    *measurement* -- so this plots the centroids instead, in chain
+    order, with a line to the previous LED on the same strip.  Which
+    is also the honest picture: those dots are the map, and the line
+    is the wire.
+    """
+    import csv as _csv
+    rows = []
+    with open(os.path.join(cal, "led_positions.csv")) as f:
+        for r in _csv.DictReader(f):
+            try:
+                if float(r["peak"]) < 40:
+                    continue
+                rows.append((int(r["index"]), float(r["cx"]), float(r["cy"])))
+            except (TypeError, ValueError, KeyError):
+                continue
+    rows.sort()
+    if not rows:
+        return start, 0
+    import mau5map
+    region = {r["index"]: str(r["region"]) for r in mau5map.load(adjust=False)}
+    group = {r["index"]: int(r["group"]) for r in mau5map.load(adjust=False)}
+
+    W, H = SIZE
+    sx = W / 1280.0
+    sy = H / 720.0
+    SHELL, EAR = (255, 110, 20), (40, 170, 255)
+
+    canvas = Image.new("RGB", SIZE, (6, 6, 9))
+    d = ImageDraw.Draw(canvas)
+    n = 0
+    shown = 0
+    frames = 0
+    while shown < len(rows):
+        upto = min(len(rows), int((frames + 1) * per_frame))
+        for k in range(shown, upto):
+            i, cx, cy = rows[k]
+            x, y = cx * sx, cy * sy
+            col = SHELL if region.get(i, "").startswith("shell") else EAR
+            if k and group.get(rows[k-1][0]) == group.get(i):
+                px, py = rows[k-1][1] * sx, rows[k-1][2] * sy
+                d.line([px, py, x, y], fill=(col[0]//5, col[1]//5, col[2]//5), width=1)
+            d.ellipse([x-2, y-2, x+2, y+2], fill=col)
+        shown = upto
+        f = canvas.copy()
+        # the newest few, brighter, so the eye follows the chain
+        fd = ImageDraw.Draw(f)
+        for k in range(max(0, shown - tail), shown):
+            i, cx, cy = rows[k]
+            x, y = cx * sx, cy * sy
+            g = int(255 * (1.0 - (shown - 1 - k) / float(tail)))
+            fd.ellipse([x-3, y-3, x+3, y+3], fill=(g, g, g))
+        caption(f, "Localisation \u00b7 every LED lit alone, measured, plotted",
+                "%d of %d \u00b7 the line is the wire" % (shown, len(rows)))
+        f.save(os.path.join(tmp, "%06d.jpg" % (start + frames)), quality=90)
+        frames += 1
+    # hold the finished map
+    caption(canvas, "Localisation \u00b7 every LED lit alone, measured, plotted",
+            "%d positions. This is the map." % len(rows))
+    for i in range(int(fps * 3.0)):
+        canvas.save(os.path.join(tmp, "%06d.jpg" % (start + frames + i)), quality=92)
+    return start + frames + int(fps * 3.0), len(rows)
+
+
+def build_explainer(tmp, fps, cal=CAL):
+    """The calibration, told in the order it happened.
+
+    Four acts, and the first one is the whole argument: the CAD knows
+    where the pockets are, the camera knows where the LEDs are, and
+    the difference is why any of this exists.
+    """
+    n = 0
+    n = title_card("Where are the LEDs?",
+                   "The CAD knows where the pockets are. It does not know "
+                   "where the LEDs ended up.", int(fps * 2.6), tmp, n)
+    n = title_card("One at a time",
+                   "622 LEDs, each lit alone in a dark room, each measured.",
+                   int(fps * 2.4), tmp, n)
+
+    n, nled = trace_map(tmp, n, fps, cal)
+    print("  plotted %d measured positions" % nled)
+
+    bars = sorted(glob.glob(os.path.join(cal, "baralign", "s*.jpg")))
+    if bars:
+        n = title_card("Is the map straight?",
+                       "A flat bar swept down it. Differential, so the "
+                       "diffusion does not matter.", int(fps * 2.4), tmp, n)
+        n, _ = add_frames(bars, "Alignment \u00b7 a straight bar swept down the map",
+                          3, tmp, n, True, "step %d of %d")
+
+    rev = sorted(glob.glob(os.path.join(cal, "review", "*_[0-9].jpg")))
+    if rev:
+        n = title_card("Then every effect, on the helmet",
+                       "Frozen at a chosen moment and differenced against "
+                       "the dark, so only the LEDs remain.",
+                       int(fps * 2.4), tmp, n)
+        if len(rev) > 320:
+            step = len(rev) / 320.0
+            rev = [rev[int(i * step)] for i in range(320)]
+        n, _ = add_frames(rev, "Presets \u00b7 photographed one by one", 4, tmp,
+                          n, True, "frame %d of %d")
+
+    n = title_card("vortex1.dev/mau5-simulator.html",
+                   "All of it runs in a browser \u00b7 "
+                   "github.com/vortexcodes/deadmau5-helmet",
+                   int(fps * 3.2), tmp, n)
+    return n
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -162,6 +317,10 @@ def main(argv=None):
                     help="subset of: " + ", ".join(a[0] for a in ACTS))
     ap.add_argument("--no-level", dest="level", action="store_false", default=True)
     ap.add_argument("--max-per-act", type=int, default=700)
+    ap.add_argument("--explain", action="store_true",
+                    help="build the calibration explainer: the localisation "
+                         "pass accumulated so the helmet draws itself, then "
+                         "the bar sweep, then the presets")
     ap.add_argument("--keep-above", type=float, default=25.0,
                     help="on the night act, drop a frame with less than this "
                          "left once the static room is subtracted")
@@ -196,6 +355,16 @@ def main(argv=None):
             ("review",      sorted(glob.glob(ACTS[3][1])), ACTS[3][2], 4,
              "frame %d of %d", None),
         ]
+        if a.explain:
+            n = build_explainer(tmp, a.fps)
+            print("  %d frames -> %.0fs at %d fps" % (n, n / float(a.fps), a.fps))
+            cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                   "-framerate", str(a.fps), "-i", os.path.join(tmp, "%06d.jpg"),
+                   "-vf", "format=yuv420p", "-c:v", "libx264", "-crf", "23",
+                   "-movflags", "+faststart", a.out]
+            subprocess.run(cmd, check=True)
+            print("\n%s  (%.1f MB)" % (a.out, os.path.getsize(a.out) / 1e6))
+            return 0
         n = title_card("deadmau5 helmet", "622 LEDs, mapped and tested", 45, tmp, n)
         for name, files, cap, hold, sub, bg in plan:
             if name not in want or not files:
