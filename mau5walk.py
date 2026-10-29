@@ -32,7 +32,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

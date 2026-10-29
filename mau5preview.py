@@ -15,7 +15,6 @@ preview of crisp dots would flatter effects that will actually smear.
 from __future__ import annotations
 
 import argparse
-import math
 import os
 import subprocess
 import tempfile

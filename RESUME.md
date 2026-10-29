@@ -1,6 +1,73 @@
-# Where things stand (2026-10-29, 02:00)
+# Where things stand (2026-10-29, afternoon)
 
-## The shows follow the music now
+## The map is built from the CAD now
+
+The side view was wrong, and the reason was worse than the ears. The
+shell positions labelled `cad` were not the CAD: an earlier fix had
+slid every LED along the sphere onto its own front-camera ray, which
+fits that camera to 0.02 px by construction and put most LEDs between
+slots, up to 113 mm off at the edges. The ears were one flat sheet.
+
+`mau5slots.py` replaces all of it. Positions only come from the CAD;
+the two camera poses decide which slot. It aligns the chain to the
+CAD's wiring order allowing empty slots and never reusing one, and
+from the CAD alone it gets:
+
+- 398 shell LEDs in 398 distinct slots, one empty (top of B04)
+- the strips at both ear mounts wired out of CAD order, mirror images
+- each camera alone, start to finish: the same 398 slots
+- 2 px error where a camera sees an LED square-on (was 15)
+- 67 of 68 strip boundaries exactly where the hand walk put them
+
+The shell is **398** LEDs, not 399, and the left ear starts at 398.
+`power.json`, the docs and the tests all say so now. The ears sit
+where the CAD puts them -- a daylight photo from the high pose lines
+up with the CAD outline -- and the cameras only choose where along
+which tube each LED is.
+
+Rebuild with `python3 mau5slots.py` after any new camera run.
+Superseded and removed: `mau5fitmap`, `mau5stereo`, `mau5gaps`.
+
+## Start plays the song
+
+Starting a show used to light the helmet in silence. Now it plays the
+song: the first time, it asks for the file and keeps it in the
+browser's IndexedDB under the show's name; after that, start just
+plays it. "Lights only" runs a show silently on purpose. The website
+simulator does the same.
+
+**Not on the controller yet.** Deploy when on the home network:
+
+    python3 mau5offline.py deploy --host 192.168.10.172
+
+## The simulator matches the website
+
+Restyled with the site's own tokens and title blocks, and it draws
+the helmet's CAD around the LEDs. Built by `python3 mau5web.py --into
+<site checkout>`.
+
+## The film
+
+`python3 mau5film.py` renders a ninety-second explanation of the
+localisation from the data, in the site's style, to
+`data/cal/localisation.mp4` (not committed -- it is 15 MB and
+regenerable). It is on the project page.
+
+## Power guard: no more silent "no guard"
+
+A missing `power.json` used to mean an unguarded helmet: `load()`
+returned None and every caller read that as "no limit". A missing file
+now gives a deliberately timid guard (300 mA, an eighth of full
+drive), and a broken one raises instead of being ignored.
+
+## One camera angle would still help
+
+The photo suggests the left ear is turned a few degrees further than
+the CAD. The cameras cannot settle that -- they are calibrated on the
+shell and the ear glows are diffuse -- but a pose from the side,
+45 degrees or more off the face, would. Nothing is blocked on it.
+
+## The shows follow the music
 
 Jones lifted the power rule: peaks may go up for effects and shows,
 as long as nothing stays raised for ten minutes or more. That is a
@@ -42,84 +109,6 @@ Every show peaks at exactly 1000 mA, which is `budget_ma`, not the
 thermal bucket. Raising it needs the controller's per-bus ABL raised
 to match, so it waits for hardware access.
 
-## The ears are wrong by three LED pitches, and now it is measured
-
-Independent of any triangulation, and the cleanest number yet. Solve
-each camera against the shell, project the map's own positions, and
-compare with where that camera actually saw each LED. One LED pitch
-is 16.7 mm:
-
-| | shell | ear1 | ear2 |
-|---|---|---|---|
-| pose 1 (the view the ears were fitted from) | 0.5 mm | 13.2 mm | 10.4 mm |
-| pose 2 (had no part in making the map) | **4.7 mm** | **47.4 mm** | **59.5 mm** |
-
-Pose 1 cannot fail on the ears, because they were derived from it,
-and it is still off by most of a pitch. Pose 2 never saw the map
-being made: the shell comes back to a third of a pitch and the ears
-to **three pitches**. That is the "ears are funky" complaint, with a
-number on it.
-
-It agrees with the triangulation, which independently put the ears
-50-60 mm from where the map has them. Two methods, same magnitude.
-The *direction* is still not measurable -- see below.
-
-`python3 mau5stereo.py --pose2 data/cal/led_positions_pose4.csv`
-prints this table every time now.
-
-## The camera angle I need next: from the side
-
-Two poses now exist -- the old low one and last night's high, close
-one -- and `mau5stereo.py` triangulates every LED seen from both,
-with no model of the ear anywhere in it. It works: the shell, whose
-positions are CAD-exact, comes back to **4.8 mm median** against a
-16.7 mm LED pitch.
-
-It still cannot measure the ear tilt, and the tool now says so
-itself. Solving both cameras twice -- once from the even shell LEDs,
-once from the odd -- and triangulating with each gives:
-
-    ear1 tilt: +30.4 from one half, -35.5 from the other  -> DISAGREE by 66 deg
-    ear2 tilt: -23.3 from one half, +19.7 from the other  -> DISAGREE by 43 deg
-
-That is not a measurement. The reason is geometric and no amount of
-care fixes it: **both poses look at the helmet from the front.**
-Triangulating depth needs a baseline across the line of sight, and
-two front-on views have almost none, so depth -- and therefore the
-tilt of a disc, which is depth against x -- is unconstrained.
-
-**So: one pose from the side.** Forty-five degrees or more off the
-face, either side, roughly helmet height, with both ears still in
-frame. That single photograph set is what turns `DISC_TILT_DEG` from
-a guess into a number. Nothing else is blocked on it.
-
-What *is* established, and did not need the tilt:
-
-- Both ears are flat. Plane rms came out 5-10 mm on every variant
-  tried, which is well under an LED pitch.
-- The map's flat `y = 30.0` for every ear LED is wrong. Measured
-  depth spans tens of millimetres however the cameras are solved.
-- The two ears tilt in **opposite** directions, so a single global
-  `DISC_TILT_DEG` cannot be right whatever its value.
-
-Nothing has been written into the map. `data/cal/ears_stereo.csv`
-has the triangulated positions for inspection.
-
-### Two traps in here, both of which caught me
-
-`mau5locate` aborted twice saying the camera had drifted 200+ px. It
-had not. The fiducial was a single LED and its centroid occasionally
-landed on something else. Three fiducials and a similarity fit
-(`--track`) ran all 622 LEDs with 1 px of correction.
-
-Dropping the worst-fitting quarter of the calibration points,
-twice, walks the survivors onto a patch -- and a **coplanar** point
-set fits a 3x4 DLT *exactly*. Residual 0.000 px on 224 points, a
-beautiful-looking camera, and a shell check that reproduced the
-shell to 1.9 mm while proving nothing, because it was the same plane
-answering itself. There is now a spread guard that refuses to go
-there.
-
 ## The ear "line" is four lines, and they are the tubes
 
 Photographed at low level in a dark room: lighting the right ear
@@ -130,10 +119,8 @@ the pattern is purely where they physically are. Software cannot
 even it out; more distance between tube and diffuser, or a second
 diffuser layer, would.
 
-Worth knowing: the app icon, which is drawn from the LED map, renders
-the ears as radiating spokes. The photograph shows parallel stripes.
-Those disagree, and the stereo work above is what will settle it --
-from the side.
+The rebuilt map agrees with the photograph now: three tubes per ear,
+each run up and back, which is the parallel stripes.
 
 ## Reading the strip back: one warning
 
@@ -144,59 +131,6 @@ hour and produced two confident, wrong conclusions about the wire
 protocol, both of which evaporated when the tab was closed. Before
 believing a reading, check `ws` in `/json/info` -- it is the number of
 WebSocket clients, and it should be 1 (yours).
-
-## Shows run offline now
-
-The five cue lists are on the controller (27 kB). The analyses are not
--- two megabytes against nine hundred kilobytes free -- and turn out
-not to be needed: they existed to say where the beats and bands were,
-and the phone measures that from whatever it can hear.
-
-So: pick a show, start the track on whatever is playing it, tap
-**start** on the first beat. The cue list drives which effect is on
-screen; the room drives the brightness, the pulse and the overlays.
-The ported player matches `mau5show.Player` to **0.0005 counts out of
-255** across all five shows.
-
-What is lost is the clock -- nothing on the phone knows where in the
-track you are, so it is started by hand, which is how a lighting desk
-works anyway. If it drifts, tap stop and start again on a downbeat.
-
-## The track plays, and you can turn it up
-
-A show with no sound was half a show. The page now plays the track
-itself: tap **play the track** in the show panel, pick the mp3 off the
-phone, and the audio element becomes the clock, the volume control and
-the scrub bar at once. Picking a file called "deadmau5 - Strobe.mp3"
-selects the Strobe show by itself.
-
-The clock is read from the audio element rather than from a wall clock
-started by hand, so it cannot drift from what the room hears, and
-pause and seek work for nothing. Verified: pause holds the show at
-0:02 across three seconds, resume advances it, volume takes.
-
-The five tracks have to be *on the phone* -- 61 MB of mp3 will not fit
-on a controller with 900 kB. Copy them across once.
-
-## Audio from another app
-
-There is no way for a web page to tap another app's audio on a phone.
-No browser offers one, on Android or iOS. What works is the
-**microphone hearing the speaker** -- which does follow Spotify, and
-is what the page offers.
-
-The microphone needs a secure origin and the controller cannot be
-one. Two ways round it, both now in the page's own text:
-
-- **Android Chrome:** put `http://192.168.10.172` (and the AP address)
-  into `chrome://flags/#unsafely-treat-insecure-origin-as-secure`,
-  restart Chrome. Then the microphone works on the offline page.
-- **With the laptop there:** `python3 mau5offline.py serve --host
-  192.168.10.172 --tls` serves the same page over https and forwards
-  the pixels. Verified working and reaching the helmet.
-
-On a desktop there is also **what's playing**, which uses
-`getDisplayMedia` to follow a shared tab. Phones do not offer it.
 
 ## Frame rate
 
@@ -231,28 +165,6 @@ re-running the localisation cannot silently discard them. Verified:
 the tool lights exactly the LEDs it claims, corrections reach the
 map, and undo restores it byte-exactly.
 
-## Not done -- the camera never came back up
-
-The camera page stopped pushing at about 08:00 and was still stale at
-17:30, so none of the camera work happened:
-
-- the second pose (the new high, close one) to validate the shell
-  correction non-circularly and measure `DISC_TILT_DEG`
-- re-running `mau5baralign.py`
-- the ears
-
-To restart it: open `http://192.168.10.225:8752/` on whichever device
-the camera is and tap START CAMERA. Then `curl -s
-http://127.0.0.1:8752/api/status` should show an age of a second or
-two rather than hours.
-
-**One camera question is now sharper than it was.** The brightness
-limiter does not clamp pixels painted into a frozen segment -- that
-rests on `/json/info` reporting a flat idle 120 mA while the page
-paints a full rainbow, which is strong but indirect. Photographing
-the same frame at a bus cap of 1622 and of 400 settles it in one
-shot.
-
 ## Still open from before
 
 The GPIO 18 relay: 622 WS2815s draw ~0.6 A whenever 12 V reaches
@@ -265,3 +177,4 @@ the API so nothing here can tell. At a show that is the password to
 the helmet:
 
     python3 mau5offline.py config --host 192.168.10.172 --ap-ssid mau5head --ap-psk '<pick one>' --apply
+

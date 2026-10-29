@@ -494,6 +494,36 @@ def t_connector_limit():
        "a generous connector should not hold the frame back")
 
 
+def t_power_failsafe():
+    """No profile must never mean no limit.
+
+    It did: load() returned None for a missing file, and every caller
+    took None as "unguarded", so deleting one JSON file gave a helmet
+    with nothing between a white frame and 11.8 A.  A missing profile
+    is now timid, a broken one is an error, and save() round-trips
+    every field the guard reads.
+    """
+    import contextlib, io, tempfile, mau5power
+    with contextlib.redirect_stderr(io.StringIO()):
+        g = mau5power.load(os.path.join(tempfile.mkdtemp(), "none.json"), count=622)
+    ok(g is not None, "a missing profile gave no guard at all")
+    _, rep = g.apply(np.full((622, 3), 255, np.uint8))
+    ok(rep["sent_ma"] <= 300.5, "the timid guard let %.0f mA through" % rep["sent_ma"])
+    bad = os.path.join(tempfile.mkdtemp(), "bad.json")
+    open(bad, "w").write("{not json")
+    try:
+        mau5power.load(bad)
+        ok(False, "a broken profile loaded silently")
+    except ValueError:
+        pass
+    real = mau5power.load()
+    rt = os.path.join(tempfile.mkdtemp(), "rt.json")
+    mau5power.save(real, rt)
+    back = mau5power.load(rt)
+    eq([r.floor for r in back.regions], [r.floor for r in real.regions], "floors lost in a save")
+    eq(back.link_ma, real.link_ma, "link_ma lost in a save")
+
+
 def t_power_regions():
     """The power profile's regions must be the map's regions.
 
@@ -1355,7 +1385,7 @@ GROUPS = {
             t_map_adjustments],
     "presets": [t_presets, t_preset_params, t_text_bitmap, t_accepts],
     "power": [t_power_budget, t_power_board_limit, t_guard_in_send,
-              t_thermal, t_thermal_never_exceeds, t_power_regions,
+              t_thermal, t_thermal_never_exceeds, t_power_regions, t_power_failsafe,
               t_floor_holds_the_shape, t_connector_limit,
               t_off_does_not_stream_black],
     "colour": [t_colour_correction],

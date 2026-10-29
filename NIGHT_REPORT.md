@@ -1,3 +1,7 @@
+> A report from the night of 2026-10-26/27, kept as it was written.  Parts of it
+> were superseded later -- the map in particular is now built by `mau5slots.py`,
+> and the shell is 398 LEDs, not 399.  RESUME.md is the current state.
+
 # Overnight build — 27 Oct 2026
 
 *Second pass: test suite, bug fixes, 12 more presets, measured beat-sync correction, favourites, watchdog, health check.*

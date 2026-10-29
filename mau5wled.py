@@ -250,27 +250,32 @@ class Pixels:
             # Measured colour-order corrections, loaded here for the same
             # reason as the power guard: every frame goes through send(),
             # and a tool that forgot would render both ear rims green.
-            try:
-                import json as _json
-                _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                  "data", "cal", "strips.json")
-                if os.path.exists(_p):
+            _p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "data", "cal", "strips.json")
+            if os.path.exists(_p):
+                try:
+                    import json as _json
                     self.set_strips(_json.load(open(_p))["strips"])
-            except Exception:
-                pass
+                except (ValueError, KeyError, TypeError, WLEDError) as e:
+                    # Say so: the symptom is green where red was asked
+                    # for, which looks like a wiring fault, not a file.
+                    import sys
+                    print("mau5wled: %s could not be applied (%s) -- the ear "
+                          "rims will show the wrong colours" % (_p, e),
+                          file=sys.stderr)
         # Thermal clamp.  Loaded here rather than left to each caller,
         # because every frame reaching the helmet goes through send()
         # and a tool that forgot to apply it would melt hot glue.
+        # A broken profile raises from here on purpose.  It used to be
+        # caught and turned into "no guard", which is the one outcome
+        # this exists to prevent.
         if guard is False:                  # explicit opt-out
             self.guard = None
         elif guard is not None:
             self.guard = guard
         else:
-            try:
-                import mau5power
-                self.guard = mau5power.load(count=self.count)
-            except Exception:
-                self.guard = None
+            import mau5power
+            self.guard = mau5power.load(count=self.count)
         self.last_power = None
         self.last_sent = np.zeros((self.count, 3), np.uint8)
 
@@ -379,6 +384,11 @@ class Streamer:
         self._lock = threading.Lock()
         self._stop = False
         self.last_power = None
+        # A send that fails keeps failing quietly in a background thread,
+        # and the helmet just goes back to its own effect.  So the last
+        # failure is kept, counted, and reported the first time.
+        self.errors = 0
+        self.last_error = None
         self._t = threading.Thread(target=self._run, daemon=True)
         self._t.start()
 
@@ -396,8 +406,13 @@ class Streamer:
             try:
                 self.pix.send(b)
                 self.last_power = self.pix.last_power
-            except Exception:
-                pass
+            except OSError as e:          # the network, not the program
+                if not self.errors:
+                    import sys
+                    print("mau5wled: sending to %s failed (%s); still trying"
+                          % (self.pix.host, e), file=sys.stderr)
+                self.errors += 1
+                self.last_error = e
             time.sleep(self.period)
 
     def stop(self):

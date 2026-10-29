@@ -95,11 +95,8 @@ class Controller:
         # every bright preset and be useless for judging one.
         self.guard = pix.guard if pix is not None else None
         if self.guard is None:
-            try:
-                import mau5power
-                self.guard = mau5power.load(count=self.h.n)
-            except Exception:
-                self.guard = None
+            import mau5power
+            self.guard = mau5power.load(count=self.h.n)
         self.last_frame = np.zeros((self.h.n, 3), np.uint8)
         self._t0_sim = 0.0
         self._output_on = None

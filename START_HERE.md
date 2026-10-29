@@ -4,7 +4,7 @@
 git clone https://github.com/vortexcodes/deadmau5-helmet.git
 cd deadmau5-helmet
 python3 -m pip install numpy pillow matplotlib
-python3 -m pytest test_mau5.py -q               # 25 tests, no hardware needed
+python3 test_mau5.py                            # 41 checks, no hardware needed
 ```
 
 Then start Claude Code in that folder.
@@ -45,10 +45,12 @@ about 280 MB, all of it regenerable in a few minutes with `mau5locate.py`
 and `mau5review.py`. The calibration *results* are committed, and those
 are the part that took the night:
 
-    data/cal/pixel_map.csv      the 622-LED map
-    data/cal/led_positions.csv  what the camera measured
-    data/cal/power.json         regions, ceilings, thermal budget
-    data/cal/strips.json        the measured colour-order corrections
+    data/cal/pixel_map.csv            the 622-LED map (built by mau5slots.py)
+    data/cal/led_positions.csv        what the front camera measured
+    data/cal/led_positions_pose4.csv  what the high camera measured
+    data/cal/walk_session.json        the hand walk from the first night
+    data/cal/power.json               regions, ceilings, thermal budget
+    data/cal/strips.json              the measured colour-order corrections
 
 Losing those means re-running the localisation. Losing the photographs
 means nothing.

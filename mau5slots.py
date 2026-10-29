@@ -758,9 +758,12 @@ def main(argv=None):
         "cameras": {k: M.tolist() for k, M in cams.items()},
         "residuals": rep,
     }
-    with open(REPORT, "w") as f:
+    # beside the map it describes, so a trial run elsewhere does not
+    # overwrite the report for the real one
+    rep_path = os.path.join(os.path.dirname(os.path.abspath(a.out)), os.path.basename(REPORT))
+    with open(rep_path, "w") as f:
         json.dump(report, f, indent=1)
-    print("\nwrote %s and %s" % (os.path.relpath(a.out, HERE), os.path.relpath(REPORT, HERE)))
+    print("\nwrote %s and %s" % (os.path.relpath(a.out, HERE), os.path.relpath(rep_path, HERE)))
     return rows
 
 

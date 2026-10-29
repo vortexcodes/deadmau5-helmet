@@ -329,14 +329,40 @@ class PowerGuard:
 
 
 # ----------------------------------------------------------------------
+def timid(count):
+    """The guard to use when there is no measured profile.
+
+    Every LED at an eighth of full drive, 300 mA of LED current in all
+    and a thermal bucket a tenth the size of the measured one.  Dim, but
+    nothing it can be asked to show will hurt the helmet, which is the
+    point: this used to return None, every caller took None to mean "no
+    guard", and a missing file therefore meant an unlimited helmet.
+    """
+    return PowerGuard(count, [Region("all", 0, count - 1, 32, 300.0)], 300.0,
+                      default_ceiling=32,
+                      thermal=ThermalBudget(9.0, 300.0, 12.0, count * 0.012, 0.30))
+
+
 def load(path=DEFAULT, count=None):
-    """Read a power profile.  Missing file -> a deliberately timid one."""
+    """Read a power profile.  Missing file -> a deliberately timid one.
+
+    A file that is there but unreadable is an error, raised, not a
+    reason to fall back: the fallback is dimmer than any real profile,
+    so a typo would look like a dull helmet rather than a broken file.
+    """
     if not os.path.exists(path):
-        return None
-    d = json.load(open(path))
-    regions = [Region(r["name"], r["lo"], r["hi"], r["ceiling"],
-                      r["budget_ma"], r.get("shed", 1.0), r.get("floor", 0.0))
-               for r in d["regions"]]
+        import sys
+        print("mau5power: no profile at %s -- using a deliberately timid one"
+              % path, file=sys.stderr)
+        return timid(count or 622)
+    try:
+        d = json.load(open(path))
+        regions = [Region(r["name"], r["lo"], r["hi"], r["ceiling"],
+                          r["budget_ma"], r.get("shed", 1.0), r.get("floor", 0.0))
+                   for r in d["regions"]]
+    except (ValueError, KeyError, TypeError) as e:
+        raise ValueError("power profile %s is unreadable (%s): fix it rather "
+                         "than run without one" % (path, e)) from e
     th = None
     if d.get("thermal"):
         t = d["thermal"]
@@ -351,6 +377,8 @@ def load(path=DEFAULT, count=None):
 def save(guard, path=DEFAULT):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     th = guard.thermal
+    # Every field load() reads, or a round trip quietly drops it: this
+    # used to lose each region's floor and the connector limit.
     json.dump({"count": guard.count, "budget_ma": guard.budget_ma,
                "default_ceiling": guard.default_ceiling,
                "thermal": ({"sustained_w": th.sustained_w, "burst_j": th.burst_j,
@@ -358,8 +386,9 @@ def save(guard, path=DEFAULT):
                             "ramp": th.ramp} if th else None),
                "regions": [{"name": r.name, "lo": r.lo, "hi": r.hi,
                             "ceiling": r.ceiling, "budget_ma": r.budget_ma,
-                            "shed": r.shed}
-                           for r in guard.regions]},
+                            "shed": r.shed, "floor": r.floor}
+                           for r in guard.regions],
+               "link_ma": guard.link_ma},
               open(path, "w"), indent=1)
     return path
 

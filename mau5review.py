@@ -36,7 +36,6 @@ from PIL import Image, ImageDraw
 
 import mau5engine as E
 import mau5eye
-import mau5map
 import mau5wled
 
 HERE = os.path.dirname(os.path.abspath(__file__))

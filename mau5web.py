@@ -46,7 +46,6 @@ def write_mesh(path):
     slot or tube it was mapped to.
     """
     import struct
-    import numpy as np
     import mau5slots
     V, F = mau5slots.load_mesh()
     if len(V) >= 65536:
@@ -104,6 +103,11 @@ def build(out=OUT, verbose=True):
                     os.path.join(out, "mau5-simulator.js"))
     shutil.copyfile(os.path.join(SRC_WEB, "simulator.html"),
                     os.path.join(out, "mau5-simulator.html"))
+    # The page is styled by the website's own stylesheet.  Served from
+    # here there is no website, so stand in for it with the live one;
+    # --into never copies this, because the site has the real thing.
+    with open(os.path.join(out, "site.css"), "w") as f:
+        f.write('@import url("https://vortex1.dev/site.css");\n')
     total += os.path.getsize(os.path.join(SRC_WEB, "simulator.js"))
     if verbose:
         print("  %s" % out)

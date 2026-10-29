@@ -32,7 +32,6 @@ from __future__ import annotations
 import colorsys
 import json
 import math
-import os
 
 import numpy as np
 

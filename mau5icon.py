@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse
 import os
 
-import numpy as np
 from PIL import Image, ImageDraw
 
 import mau5engine as E
