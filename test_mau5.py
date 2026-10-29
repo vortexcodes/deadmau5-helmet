@@ -1013,6 +1013,57 @@ def t_offline_oversize_is_caught():
     ok(f.px[0].max() == 0, "LED 0 should have gone dark")
 
 
+def t_map_adjustments():
+    """Hand corrections reach the map, and undo really undoes.
+
+    The point of keeping them in their own file is that re-running
+    the localisation must not discard them, so the thing to check is
+    that load() applies them and that removing one puts the map back
+    exactly -- not approximately, because a nudge that half survives
+    is worse than one that never applied.
+    """
+    import copy
+    import mau5map
+    base = mau5map.load(adjust=False)
+    raw = {r["index"]: (r["x"], r["z"]) for r in base}
+    want = {r["index"]: (round(r["x"], 4), round(r["z"], 4), r["region"])
+            for r in base}
+
+    rows = copy.deepcopy(base)
+    rows, done = mau5map.apply_adjustments(rows, path=os.devnull)
+    eq(len(done), 0, "a missing adjustments file should change nothing")
+
+    import tempfile
+    spans = {"spans": [
+        {"op": "move", "lo": 10, "hi": 12, "dx": 5.0, "dz": -2.0},
+        {"op": "region", "lo": 399, "hi": 406, "to": "ear1_cross"},
+        {"op": "reverse", "lo": 20, "hi": 25},
+        {"op": "shift", "lo": 30, "hi": 35, "by": 1},
+    ]}
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(spans, f)
+        path = f.name
+    try:
+        rows = copy.deepcopy(base)
+        rows, done = mau5map.apply_adjustments(rows, path=path)
+        eq(len(done), 4, "all four corrections should have applied")
+        by = {r["index"]: r for r in rows}
+        ok(abs(by[10]["x"] - (raw[10][0] + 5.0)) < 1e-6, "move did not shift x")
+        ok(abs(by[10]["z"] - (raw[10][1] - 2.0)) < 1e-6, "move did not shift z")
+        eq(by[399]["region"], "ear1_cross", "region relabel did not apply")
+        ok(abs(by[20]["x"] - raw[25][0]) < 1e-6, "reverse did not swap the ends")
+        ok(abs(by[25]["x"] - raw[20][0]) < 1e-6, "reverse did not swap the ends")
+        ok(by[30]["x"] != raw[30][0], "shift left the span where it was")
+        # Everything outside the named spans must be untouched.
+        for i, w in want.items():
+            if 10 <= i <= 12 or 20 <= i <= 25 or 30 <= i <= 35 or 399 <= i <= 406:
+                continue
+            eq((round(by[i]["x"], 4), round(by[i]["z"], 4), by[i]["region"]), w,
+               "led %d moved and nothing asked it to" % i)
+    finally:
+        os.unlink(path)
+
+
 def t_offline_page_is_self_contained():
     """A page that fetches anything is a page that is blank at a show."""
     import mau5offline
@@ -1053,7 +1104,8 @@ def t_offline_limiter_matches_the_budget():
 
 
 GROUPS = {
-    "map": [t_map, t_frame, t_masks, t_strip_orientation, t_ears_match],
+    "map": [t_map, t_frame, t_masks, t_strip_orientation, t_ears_match,
+            t_map_adjustments],
     "presets": [t_presets, t_preset_params, t_text_bitmap, t_accepts],
     "power": [t_power_budget, t_power_board_limit, t_guard_in_send,
               t_thermal, t_thermal_never_exceeds, t_power_regions,

@@ -29,6 +29,7 @@ output so nothing downstream mistakes them for measurements.
 from __future__ import annotations
 
 import csv
+import json
 import math
 import os
 
@@ -200,13 +201,100 @@ def build(meas=None, verbose=True):
     return rows, flips
 
 
-def load(path=OUT):
+ADJUST = os.path.join(os.path.dirname(OUT), "adjust.json")
+
+
+def apply_adjustments(rows, path=ADJUST):
+    """Hand corrections, applied on top of the measured map.
+
+    The camera gets the shell right and gets most of the ears right,
+    and the parts it does not get right are the parts nobody can
+    photograph: a strip crossing a gap edge-on, a run whose LEDs were
+    cut out around a magnet, a disc whose tilt a single pose cannot
+    see.  Those are visible to somebody standing in front of the
+    helmet in about two seconds, and `mau5lines.py` is how that person
+    writes down what they saw.
+
+    Kept as a separate file rather than edited into pixel_map.csv so
+    that re-running the localisation does not quietly discard them,
+    and so that what was measured and what was judged by eye stay
+    told apart.  Applied in order; later entries see earlier ones.
+
+      move     add (dx, dy, dz) mm to the span's positions
+      reverse  turn the span's positions end for end
+      shift    take each LED's position from `by` places further
+               along its own strip -- the correction for LEDs cut
+               out of a run, where the chain does not skip but the
+               geometry does
+      region   relabel the span, for a run that is not on the
+               surface it was filed under
+    """
+    if not os.path.exists(path):
+        return rows, []
+    try:
+        with open(path) as f:
+            doc = json.load(f)
+    except (ValueError, OSError):
+        # An empty or half-written file must not take the map with it:
+        # this is read by everything, including the show player.
+        return rows, []
+    done = []
+    for a in doc.get("spans", []):
+        lo, hi = int(a["lo"]), int(a["hi"])
+        span = [r for r in rows if lo <= r["index"] <= hi]
+        if not span:
+            continue
+        op = a.get("op")
+        if op == "move":
+            for r in span:
+                r["x"] += float(a.get("dx", 0.0))
+                r["y"] += float(a.get("dy", 0.0))
+                r["z"] += float(a.get("dz", 0.0))
+        elif op == "reverse":
+            pts = [(r["x"], r["y"], r["z"]) for r in span][::-1]
+            for r, p in zip(span, pts):
+                r["x"], r["y"], r["z"] = p
+        elif op == "shift":
+            by = int(a.get("by", 0))
+            for g in set(r["group"] for r in span):
+                strip = [r for r in rows if r["group"] == g]
+                strip.sort(key=lambda r: r["pos_in_strip"])
+                pts = [(r["x"], r["y"], r["z"]) for r in strip]
+                at = {r["index"]: i for i, r in enumerate(strip)}
+                for r in span:
+                    if r["group"] != g:
+                        continue
+                    j = min(max(at[r["index"]] + by, 0), len(pts) - 1)
+                    r["x"], r["y"], r["z"] = pts[j]
+        elif op == "region":
+            for r in span:
+                r["region"] = str(a["to"])
+        else:
+            continue
+        done.append(a)
+    if done:
+        _rederive(rows)
+    return rows, done
+
+
+def _rederive(rows):
+    """az and elev follow from x, y, z, so a moved LED has to redo them."""
+    for r in rows:
+        x, y, z = r["x"], r["y"], r["z"]
+        r["az_deg"] = round(math.degrees(math.atan2(x, -y)) % 360.0, 2)
+        rad = math.hypot(x, y)
+        r["elev_deg"] = round(math.degrees(math.atan2(z, rad or 1e-9)), 2)
+
+
+def load(path=OUT, adjust=True):
     rows = list(csv.DictReader(open(path)))
     for r in rows:
         for k in ("x", "y", "z", "az_deg", "elev_deg", "u"):
             r[k] = float(r[k])
         for k in ("index", "group", "pos_in_strip", "swap_rg"):
             r[k] = int(r[k])
+    if adjust:
+        rows, _ = apply_adjustments(rows)
     return rows
 
 

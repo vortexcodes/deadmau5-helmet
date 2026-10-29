@@ -548,11 +548,66 @@ to read the FSEQ, keep a frame clock locked to its own audio playback, and
 push DDP. That is the next build, and it is a real one. Until it exists, the
 mini can play shows the same way for testing.
 
+## Reading the strip back
+
+Everything else that drives the helmet is open loop: a frame goes out
+and whether it arrived is a matter of belief, or of pointing a camera
+at it and hoping the room is dark. WLED will simply tell you. Its web
+UI has a live preview fed by a WebSocket, and `mau5peek.py` asks the
+same question from a script:
+
+```bash
+python3 mau5peek.py --host 192.168.10.172 --watch 10
+```
+
+It returns the colour of every LED as the strip is driving it. No
+camera, no dark room, nothing to calibrate. Four separate things
+about offline mode turned out to be wrong the first time it ran on
+real hardware, and none of them could have been found any other way:
+each one failed by sending successfully and changing nothing.
+
+## Checking the map by eye, line by line
+
+The camera settled where 622 LEDs are and is right about nearly all
+of them. What it cannot settle is the handful it never saw properly:
+a strip crossing a gap edge-on, a run with LEDs cut out around a
+visor magnet, a disc whose tilt one pose cannot measure. Those are
+invisible to a solver and obvious to somebody standing in front of
+the helmet.
+
+```bash
+python3 mau5lines.py --host 192.168.10.172
+```
+
+Open the printed address on a phone. It lights one line at a time --
+a vertical band across the face by default, or horizontal, or by
+depth, or one strip or one chain run -- and draws, next to it, where
+the map thinks those LEDs are. Two pictures of the same claim, one on
+the helmet and one in your hand. Where they disagree, the
+disagreement is the finding.
+
+Four corrections, which between them cover everything that has
+actually been wrong here:
+
+| | what it means |
+|---|---|
+| move | the span sits somewhere else: nudge it in millimetres |
+| shift | LEDs were cut out of this run, so everything after the cut is a pitch or more further along than the map believes |
+| reverse | the strip is wired the other way round |
+| region | this run is not on the surface it was filed under |
+
+They are written to `data/cal/adjust.json`, which `mau5map.load()`
+applies on top of the measured map. Nothing edits `pixel_map.csv`:
+re-running the localisation must not quietly discard what somebody
+saw, and what was measured should stay told apart from what was
+judged by eye. Undo removes the last correction and puts the map back
+exactly.
+
 ## Offline mode: the helmet with no network and no laptop
 
 At a show there is no house WiFi worth trusting and no reason to be carrying
 the laptop. The helmet brings up its own access point, the phone joins it,
-opens one page, and all 34 animations run with nothing else involved.
+opens one page, and all 37 animations run with nothing else involved.
 
 ```bash
 python3 mau5offline.py build              # make the page, no hardware needed
@@ -604,30 +659,42 @@ Python and read back as typed arrays, so the port cannot disagree about where
 an LED is, only about what colour to paint it, which is the part that is
 tested.
 
-### The wire
+### The wire, as measured
 
-WLED's individual-LED syntax, `{"seg":{"i":[…]}}`, over the WebSocket when the
-build has one and plain POSTs when it does not. Only what changed is sent and
-runs of one colour collapse to a range, which is the difference between 5.6 kB
-a frame and a mean of 1.0 kB. `solid` is 88 bytes; `fire`, the worst, is 3.6 kB.
+WLED's individual-LED syntax, `{"seg":{"i":[…]}}`, with runs of one colour
+collapsed to a range. **One message per frame, always the whole helmet.**
+
+That shape is forced, and it was arrived at the hard way: the first version
+sent deltas, split frames across messages and paced itself on
+acknowledgements, and every one of those was wrong about this firmware
+without once failing visibly. `mau5peek.py` is what found it, by reading the
+strip back instead of trusting the send. On WLED 0.15.4:
+
+* **An `i` write blanks the rest of the segment.** Write LEDs 0–99 and then
+  100–199 and only the second hundred is lit. A delta is therefore not an
+  optimisation, it is a frame with the rest of the helmet switched off.
+* **A WebSocket message that does not fit one TCP segment is dropped in
+  silence.** 1428 bytes lands, 1448 does not, and the MSS is 1436. The send
+  succeeds and the pixels never change.
+* **An HTTP POST has no such limit.** A whole 622-LED frame goes in one 6.2 kB
+  request and arrives exactly — at the cost of a round trip.
+* **WLED does not echo an `i` write.** 665 pixel messages drew about six bytes
+  each back, so a credit window built on those replies stalls at two
+  outstanding messages and pins the player at 4 fps.
+
+So the transport is chosen by how big the frame came out. Fifteen of the 37
+presets encode under 1400 bytes and go by WebSocket, where frames apply
+correctly at **60 fps**; the rest go by POST at about **10**. Quantising
+colour to force more of them under the limit was measured too — it buys four
+presets for a visible cost, and was not taken.
+
+Because every frame is whole, a dropped message costs one frame and the next
+one is right again. There is no resync, and no belief about the controller's
+state left to go stale.
 
 Sending `i` puts the segment in WLED's freeze state, which is what stops the
-running effect painting over the frames. Three things follow from that:
-
-* **The parts of a frame accumulate**, so a frame too big for the firmware's
-  JSON buffer is split rather than dropped. Nothing is sent over 3000 bytes.
-* **Nothing acknowledges a frame.** WLED answers an HTTP post before parsing
-  the body and a WebSocket says nothing at all, so the player resends the
-  whole frame every two seconds; any LED left stale by a dropped message
-  rights itself within that.
-* **The last frame stays lit forever** if the phone goes away. Hence the dead
-  man below.
-
-The frame rate is measured, not declared. An ESP32 parsing JSON is the slow
-part of this system and how slow depends on the preset, so the player backs
-off when the controller refuses and creeps back up when it keeps up. Against a
-controller that takes 35 ms a message it settles at 17 fps; against one that
-takes 8 ms, 29.
+running effect painting over the frames — and means **the last frame stays
+lit forever** if the phone goes away. Hence the dead man below.
 
 ### Power, with the laptop gone
 
@@ -640,11 +707,20 @@ browser tab, so there are three:
    `heat` climb on the page and the current ration itself down from 1622 mA to
    about 1040 mA after a couple of minutes of something bright — that is the
    bucket filling, exactly as it does on the laptop.
-2. **WLED's own brightness limiter**, set by `mau5offline.py config` to the
-   same number, `budget + standby` mA at 19 mA per LED. A limiter a UI bug can
-   skip is not a limiter; this one runs on the controller, below anything the
-   page can reach, and it also covers the helmet being powered on with no
-   phone anywhere near it.
+2. **WLED's own brightness limiter**, set by `mau5offline.py config` to
+   `budget + standby` mA at 19 mA per LED — on the *bus*, which is the one
+   0.15 enforces; the global `hw.led.maxpwr` is accepted and ignored.
+
+   It does **not** cover the phone. WLED's current estimator does not count
+   pixels painted into a frozen segment — `/json/info` reports a flat idle
+   120 mA while the page paints a full rainbow — so the limiter it drives
+   does not clamp them either. It still covers everything the controller
+   renders itself, which is what a stray tap in WLED's own UI produces.
+
+   What actually holds the phone is the guard above it, and this: the region
+   ceilings sum to 1950 mA of LED current, against a supply the ramp test
+   took to 2200 mA with no fault. Even a pathological frame cannot ask for
+   more than the wiring has already been shown to give.
 3. **A dead man's handle.** The segment latches, so the player re-arms WLED's
    nightlight — instant mode, one minute — every twenty seconds. If the phone
    is dropped, locked or out of battery the helmet goes dark about a minute
@@ -655,10 +731,13 @@ browser tab, so there are three:
 
 `mau5fake.py` answers like the controller does and is deliberately strict
 where the firmware is strict: it refuses individual LED writes unless the
-segment is frozen, drops a message over its JSON buffer in silence, and
-broadcasts state back over the WebSocket the way WLED does. `--lag`,
-`--max-json`, `--no-ws`, `--no-ws-echo` and `--no-freeze` are there to make
-each of those failures happen on purpose.
+segment is frozen, **blanks the segment on every `i` write**, **drops a
+WebSocket message that would not fit one TCP segment**, and stays quiet on
+pixel writes the way WLED does. The first three of those were added after
+the real controller disagreed with it — the fake modelled none of them, and
+that is precisely why a player that showed a fifth of each frame passed
+every test. `--lag`, `--max-json`, `--no-ws`, `--no-ws-echo` and
+`--no-freeze` make the remaining failures happen on purpose.
 
 ```bash
 python3 mau5fake.py --lag 35 --max-json 3072   # a slow controller
@@ -668,6 +747,36 @@ python3 mau5fake.py --host 192.168.10.172      # the real one, via the laptop
 
 `/fake/view` draws the pixel buffer it was sent, which is the closest thing to
 looking at the helmet.
+
+### Audio from the phone
+
+The page can listen and drive the presets from what it hears.
+
+Pick a track with **play a track** and the phone plays it out loud and taps it
+on the way past, so the helmet reacts to exactly what the room hears with no
+latency to guess at. **listen** does the same from the microphone, where the
+browser allows one.
+
+What it measures, on a 50 Hz clock of its own so the numbers stay right when
+the link drags the render rate down: loudness with an auto-gain that tracks
+its own loud and quiet ends, log-spaced bands each normalised against its own
+history, a chroma circular mean for pitch, a spectral centroid, onsets by
+spectral flux and a tempo from the gaps between them.
+
+Two FFT windows, because the two questions want opposite things. Onsets want
+a short one; pitch wants a long one. At 44.1 kHz a 2048-point FFT has 21.5 Hz
+bins and a semitone at middle C is 15 Hz — measured, a 262 Hz tone spread
+across five pitch classes and read two semitones flat. 8192 points resolves a
+semitone down to about 90 Hz, at a window harmony does not move inside.
+
+Three presets are built to show it, and the older reactive ones (`eq`, `vu`,
+`beatpulse`, `heartbeat`) pick it up for free:
+
+| | |
+|---|---|
+| `spectrum` | bars across the face from the bands, hue from the pitch, and a peak cap that falls — the cap is what makes it readable, because a held peak is a *moving* edge and movement survives the diffusion where a gradient does not |
+| `pitchwheel` | the ears as a pitch wheel, one turn per octave, with the shell on the same hue |
+| `bloom` | rings running outward on the beat, hue from pitch pushed round as the spectrum brightens |
 
 ### What offline mode does not do
 
@@ -679,6 +788,15 @@ Nothing about the design prevents it; it is the next piece, not a limitation.
 
 **Anything with no phone at all.** Join the AP without opening the page and
 you get WLED's own effects, which still work and are a reasonable fallback.
+This controller also reports a PDM microphone of its own with sound
+processing running, so WLED's sound-reactive effects may work with no phone
+in the loop at all — nobody has checked whether it actually hears the room.
+
+**Live microphone on the page the controller serves.** `getUserMedia` needs a
+secure context and plain http is not one, so `navigator.mediaDevices` is
+absent rather than blocked. A track picked off the phone needs none of that
+and is the thing that works at a show; the page explains the two ways round
+it for the microphone.
 
 ### The thing most likely to go wrong at a show
 
