@@ -87,6 +87,34 @@ def bundle():
     return d
 
 
+def stamp(out):
+    """Put a content hash on every file the page loads.
+
+    GitHub Pages serves scripts with a four-hour max-age, so after a
+    deploy anybody who had the page open today gets the new HTML and
+    yesterday's JavaScript -- which here means the new page drawing the
+    old map, the very thing the deploy was meant to fix.  A query string
+    that changes with the contents makes each build fetch its own files.
+    """
+    import hashlib
+
+    def h(rel):
+        with open(os.path.join(out, rel), "rb") as f:
+            return hashlib.sha1(f.read()).hexdigest()[:10]
+
+    js = os.path.join(out, "mau5-simulator.js")
+    src = open(js).read()
+    src = src.replace("'mau5/%s'" % MESH, "'mau5/%s?v=%s'" % (MESH, h(os.path.join("mau5", MESH))))
+    with open(js, "w") as f:
+        f.write(src)
+    page = os.path.join(out, "mau5-simulator.html")
+    html = open(page).read()
+    for rel in ["mau5/data.js"] + ["mau5/" + p for p in PARTS] + ["mau5-simulator.js"]:
+        html = html.replace('src="%s"' % rel, 'src="%s?v=%s"' % (rel, h(rel)))
+    with open(page, "w") as f:
+        f.write(html)
+
+
 def build(out=OUT, verbose=True):
     os.makedirs(os.path.join(out, "mau5"), exist_ok=True)
     data = bundle()
@@ -109,6 +137,7 @@ def build(out=OUT, verbose=True):
     with open(os.path.join(out, "site.css"), "w") as f:
         f.write('@import url("https://vortex1.dev/site.css");\n')
     total += os.path.getsize(os.path.join(SRC_WEB, "simulator.js"))
+    stamp(out)
     if verbose:
         print("  %s" % out)
         print("    mau5/data.js          %7.1f kB  (%d presets, %d shows, %d LEDs)"
