@@ -1,57 +1,72 @@
-# Where things stand (2026-10-28, evening)
+# Where things stand (2026-10-29, 02:00)
 
-Both of the things that were asked for on the day are done and were
-checked against the helmet, not against a simulator.
+## The camera angle I need next: from the side
 
-## Offline mode works, and four things about it were wrong
+Two poses now exist -- the old low one and last night's high, close
+one -- and `mau5stereo.py` triangulates every LED seen from both,
+with no model of the ear anywhere in it. It works: the shell, whose
+positions are CAD-exact, comes back to **4.8 mm median** against a
+16.7 mm LED pitch.
 
-`mau5peek.py` is new and is why. It opens WLED's own live-preview
-socket and reports the colour of every LED as the strip is driving
-it -- no camera, no dark room, nothing to calibrate. Every claim
-below was measured with it.
+It still cannot measure the ear tilt, and the tool now says so
+itself. Solving both cameras twice -- once from the even shell LEDs,
+once from the odd -- and triangulating with each gives:
 
-- **An `i` write blanks the rest of the segment.** Deltas were
-  therefore a frame with most of the helmet switched off. Every frame
-  now goes whole, in one message.
-- **A websocket message over one TCP segment is dropped in silence.**
-  1428 bytes lands, 1448 does not. The player's limit was 3000. HTTP
-  has no such limit, so the transport is now chosen by frame size:
-  15 of 37 presets fit the websocket and run at 60 fps, the rest go
-  by POST at about 10.
-- **WLED does not echo an `i` write**, so the ack-based pacing had
-  two messages permanently outstanding and sat at 4 fps.
-- **The brightness limiter was set on the wrong key.** `hw.led.maxpwr`
-  is accepted and ignored by 0.15; the per-bus one is enforced and
-  reserves a milliamp per LED, so the cap is the budget including
-  standby. It does **not** cover the phone -- the estimator does not
-  count pixels painted into a frozen segment. What actually holds is
-  that the region ceilings sum to 1950 mA against a supply proven to
-  2200.
+    ear1 tilt: +30.4 from one half, -35.5 from the other  -> DISAGREE by 66 deg
+    ear2 tilt: -23.3 from one half, +19.7 from the other  -> DISAGREE by 43 deg
 
-Verified end to end: a frame sent by the page's own JavaScript, read
-back off the strip, 622 of 622 LEDs exact on both transports.
+That is not a measurement. The reason is geometric and no amount of
+care fixes it: **both poses look at the helmet from the front.**
+Triangulating depth needs a baseline across the line of sight, and
+two front-on views have almost none, so depth -- and therefore the
+tilt of a disc, which is depth against x -- is unconstrained.
 
-    python3 mau5offline.py check --host 192.168.10.172
+**So: one pose from the side.** Forty-five degrees or more off the
+face, either side, roughly helmet height, with both ears still in
+frame. That single photograph set is what turns `DISC_TILT_DEG` from
+a guess into a number. Nothing else is blocked on it.
 
-## Audio from the phone
+What *is* established, and did not need the tilt:
 
-The page can play a track you pick and drive the presets off it:
-loudness with its own auto-gain, log-spaced bands, chroma for pitch,
-a spectral centroid, onsets and a tempo, all on a 50 Hz clock of
-their own. Three presets show it off -- `spectrum`, `pitchwheel`,
-`bloom` -- written in Python and ported, cross-checked like the rest.
+- Both ears are flat. Plane rms came out 5-10 mm on every variant
+  tried, which is well under an LED pitch.
+- The map's flat `y = 30.0` for every ear LED is wrong. Measured
+  depth spans tens of millimetres however the cameras are solved.
+- The two ears tilt in **opposite** directions, so a single global
+  `DISC_TILT_DEG` cannot be right whatever its value.
 
-**The microphone only works where the page is a secure context.** On
-the page the controller serves it is not: plain http means
-`navigator.mediaDevices` is absent, not blocked. The page says so and
-offers the two ways round it. A track off the phone needs none of
-this and is the thing that works at a show.
+Nothing has been written into the map. `data/cal/ears_stereo.csv`
+has the triangulated positions for inspection.
 
-**The controller has its own microphone.** `/json/info` reports
-`Audio Source: PDM digital`, `Sound Processing: running`, AGC 3.14x.
-Nobody has checked whether it actually hears the room. If it does,
-WLED's own sound-reactive effects work with no phone at all -- worth
-ten minutes.
+### Two traps in here, both of which caught me
+
+`mau5locate` aborted twice saying the camera had drifted 200+ px. It
+had not. The fiducial was a single LED and its centroid occasionally
+landed on something else. Three fiducials and a similarity fit
+(`--track`) ran all 622 LEDs with 1 px of correction.
+
+Dropping the worst-fitting quarter of the calibration points,
+twice, walks the survivors onto a patch -- and a **coplanar** point
+set fits a 3x4 DLT *exactly*. Residual 0.000 px on 224 points, a
+beautiful-looking camera, and a shell check that reproduced the
+shell to 1.9 mm while proving nothing, because it was the same plane
+answering itself. There is now a spread guard that refuses to go
+there.
+
+## The ear "line" is four lines, and they are the tubes
+
+Photographed at low level in a dark room: lighting the right ear
+alone shows four bright diagonal stripes with dark bands between
+them. That is the LED tubes showing through the diffuser, not a
+mapping fault -- every LED on the ear is lit in that photograph, so
+the pattern is purely where they physically are. Software cannot
+even it out; more distance between tube and diffuser, or a second
+diffuser layer, would.
+
+Worth knowing: the app icon, which is drawn from the LED map, renders
+the ears as radiating spokes. The photograph shows parallel stripes.
+Those disagree, and the stereo work above is what will settle it --
+from the side.
 
 ## Reading the strip back: one warning
 

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import time
 
@@ -75,6 +76,50 @@ def centroid(diff, frac=0.5, floor=10.0):
             "w": float(np.ptp(xs) + 1), "h": float(np.ptp(ys) + 1)}
 
 
+def similarity(src, dst):
+    """The rotation, scale and shift that best carries src onto dst.
+
+    Two points are enough -- four equations, four unknowns -- and
+    three are better.  Nothing here solves for perspective: a camera
+    that has slipped a little is, to the accuracy that matters over a
+    few hundred pixels, a picture that has moved, turned slightly and
+    changed size slightly.  A full homography from three points is
+    not determined anyway.
+    """
+    src = np.asarray(src, float)
+    dst = np.asarray(dst, float)
+    mu_s, mu_d = src.mean(0), dst.mean(0)
+    S, D = src - mu_s, dst - mu_d
+    cov = (D.T @ S) / len(src)
+    U, sv, Vt = np.linalg.svd(cov)
+    R = U @ Vt
+    if np.linalg.det(R) < 0:
+        U = U.copy(); U[:, -1] *= -1
+        R = U @ Vt
+    var = float((S ** 2).sum()) / len(src)
+    sc = float(sv.sum() / var) if var > 1e-9 else 1.0
+    t = mu_d - sc * (R @ mu_s)
+    return sc, R, t
+
+
+def apply_sim(sim, pt):
+    sc, R, t = sim
+    return tuple(sc * (R @ np.asarray(pt, float)) + t)
+
+
+def blend(a, b, k):
+    """Part way between two similarities, by angle rather than matrix."""
+    sa, Ra, ta = a
+    sb, Rb, tb = b
+    ang_a = math.atan2(Ra[1, 0], Ra[0, 0])
+    ang_b = math.atan2(Rb[1, 0], Rb[0, 0])
+    d = (ang_b - ang_a + math.pi) % (2 * math.pi) - math.pi
+    ang = ang_a + d * k
+    c, s_ = math.cos(ang), math.sin(ang)
+    return (sa + (sb - sa) * k, np.array([[c, -s_], [s_, c]]),
+            ta + (tb - ta) * k)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -92,6 +137,14 @@ def main(argv=None):
     ap.add_argument("--fiducial", type=int, default=25,
                     help="re-measure the first LED every N, to catch the "
                          "camera being nudged mid-run")
+    ap.add_argument("--track", action="store_true",
+                    help="follow the camera instead of stopping when it "
+                         "moves: several fiducials, re-measured as the run "
+                         "goes, and every centroid carried back into the "
+                         "frame the run started in")
+    ap.add_argument("--fid-leds", default=None,
+                    help="which LEDs to track by, comma separated.  The "
+                         "default spreads three across the range.")
     ap.add_argument("--max-drift", type=float, default=6.0,
                     help="stop if the fiducial moves this many pixels")
     a = ap.parse_args(argv)
@@ -134,6 +187,30 @@ def main(argv=None):
         fid_led = a.lo
         fid0 = None
         drift = []
+        # Tracking mode.  The abort above is the right answer when the
+        # camera is meant to be still and something knocked it; it is
+        # the wrong answer when the camera simply will not stay put,
+        # which is what a phone propped against a box does.  Measured
+        # on this one: 213 px of drift in five minutes, steadily.  So
+        # several fiducials are re-measured as the run goes and every
+        # centroid is carried back into the frame the run started in.
+        if a.fid_leds:
+            fids = [int(v) for v in a.fid_leds.split(",") if v.strip()]
+        else:
+            span = max(hi - a.lo, 3)
+            fids = sorted({a.lo, a.lo + span // 3, a.lo + 2 * span // 3})
+        fids = [f for f in fids if a.lo <= f <= hi]
+        base = {}                 # fiducial -> its position at the start
+        marks = []                # (n, similarity carrying now -> the start)
+        raw = {}                  # led -> (n, cx, cy), before correction
+
+        def read_fids():
+            got = {}
+            for f in fids:
+                c = measure(f)
+                if c is not None:
+                    got[f] = (c["cx"], c["cy"])
+            return got
 
         def measure(led):
             buf = np.zeros((a.count, 3), np.uint8)
@@ -146,7 +223,25 @@ def main(argv=None):
             return centroid(d)
 
         for n, led in enumerate(todo):
-            if n % a.fiducial == 0:
+            if a.track and n % a.fiducial == 0:
+                got = read_fids()
+                common = [f for f in fids if f in got and f in base]
+                if not base:
+                    base = got
+                    marks.append((n, (1.0, np.eye(2), np.zeros(2))))
+                    print("  tracking by LEDs %s" % fids)
+                elif len(common) >= 2:
+                    sim = similarity([got[f] for f in common],
+                                     [base[f] for f in common])
+                    marks.append((n, sim))
+                    sh = math.hypot(*sim[2])
+                    if sh > a.max_drift:
+                        print("  camera has moved; correcting (%.0f px, "
+                              "scale %.3f)" % (sh, sim[0]))
+                else:
+                    print("  only %d fiducials visible; no correction at %d"
+                          % (len(common), led))
+            elif not a.track and n % a.fiducial == 0:
                 c = measure(fid_led)
                 if c is not None:
                     if fid0 is None:
@@ -176,6 +271,8 @@ def main(argv=None):
                 misses.append(led)
             else:
                 c["index"] = led; c["level"] = a.level
+                if a.track:
+                    raw[led] = (n, c["cx"], c["cy"])
                 rows[led] = c
             if n % 10 == 9 or n == len(todo) - 1:
                 save(rows, a.out)
@@ -188,6 +285,22 @@ def main(argv=None):
                          rate, rate * (len(todo) - done)))
     finally:
         st.stop()
+        if a.track and len(marks) >= 1 and raw:
+            # Carry every centroid back into the starting frame, easing
+            # between the checkpoints either side of it rather than
+            # snapping at each one.
+            worst = 0.0
+            for led, (n, cx, cy) in raw.items():
+                before = [m for m in marks if m[0] <= n] or [marks[0]]
+                after = [m for m in marks if m[0] > n] or [marks[-1]]
+                n0, s0 = before[-1]
+                n1, s1 = after[0]
+                k = 0.0 if n1 == n0 else (n - n0) / float(n1 - n0)
+                x, y = apply_sim(blend(s0, s1, k), (cx, cy))
+                worst = max(worst, math.hypot(x - cx, y - cy))
+                rows[led]["cx"], rows[led]["cy"] = x, y
+            print("\n  tracked out up to %.0f px of camera movement across "
+                  "%d checkpoints" % (worst, len(marks)))
         save(rows, a.out)
     print("\nmeasured %d, missed %d %s" % (len(rows), len(misses), misses[:12]))
     print("wrote %s" % a.out)
