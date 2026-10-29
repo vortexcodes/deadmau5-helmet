@@ -14,6 +14,7 @@ and expensive to rediscover.
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 import os
@@ -72,15 +73,31 @@ def t_map():
         ok(0.0 <= r["u"] <= 1.0, "u out of range at %d" % r["index"])
 
     shell = [r for r in rows if r["region"] == "shell"]
-    eq(len(shell), 399, "shell count")
-    for r in shell:
-        rad = math.sqrt(r["x"] ** 2 + r["y"] ** 2 + r["z"] ** 2)
-        ok(abs(rad - 173.04) < 0.5, "shell led %d off the sphere (%.2f)"
-           % (r["index"], rad))
+    eq(len(shell), 398, "shell count")
+    eq([r["index"] for r in shell], list(range(398)), "shell is not 0..397")
 
-    # the swap flag must mark exactly the measured span
+    # Every shell LED sits exactly in a CAD slot, and no two share one.
+    # Positions come from the CAD and only the choice of slot from the
+    # cameras; an LED between slots is somewhere no LED can be.
+    cad = [(float(r["x"]), float(r["y"]), float(r["z"]))
+           for r in csv.DictReader(open(os.path.join(HERE, "data", "cad",
+                                                     "pixel_map_cad.csv")))]
+    C = np.array(cad)
+    taken = set()
+    for r in shell:
+        d = np.linalg.norm(C - np.array([r["x"], r["y"], r["z"]]), axis=1)
+        k = int(d.argmin())
+        ok(d[k] < 0.01, "shell led %d is %.1f mm from the nearest CAD slot"
+           % (r["index"], d[k]))
+        ok(k not in taken, "shell led %d shares a CAD slot" % r["index"])
+        taken.add(k)
+
+    # the swap flag must mark exactly the span the output path corrects
     sw = [r["index"] for r in rows if r["swap_rg"]]
-    eq((min(sw), max(sw), len(sw)), (492, 527, 36), "swap span")
+    st = json.load(open(os.path.join(HERE, "data", "cal", "strips.json")))
+    want = sorted(i for s in st["strips"] if s["order"] == "GRB"
+                  for i in range(s["start"], s["start"] + s["count"]))
+    eq(sw, want, "swap span differs from strips.json")
 
     # The chain is mostly continuous.  The exact set of jumps is not
     # fixed -- strip orientation comes from the camera now, and the
@@ -486,9 +503,9 @@ def t_power_regions():
     rim_lo = min(spans[k][0] for k in spans if k.endswith("rim"))
     rim_hi = max(spans[k][1] for k in spans if k.endswith("rim"))
     # The colour-order span and the mapped rims are the same physical
-    # strip, so they must start together.  They need not end together:
-    # the swap was re-measured at 492-529 while the map's rim region
-    # ends at 527, and the measurement wins -- it is the wiring.
+    # strip, so they must start together, and since the walk put the
+    # second rim's end at 529 they end together too.  The check allows
+    # a little overrun because the measurement is the wiring and wins.
     for st in strips["strips"]:
         eq(st["start"], rim_lo, "strips.json starts away from the mapped rims")
         ok(st["start"] + st["count"] - 1 >= rim_hi,

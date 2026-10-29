@@ -54,9 +54,11 @@ def _map():
     src = collections.Counter(r["source"] for r in rows)
     say(OK if n == 622 else BAD, "map",
         "%d LEDs: %s" % (n, ", ".join("%d %s" % (v, k) for k, v in sorted(src.items()))))
-    if src.get("estimated"):
-        say(WARN, "map", "%d LEDs still from the parametric model"
-            % src["estimated"], "python3 mau5locate.py && python3 mau5fitmap.py")
+    other = {k: v for k, v in src.items() if k not in ("cad-slot", "cad-ear")}
+    if other:
+        say(WARN, "map", "%d LEDs not placed from the CAD (%s)"
+            % (sum(other.values()), ", ".join(sorted(other))),
+            "python3 mau5locate.py && python3 mau5slots.py")
     sw = [r["index"] for r in rows if r["swap_rg"]]
     if sw:
         say(OK, "map", "colour swap marked on %d..%d (%d LEDs)"

@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 """mau5locate -- find out where each LED actually is, one at a time.
 
-The shell's positions come from the CAD and the camera agrees with
-them.  The ears do not: they were rebuilt by hand after the CAD was
-drawn, and the parametric stand-in for them is measurably wrong -- a
-bar swept vertically correlates with image height at r=-0.87 on the
-head but only -0.36 and -0.45 on the ears.
+Each LED is lit alone, at a low level so the diffuser's bloom stays
+small, and its weighted centroid in the camera is recorded.  That is
+all this does.  Turning centroids into a map is mau5slots.py's job: it
+needs two runs from two camera positions, and it uses them to decide
+which CAD slot each LED is in rather than to place it directly.
 
-Rather than guess better, this measures.  Each LED is lit alone, at a
-low level so the diffuser's bloom stays small, and its weighted
-centroid in the camera is recorded.  Centroids proved stable to about
-two pixels across a sevenfold brightness range, which is far finer
-than the error being chased.
+Centroids proved stable to about two pixels across a sevenfold
+brightness range, which is finer than the slot spacing by a factor of
+seven.
 
 Slow and dull -- about three seconds an LED -- but it only has to be
 right once, and it writes as it goes so an interrupted run resumes.
 
-    python3 mau5locate.py --from 399 --to 622
+    python3 mau5locate.py --from 398 --to 622
     python3 mau5locate.py --resume
 """
 
@@ -126,7 +124,7 @@ def main(argv=None):
                                  epilog=__doc__)
     ap.add_argument("--host", default=None)
     ap.add_argument("--count", type=int, default=622)
-    ap.add_argument("--from", dest="lo", type=int, default=399)
+    ap.add_argument("--from", dest="lo", type=int, default=398)
     ap.add_argument("--to", dest="hi", type=int, default=622)
     ap.add_argument("--level", type=int, default=45,
                     help="per-channel drive; low keeps the bloom small")

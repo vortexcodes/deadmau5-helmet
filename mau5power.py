@@ -8,7 +8,7 @@ that asks for white everywhere is not merely too bright, it is asking
 for more than twice what the hardware can deliver, and nothing upstream
 of here is obliged to be reasonable.
 
-The LEDs are not all in the same thermal situation.  The 399 on the
+The LEDs are not all in the same thermal situation.  The 398 on the
 shell are held on with hot glue inside a sealed print, and when that
 softens they fall off.  The ear tubes hang in free air and have to
 shine through a diffuser, so they can take much more.  One global

@@ -14,7 +14,7 @@ can halve -- blocks first, then the LEDs inside any block that
 answered yes.
 
     python3 mau5hue.py                     # the ears
-    python3 mau5hue.py --lo 0 --hi 398     # the shell
+    python3 mau5hue.py --lo 0 --hi 397     # the shell
     python3 mau5hue.py --apply             # write the fix to strips.json
 """
 
@@ -82,7 +82,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default=None)
-    ap.add_argument("--lo", type=int, default=399)
+    ap.add_argument("--lo", type=int, default=398)
     ap.add_argument("--hi", type=int, default=621)
     ap.add_argument("--block", type=int, default=8)
     ap.add_argument("--level", type=int, default=90)

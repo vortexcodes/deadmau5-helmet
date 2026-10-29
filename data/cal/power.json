@@ -13,7 +13,7 @@
   {
    "name": "shell",
    "lo": 0,
-   "hi": 398,
+   "hi": 397,
    "ceiling": 64,
    "budget_ma": 300,
    "shed": 6.0,
@@ -21,7 +21,7 @@
   },
   {
    "name": "ear1_tubes",
-   "lo": 399,
+   "lo": 398,
    "hi": 491,
    "ceiling": 255,
    "budget_ma": 620,
@@ -40,7 +40,7 @@
   {
    "name": "ear2_rim",
    "lo": 511,
-   "hi": 527,
+   "hi": 529,
    "ceiling": 160,
    "budget_ma": 190,
    "shed": 3.0,
@@ -48,7 +48,7 @@
   },
   {
    "name": "ear2_tubes",
-   "lo": 528,
+   "lo": 530,
    "hi": 621,
    "ceiling": 255,
    "budget_ma": 640,

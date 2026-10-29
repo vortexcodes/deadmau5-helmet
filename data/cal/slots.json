@@ -1,0 +1,135 @@
+{
+ "shell_leds": 398,
+ "empty_slots": [
+  {
+   "strip": "strip_B04_upper_led580-591",
+   "led": 591
+  }
+ ],
+ "wiring_order": [
+  "strip_B39_lower_led855-860",
+  "strip_B40_lower_led861-867",
+  "strip_B41_lower_led868-873",
+  "strip_B42_lower_led874-878",
+  "strip_B43_lower_led879-882",
+  "strip_B44_lower_led883-886",
+  "strip_B45_lower_led887-889",
+  "strip_B46_lower_led890-892",
+  "strip_B47_lower_led893-894",
+  "strip_B48_lower_led895-896",
+  "strip_B49_lower_led897-897",
+  "strip_B50_lower_led898-898",
+  "strip_B51_lower_led899-899",
+  "strip_B52_lower_led900-900",
+  "strip_B53_lower_led901-901",
+  "strip_B54_lower_led902-902",
+  "strip_B55_lower_led903-903",
+  "strip_B56_lower_led904-904",
+  "strip_B57_lower_led905-905",
+  "strip_B58_lower_led906-906",
+  "strip_B59_lower_led907-908",
+  "strip_B60_lower_led909-910",
+  "strip_B61_lower_led911-913",
+  "strip_B62_lower_led914-916",
+  "strip_B63_lower_led917-920",
+  "strip_B64_lower_led921-924",
+  "strip_B65_lower_led925-929",
+  "strip_B66_lower_led930-935",
+  "strip_B67_lower_led936-942",
+  "strip_B68_lower_led943-948",
+  "strip_B01_upper_led550-558",
+  "strip_B02_upper_led559-570",
+  "strip_B03_upper_led571-579",
+  "strip_B04_upper_led580-591",
+  "strip_B05_upper_led592-600",
+  "strip_B06_upper_led601-611",
+  "strip_B07_upper_led612-619",
+  "strip_B08_upper_led620-629",
+  "strip_B10_upper_led635-635",
+  "strip_B09_upper_led630-634",
+  "strip_B12_upper_led639-643",
+  "strip_B11_upper_led636-638",
+  "strip_B13_upper_led644-651",
+  "strip_B14_upper_led652-660",
+  "strip_B15_upper_led661-667",
+  "strip_B16_upper_led668-676",
+  "strip_B17_upper_led677-683",
+  "strip_B18_upper_led684-694",
+  "strip_B19_upper_led695-701",
+  "strip_B20_upper_led702-710",
+  "strip_B21_upper_led711-717",
+  "strip_B22_upper_led718-727",
+  "strip_B23_upper_led728-734",
+  "strip_B24_upper_led735-743",
+  "strip_B25_upper_led744-750",
+  "strip_B26_upper_led751-760",
+  "strip_B28_upper_led766-766",
+  "strip_B27_upper_led761-765",
+  "strip_B30_upper_led770-774",
+  "strip_B29_upper_led767-769",
+  "strip_B31_upper_led775-782",
+  "strip_B32_upper_led783-792",
+  "strip_B33_upper_led793-801",
+  "strip_B34_upper_led802-812",
+  "strip_B35_upper_led813-821",
+  "strip_B36_upper_led822-833",
+  "strip_B37_upper_led834-843",
+  "strip_B38_upper_led844-854"
+ ],
+ "cameras": {
+  "front": [
+   [
+    1207.3840942610793,
+    524.1043227605838,
+    354.50513361745607,
+    636228.0312624566
+   ],
+   [
+    13.402244617961049,
+    483.89573270709144,
+    -1038.8968245371489,
+    540790.0157613807
+   ],
+   [
+    0.017119519824605547,
+    0.8277087088902356,
+    0.5608967955588925,
+    1078.400754978534
+   ]
+  ],
+  "high": [
+   [
+    1399.5462845136049,
+    1117.8545483763003,
+    -79.3708694574264,
+    926324.1955327897
+   ],
+   [
+    89.99786457952736,
+    -227.13517135704043,
+    -1668.225793898113,
+    905751.9716587034
+   ],
+   [
+    -0.3037258745534573,
+    0.9462363511358705,
+    -0.11129852162455325,
+    1806.7702740336904
+   ]
+  ]
+ },
+ "residuals": {
+  "front": {
+   "square_on_median_px": 2.01,
+   "square_on_90th_px": 3.99,
+   "square_on_n": 146,
+   "edge_on_median_px": 4.27
+  },
+  "high": {
+   "square_on_median_px": 1.92,
+   "square_on_90th_px": 3.53,
+   "square_on_n": 227,
+   "edge_on_median_px": 4.24
+  }
+ }
+}

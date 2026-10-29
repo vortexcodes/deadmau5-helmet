@@ -47,8 +47,8 @@ _SUPERSEDED = """
   mau5build packages shows for FPP on a Raspberry Pi, against the
   helmet as it was CAD'd: a full sphere of 1185 pixels on two chains.
 
-  The helmet that exists is 622 WS2815 on ONE chain: 399 on the front
-  shell, 224 across two rebuilt ears, straight into WLED over DDP.
+  The helmet that exists is 622 WS2815 on ONE chain: 398 on the front
+  shell, 224 across the two ears, straight into WLED over DDP.
   Nothing on the current path reads this file.
 
   Use instead:

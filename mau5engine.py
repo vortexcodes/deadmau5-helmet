@@ -2,10 +2,10 @@
 """mau5engine -- presets that know where they are on the helmet.
 
 The old effect library addressed a tidy 68x22 grid wrapped round a whole
-sphere.  That helmet does not exist: there are 399 LEDs on the front
+sphere.  That helmet does not exist: there are 398 LEDs on the front
 shell in strips of wildly uneven length, holes where the eyes and mouth
-are, and 224 more on two ears that the CAD never knew about.  Indexing
-by row and column against that produces nonsense.
+are, and 224 more in the two ears.  Indexing by row and column against
+that produces nonsense.
 
 So presets here are written against *geometry* instead.  Every LED
 carries its position, the direction it faces, how far along its own
@@ -13,8 +13,9 @@ strip it sits, and which part of the helmet it belongs to.  An effect
 asks questions like "how far round the face is this" or "is this on an
 ear rim", and works regardless of how the strips were actually cut.
 
-Coordinates, millimetres, origin at the centre of the head:
-    +x right (as the audience sees it), +y up, +z toward the face.
+Coordinates, millimetres, origin at the centre of the head -- the CAD's
+own frame, which is not the obvious one:
+    +x right (as the audience sees it), +z up, -y toward the audience.
     fa   front azimuth, -90 at the left edge of the face to +90 at the
          right, 0 straight ahead -- the natural axis for sweeps.
     el   elevation, about -40 at the chin to +76 at the crown.
@@ -82,7 +83,7 @@ class Helmet:
         # BACKWARDS across them -- the edge nearest the face comes out
         # further round than the outer edge -- and then the clip flattened
         # the argument anyway: every LED of the left ear read exactly 0
-        # and every LED of the right ear exactly 1.  223 LEDs, 36% of the
+        # and every LED of the right ear exactly 1.  224 LEDs, 36% of the
         # helmet and most of what anybody looks at, shared two values, so
         # a sweep did not cross the ears at all.  It flashed them.
         #
