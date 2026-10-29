@@ -38,7 +38,31 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
+import subprocess
+
 import mau5wled
+
+
+def tailnet_ip():
+    """This machine's address on the tailnet, if it is on one.
+
+    Worth printing rather than making somebody go and look: the whole
+    point of the tunnel is that the address is stable and the LAN one
+    is not, so the tailnet URL is the one to bookmark.
+    """
+    for cmd in (["tailscale", "ip", "-4"],
+                ["/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+                 "ip", "-4"]):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True,
+                                 timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        for line in (out.stdout or "").splitlines():
+            line = line.strip()
+            if line.startswith("100."):
+                return line
+    return None
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OFFLINE = os.path.join(HERE, "data", "offline")
@@ -304,8 +328,16 @@ def main(argv=None):
 
     ip = mau5wled.lan_ip()
     q = ("?t=" + a.token) if a.token else ""
+    tail = tailnet_ip()
     print("mau5relay")
     print("  on this network   %s://%s:%d/%s" % (scheme, ip, a.port, q))
+    if tail:
+        print("  from anywhere     %s://%s:%d/%s   <- the tailnet address,"
+              " the one to keep" % (scheme, tail, a.port, q))
+    else:
+        print("  from anywhere     no tailnet found.  `tailscale ip -4` on "
+              "this machine\n                    should print a 100.x address "
+              "once it has joined.")
     print("  helmet            %s" % (host or "not found"))
     print("  camera            http://%s/api/status" % a.eye)
     print("\n  routes: /  the dashboard      /cam.jpg  the newest frame")

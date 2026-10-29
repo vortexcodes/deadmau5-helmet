@@ -630,11 +630,30 @@ refuses to start without a token unless you insist: it proxies a
 controller that has no authentication of its own, so the token is the
 only thing in the way.
 
-**Getting to it is deliberately not this script's job.** Forward a
-port, run a Tailscale node, point a Cloudflare tunnel at it — all
-three work and they have very different security properties. A token
-on plain http across the open internet is a token somebody can read,
-so if the route is a forwarded port, use `--tls` at least.
+### Getting to it from outside the house
+
+Tailscale, which is the route chosen here. Both machines join the
+same tailnet and see each other by a stable `100.x` address whatever
+WiFi, VPN or NAT either of them is behind, and nothing is exposed to
+the internet at all.
+
+```bash
+brew install --cask tailscale        # on both machines
+tailscale up                         # sign in, same account both times
+tailscale ip -4                      # the 100.x address of the home one
+```
+
+Then run the relay on the home machine as above; it prints its own
+tailnet address when it finds one, and that is the URL to keep — the
+LAN address changes, the tailnet one does not.
+
+The alternatives, and why not: a forwarded port puts a controller
+with no authentication of its own on the open internet behind one
+token and a self-signed certificate, and gets scanned within hours.
+A Cloudflare tunnel is the better *end* state — it is outbound-only
+and gives a real certificate, which is also the one thing that would
+make the player a properly installable PWA — but it needs an account
+and a domain.
 
 ## Keeping it as an app, and what happens when you close it
 
