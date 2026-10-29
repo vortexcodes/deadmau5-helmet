@@ -632,28 +632,36 @@ only thing in the way.
 
 ### Getting to it from outside the house
 
-Tailscale, which is the route chosen here. Both machines join the
-same tailnet and see each other by a stable `100.x` address whatever
-WiFi, VPN or NAT either of them is behind, and nothing is exposed to
-the internet at all.
+**Tailscale was the plan and the school blocks it.** Measured from
+that network: every `*.tailscale.com` host completes the TCP
+handshake and is then reset the moment the TLS ClientHello names it
+— `tailscale.com`, `login`, `controlplane` and the DERP relays alike,
+while github.com and example.com are fine. That is SNI filtering of
+the whole domain, and since `controlplane` is what Tailscale needs to
+coordinate at all, there is nothing to configure around it.
+
+Cloudflare is open from the same network, so that is the route:
 
 ```bash
-brew install --cask tailscale        # on both machines
-tailscale up                         # sign in, same account both times
-tailscale ip -4                      # the 100.x address of the home one
+brew install cloudflared                      # on the machine at home
+python3 mau5relay.py --token <...> --host 192.168.10.172 --tunnel
 ```
 
-Then run the relay on the home machine as above; it prints its own
-tailnet address when it finds one, and that is the URL to keep — the
-LAN address changes, the tailnet one does not.
+It prints a `https://<words>.trycloudflare.com` URL and leaves a copy
+in `data/cal/relay_url.txt`. The certificate is real, which also
+means the player installs as a proper app from that address — the one
+thing the controller could never offer.
 
-The alternatives, and why not: a forwarded port puts a controller
-with no authentication of its own on the open internet behind one
-token and a self-signed certificate, and gets scanned within hours.
-A Cloudflare tunnel is the better *end* state — it is outbound-only
-and gives a real certificate, which is also the one thing that would
-make the player a properly installable PWA — but it needs an account
-and a domain.
+Two things to know about a quick tunnel. The hostname is **random and
+changes every restart**, so it is not an address to memorise; a named
+tunnel on a domain you own is, and wants a Cloudflare account. And
+the URL is **public the moment it exists** — the relay's token is the
+only thing in front of a controller with no authentication of its
+own, so make it long, and treat the URL as a secret.
+
+Verified end to end from the school network: 403 with no token, 403
+with a wrong one, 200 with the right one, certificate verified
+without `-k`.
 
 ## Keeping it as an app, and what happens when you close it
 

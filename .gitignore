@@ -37,3 +37,5 @@ data/cal/_locate*.jpg
 data/cal/led_positions_pose2.csv
 data/cal/_locate_dark.jpg
 data/cal/led_positions_pose3.csv
+data/cal/relay_url.txt
+data/cal/relay_token.txt

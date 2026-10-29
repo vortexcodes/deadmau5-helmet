@@ -31,6 +31,7 @@ import argparse
 import hmac
 import json
 import os
+import shutil
 import ssl
 import threading
 import time
@@ -38,9 +39,59 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
+import re
 import subprocess
 
 import mau5wled
+
+
+def start_tunnel(port, timeout=45):
+    """A Cloudflare quick tunnel to the local relay, and its URL.
+
+    Tailscale was the plan and the school blocks it: every
+    *.tailscale.com host resets on the TLS handshake, controlplane
+    and the DERP relays included, so there is nothing to configure
+    round it.  Cloudflare is open from the same network, looks like
+    ordinary HTTPS to a CDN, and brings a real certificate -- which
+    is also the one thing that would let the player install as a
+    proper app.
+
+    A quick tunnel is anonymous and its hostname is random and
+    changes every restart.  That is fine for working from school and
+    it is not a long-term address; a named tunnel on your own domain
+    is, and wants a Cloudflare account.
+
+    The URL is public the moment it exists.  The relay's token is the
+    only thing in front of the helmet, so make it a long one.
+    """
+    if not shutil.which("cloudflared"):
+        raise SystemExit(
+            "cloudflared is not installed.\n"
+            "  brew install cloudflared")
+    proc = subprocess.Popen(
+        ["cloudflared", "tunnel", "--url", "http://127.0.0.1:%d" % port,
+         "--no-autoupdate"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, bufsize=1)
+    url, seen = None, []
+    end = time.time() + timeout
+    while time.time() < end:
+        line = proc.stdout.readline()
+        if not line:
+            break
+        seen.append(line.rstrip())
+        m = re.search(r"https://[a-z0-9][a-z0-9-]*\.trycloudflare\.com", line)
+        if m:
+            url = m.group(0)
+            break
+    if url is None:
+        proc.terminate()
+        raise SystemExit("cloudflared did not produce a URL in %ds:\n  %s"
+                         % (timeout, "\n  ".join(seen[-8:])))
+    # keep draining, or the pipe fills and cloudflared wedges
+    threading.Thread(target=lambda: [None for _ in proc.stdout],
+                     daemon=True).start()
+    return proc, url
 
 
 def tailnet_ip():
@@ -291,6 +342,14 @@ def main(argv=None):
     ap.add_argument("--host", default=None, help="the controller's address")
     ap.add_argument("--eye", default="127.0.0.1:8752")
     ap.add_argument("--tls", action="store_true")
+    ap.add_argument("--tunnel", action="store_true",
+                    help="open a Cloudflare tunnel and print a public URL")
+    ap.add_argument("--url-file",
+                    default=os.path.join(HERE, "data", "cal", "relay_url.txt"),
+                    help="where to leave the current public URL, because a "
+                         "quick tunnel picks a new hostname every restart "
+                         "and the machine running it is not the machine "
+                         "you are sitting at")
     a = ap.parse_args(argv)
 
     if not a.token and not a.allow_open:
@@ -326,6 +385,25 @@ def main(argv=None):
         except Exception as e:
             print("  could not start https (%s); serving plain http" % e)
 
+    tunnel = None
+    public = None
+    if a.tunnel:
+        if a.tls:
+            raise SystemExit("--tunnel and --tls together would make "
+                             "cloudflared talk https to a self-signed "
+                             "certificate.  Pick one; the tunnel already "
+                             "brings a real one.")
+        print("  opening a Cloudflare tunnel...")
+        tunnel, public = start_tunnel(a.port)
+        try:
+            os.makedirs(os.path.dirname(a.url_file), exist_ok=True)
+            with open(a.url_file, "w") as f:
+                f.write("%s/%s\n" % (public,
+                                      ("?t=" + a.token) if a.token else ""))
+            os.chmod(a.url_file, 0o600)
+        except OSError:
+            pass
+
     ip = mau5wled.lan_ip()
     q = ("?t=" + a.token) if a.token else ""
     tail = tailnet_ip()
@@ -340,6 +418,12 @@ def main(argv=None):
               "once it has joined.")
     print("  helmet            %s" % (host or "not found"))
     print("  camera            http://%s/api/status" % a.eye)
+    if public:
+        print("  from anywhere     %s/%s" % (public, q))
+        print("                    real certificate, so the player installs "
+              "as an app from here.\n                    Public the moment it "
+              "exists: the token is the only guard,\n                    and "
+              "the hostname changes every time this restarts.")
     print("\n  routes: /  the dashboard      /cam.jpg  the newest frame")
     print("          /status                /helmet/json/...  the controller")
     print("          /app/mau5.htm          the player, served from here")
@@ -349,6 +433,9 @@ def main(argv=None):
         srv.serve_forever()
     except KeyboardInterrupt:
         print("\n  stopped.")
+    finally:
+        if tunnel is not None:
+            tunnel.terminate()
     return 0
 
 
