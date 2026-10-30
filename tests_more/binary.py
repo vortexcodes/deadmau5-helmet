@@ -28,13 +28,12 @@ L.ws = { readyState: 1, bufferedAmount: 0, send: (m) => sent.push(m) };
 const f = new Uint8Array(n * 3);
 for (let i = 0; i < n * 3; i++) f[i] = (i * 37 + 11) & 255;
 out.ret = L.send(f);
-out.msgs = sent.map(m => typeof m === 'string' ? { text: m.length > 9 ? 'filler' + m.length : m }
-                                                  : { bin: Array.from(m) });
+out.msgs = sent.map(m => typeof m === 'string' ? { text: m } : { bin0: m[0], len: m.length });
 // decode the DDP packets back into one frame
 const got = new Array(n * 3).fill(-1);
 let pushes = 0;
 for (const m of sent) {
-  if (typeof m === 'string') continue;
+  if (typeof m === 'string' || m[0] !== 2) continue;
   const off = (m[5] << 24) | (m[6] << 16) | (m[7] << 8) | m[8], len = (m[9] << 8) | m[10];
   if (m[1] & 1) pushes++;
   for (let k = 0; k < len; k++) got[off + k] = m[11 + k];
@@ -43,9 +42,13 @@ const want = [];
 for (let i = 0; i < n; i++) { const b = i * 3; for (let c = 0; c < 3; c++) want.push(f[b + L.perm[b + c]]); }
 out.exact = got.every((v, i) => v === want[i]);
 out.pushes = pushes;
-out.lastIsPush = !!(sent.filter(m => typeof m !== 'string').slice(-1)[0][1] & 1);
-out.sizes = sent.filter(m => typeof m !== 'string').map(m => m.length);
-out.first = sent.filter(m => typeof m !== 'string').map(m => m[0]);
+const ddp = sent.filter(m => typeof m !== 'string' && m[0] === 2);
+out.lastIsPush = !!(ddp.slice(-1)[0][1] & 1);
+out.sizes = ddp.map(m => m.length);
+out.first = ddp.map(m => m[0]);
+const fill = sent.filter(m => typeof m !== 'string' && m[0] !== 2);
+out.filler = fill.map(m => [m[0], m.length]);
+out.textCount = sent.filter(m => typeof m === 'string').length;
 // the same frame again: nothing sent
 L._pong(); sent.length = 0; out.again = L.send(f); out.againMsgs = sent.length;
 // a 0.15.4 link stays on JSON
@@ -75,7 +78,9 @@ def t_binary_frames_for_wled16():
     ok(all(sz == r["pad"] for sz in r["sizes"]), "every packet exactly one segment: %s" % r["sizes"])
     ok(all(b == 2 for b in r["first"]), "first byte 2 means DDP to WLED's socket")
     texts = [m["text"] for m in r["msgs"] if "text" in m]
-    eq(texts[0], "p", "each frame ends with its ping")
+    eq(texts, ["p"], "the only text is the ping: no JSON for the firmware to lock for")
+    eq(r["filler"], [[255, 1421]], "the filler is binary, protocol 0xFF, 1421 bytes")
+    eq(1 + 6 + 1421 + 8, 1436, "ping and filler fill one segment")
     eq(r["again"], 0, "an unchanged frame is not sent again")
     eq(r["againMsgs"], 0, "and nothing goes out for it")
     ok(r["jsonFirst"], "a link that has not seen WLED 16 keeps sending JSON")

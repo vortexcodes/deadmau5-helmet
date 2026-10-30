@@ -213,6 +213,14 @@ const DEADMAN_RETRY_MS = 3000;
 const DDP_LEDS = 472;
 const DEPTH_BINARY = 3;
 
+// The filler again, as a binary message with a protocol byte WLED does
+// not use (0xFF): its binary switch has no case for it, so it is dropped
+// with no reply and, unlike the text filler, without taking the JSON
+// buffer lock -- which, when something else held it, drew {"error":3}
+// for a quarter of all frames in a measured sweep.  Same length on the
+// wire as the text filler (8-byte header, 1421 bytes).
+const BIN_FILLER = (() => { const b = new Uint8Array(1421); b[0] = 0xFF; return b; })();
+
 function takesBinary(ver) {
   const m = /^(\d+)\.(\d+)/.exec(String(ver || ''));
   if (!m) return false;
@@ -906,7 +914,7 @@ class Link {
       this._lastBin = (this._lastBin && this._lastBin.length === tmp.length)
         ? (this._lastBin.set(tmp), this._lastBin) : tmp.slice();
       ws.send('p');
-      if (this.depth > 1) ws.send(FILLER);
+      if (this.depth > 1) ws.send(BIN_FILLER);
       this.unacked.push(now);
       this.path = 'ddp';
       this.sent++; this.bytes += bytes;
