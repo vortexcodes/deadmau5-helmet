@@ -1098,7 +1098,14 @@ async function spPoll() {
   try {
     await sp.poll();
   } catch (e) {
-    const why = String(e.message || e);
+    let why = String(e.message || e);
+    // A fetch that never reached anything is a network with no way out,
+    // which is what the helmet's own WiFi always is.  "Failed to fetch"
+    // (Chrome), "Load failed" (Safari) or "NetworkError" (Firefox) told
+    // nobody that at a show.
+    if (e instanceof TypeError || /failed to fetch|load failed|networkerror/i.test(why))
+      why = 'no internet on this WiFi (the helmet\'s own never has any) -- ' +
+            'turn mobile data on, or pick the show and play the song from the phone';
     if (why !== spSaidWhy) { spSaidWhy = why; spSay('Spotify: ' + why); }
     return;
   }
