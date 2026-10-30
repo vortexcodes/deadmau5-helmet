@@ -703,7 +703,9 @@ def t_crossfade():
     import mau5show
     f = sorted(x for x in os.listdir(mau5show.SHOWS) if x.endswith(".json"))
     ok(f, "no shows")
-    show = json.load(open(os.path.join(mau5show.SHOWS, f[0])))
+    # The cue list's fade, so the cue list: every show now carries scenes
+    # too, and those play instead unless asked not to.
+    show = dict(json.load(open(os.path.join(mau5show.SHOWS, f[0]))), mode="cues")
     ok(len(show["cues"]) > 2, "need a few cues to test a boundary")
     music = mau5show._music_for(show, os.path.join(HERE, show["track"]))
     b = show["cues"][2]["start"]
