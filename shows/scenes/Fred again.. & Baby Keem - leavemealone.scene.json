@@ -1,0 +1,262 @@
+{
+ "v": 1,
+ "show": "Fred again.. & Baby Keem - leavemealone",
+ "about": "Bars of the analysis grid: bar b starts at 0.416 + 1.379 b seconds, 162 bars at 174 bpm. The grid's bar line sits one beat before the music's downbeat -- the bass lands on beat two of every grid bar and the snare on grid beats one and three -- so every mark is written at b.25, the beat the bass actually lands on. The track is a 174 two-step that keeps stopping dead. The ears play the drums: the kick on the rims on 1 and the and of 3, the snare up the tubes on 2 and 4. Eight warm sparks looping every bar on the face are the chopped vocal, and they come back whenever it does. Every stop empties the helmet to the vocal chop traded beat by beat between the left half + ear 1 and the right half + ear 2, and one cold light on its own. Room is the intimate parts, heat the hooks, pushing out in rings from the middle of the face. In the hooks the left half + ear 1 call on 1 and the right half + ear 2 answer on 3; in the verse ear 1 keeps the snare and ear 2 carries the voice. The title crosses the face once, alone, in the breakdown. White once, on the last drop at 140.25. Shell layers are written to sit inside the shell's 300 mA, so the guard is not the one choreographing.",
+ "lead": 0,
+ "marks": {
+  "voice": 5.25, "open": 16.25, "dip": 20.25, "climb": 22.25,
+  "open2": 24.25, "dip2": 28.25, "climb2": 30.25, "peak": 32.25, "lift": 38.25,
+  "drain": 40.25, "stop1": 42.25, "drop1": 46.25, "stop2": 58.25,
+  "pickup2": 60, "drop2": 60.25, "skip": 74.25, "back": 75.25, "thin": 83.25,
+  "drain2": 88.25, "title": 89.25, "alone": 90.25, "rise": 96.25,
+  "verse": 98.25, "vlift": 104.25, "verse2": 106.25, "vrise": 112.25,
+  "squeeze": 114.25, "stop3": 122.25, "swell": 124, "stutter": 124.25,
+  "drop3": 126.25, "stop4": 138.25, "pickup4": 140, "final": 140.25,
+  "final2": 148.25, "wind": 157.25, "last": 159.25, "end": 161.25
+ },
+ "palettes": {
+  "room": [[0, 0, 0], [24, 6, 44], [96, 28, 150], [255, 130, 80]],
+  "chop": [[0, 0, 0], [255, 60, 10], [255, 160, 80], [255, 235, 210]],
+  "cold": [[0, 0, 0], [0, 14, 48], [0, 100, 255], [170, 220, 255]],
+  "heat": [[0, 0, 0], [110, 0, 20], [255, 0, 70], [255, 30, 170], [255, 110, 0]],
+  "pure": [[255, 50, 0], [255, 0, 150], [255, 255, 255]]
+ },
+ "motifs": {
+  "room": {"fx": "grad", "on": "shell", "axis": "y", "speed": 0.03125, "warp": 0.15,
+           "wspeed": 0.03125, "lo": 0, "hi": 0.6, "pal": "room", "gain": 0.25},
+  "wall": {"fx": "fill", "on": "rims", "pal": "room", "c": 0.8,
+           "gain": {"band": "bass", "punch": true, "lo": 0.05, "hi": 0.55}},
+  "chop": {"fx": "sparks", "on": "face", "rate": 2, "life": 1, "loop": 8, "seed": 5,
+           "nbr": 1, "pal": "chop", "c": 0.5, "spread": 0.3,
+           "gain": {"band": "mid", "punch": true, "lo": 0.15, "hi": 1}},
+  "kick": {"fx": "fill", "on": "rims", "pal": "heat", "c": 0.75, "gain": 0.6,
+           "gate": {"pat": "x.........x.....", "step": 0.25, "decay": 0.6}},
+  "snare": {"fx": "blades", "on": "tubes", "seq": ["012"], "step": 1, "rise": 0.12, "keep": 0,
+            "pal": "heat", "c": 0.6, "ctip": 1, "gain": 0.4,
+            "gate": {"pat": ".x.x", "step": 1, "decay": 0.75}},
+  "push": {"fx": "grad", "on": "shell", "axis": "r", "scale": 1.25, "speed": -0.5, "wave": "tri",
+           "pal": "heat", "gain": {"band": "bass", "punch": true, "lo": 0.1, "hi": 0.3}},
+  "hook": [{"use": "push"}, {"use": "kick"}, {"use": "snare"},
+           {"use": "chop", "c": 0.65, "gain": {"band": "mid", "punch": true, "lo": 0.25, "hi": 1}}],
+  "call": {"fx": "fill", "on": "left+ear1", "pal": "chop", "c": 0.6, "gain": 0.25,
+           "gate": {"pat": "x...............", "step": 0.25, "decay": 1.25}},
+  "answer": {"fx": "fill", "on": "right+ear2", "pal": "cold", "c": 0.7, "gain": 0.25,
+             "gate": {"pat": "........x.......", "step": 0.25, "decay": 1.25}},
+  "callresp": [{"use": "call"}, {"use": "answer"}],
+  "chops": [{"fx": "fill", "on": "left+ear1", "pal": "chop", "c": 0.55, "gain": 0.2,
+             "gate": {"pat": "x.x.", "step": 1, "decay": 0.6}},
+            {"fx": "fill", "on": "right+ear2", "pal": "cold", "c": 0.6, "gain": 0.18,
+             "gate": {"pat": ".x.x", "step": 1, "decay": 0.6}}],
+  "alone": {"fx": "sparks", "on": "face", "rate": 0.5, "life": 3, "loop": 6, "seed": 17,
+            "nbr": 0.6, "pal": "cold", "c": 0.85, "spread": 0.1, "gain": 0.7},
+  "rise": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "fill",
+           "soft": 0.15, "from": -0.1, "to": 1.05},
+  "front": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "band",
+            "width": 0.12, "from": -0.1, "to": 1.05},
+  "drain": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "fill",
+            "soft": 0.2, "from": 1.1, "to": -0.15},
+  "ring": {"fx": "sweep", "on": "all", "axis": "r", "shape": "p", "mode": "band",
+           "from": 0, "to": 1.2, "width": 0.25, "pal": "pure", "c": 0}
+ },
+ "scenes": [
+  {"name": "wall", "from": -0.75, "to": "voice", "pal": "room",
+   "layers": [{"use": "room", "gain": 0.22, "hi": 0.45, "env": {"in": 8}},
+              {"use": "wall", "env": {"in": 4}},
+              {"fx": "blades", "seq": ["012"], "step": 4, "rise": 1, "keep": 0.25, "c": 0.45,
+               "ctip": 0.7, "gain": 0.3, "env": {"in": 8}}]},
+
+  {"name": "voice", "from": "voice", "to": "open", "pal": "room", "out": 1.75,
+   "layers": [{"use": "room", "hi": 0.5},
+              {"use": "chop", "env": {"in": 3}},
+              {"use": "wall"},
+              {"fx": "blades", "seq": ["012"], "step": 2, "side": "alt", "rise": 0.5, "keep": 0.2,
+               "c": 0.45, "ctip": 0.75, "gain": 0.35}]},
+
+  {"name": "open", "from": "open", "to": "dip", "pal": "room",
+   "pump": {"pat": "x.........x.....", "step": 0.25, "depth": 0.15, "decay": 0.6},
+   "layers": [{"use": "room", "gain": 0.22, "hi": 0.75, "speed": 0.0625},
+              {"use": "chop"},
+              {"use": "kick", "pal": "chop", "c": 0.6, "gain": 0.6},
+              {"use": "snare", "pal": "chop", "c": 0.4, "ctip": 0.8, "gain": 0.35}]},
+
+  {"name": "dip", "from": "dip", "to": "climb", "like": "voice",
+   "patch": {"1": {"env": {"in": 0}}}},
+
+  {"name": "climb", "from": "climb", "to": "open2", "pal": "chop",
+   "layers": [{"use": "rise", "c": [0.2, 0.6], "gain": [0.02, 0.07]},
+              {"use": "front", "c": [0.5, 0.95], "gain": [0.2, 0.45]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"], "step": {"climb": 2, "23.25": 1},
+               "rise": 0.15, "c": 0.4, "ctip": 0.9, "gain": [0.35, 0.7]},
+              {"use": "chop"}]},
+
+  {"name": "open2", "from": "open2", "to": "dip2", "like": "open",
+   "add": [{"use": "callresp", "gain": 0.18}]},
+
+  {"name": "dip2", "from": "dip2", "to": "climb2", "like": "voice",
+   "patch": {"1": {"env": {"in": 0}}}},
+
+  {"name": "climb2", "from": "climb2", "to": "peak", "like": "climb",
+   "patch": {"2": {"step": {"climb2": 1, "31.25": 0.5}, "gain": [0.35, 0.6]}},
+   "add": [{"fx": "sparks", "on": "all", "rate": {"climb2": 2, "31.25": 4}, "life": 0.5,
+            "c": 0.9, "gain": {"band": "high", "lo": 0.1, "hi": 0.8}}]},
+
+  {"name": "peak", "from": "peak", "to": "lift", "pal": "heat",
+   "pump": {"pat": "x.........x.....", "step": 0.25, "depth": 0.25, "decay": 0.5},
+   "layers": [{"use": "push", "gain": {"band": "bass", "punch": true, "lo": 0.08, "hi": 0.22}},
+              {"use": "kick"},
+              {"use": "snare"},
+              {"use": "chop", "c": 0.6}]},
+
+  {"name": "lift", "from": "lift", "to": "drain", "like": "climb", "pal": "heat",
+   "patch": {"2": {"step": {"lift": 1, "39.25": 0.5}}},
+   "add": [{"use": "kick"}]},
+
+  {"name": "drain", "from": "drain", "to": "stop1", "pal": "heat",
+   "layers": [{"use": "drain", "c": [0.8, 0.3], "gain": 0.1},
+              {"use": "chop"},
+              {"fx": "fill", "on": "ears", "c": 0.5, "gain": [0.25, 0]}]},
+
+  {"name": "stop1", "from": "stop1", "to": "drop1", "pal": "cold", "out": 1,
+   "layers": [{"use": "chops"}, {"use": "alone"}]},
+
+  {"name": "drop1", "from": "drop1", "to": "stop2", "pal": "heat",
+   "pump": {"pat": "x.........x.....", "step": 0.25, "depth": 0.3, "decay": 0.5},
+   "layers": [{"use": "hook"},
+              {"fx": "sparks", "on": "all", "rate": 2, "life": 0.5, "c": 0.95,
+               "gain": {"band": "high", "lo": 0, "hi": 0.7}}]},
+
+  {"name": "stop2", "from": "stop2", "to": "drop2", "like": "stop1", "out": 0,
+   "add": [{"use": "front", "pal": "cold", "c": [0.4, 0.95], "gain": [0, 0.5]}]},
+
+  {"name": "drop2", "from": "drop2", "to": "skip", "pal": "heat",
+   "pump": {"pat": "x.........x.....", "step": 0.25, "depth": 0.3, "decay": 0.5},
+   "layers": [{"use": "hook"}, {"use": "callresp"}]},
+
+  {"name": "skip", "from": "skip", "to": "back", "pal": "heat", "out": 1,
+   "layers": [{"use": "push", "speed": 0, "gain": [0.25, 0.04]},
+              {"use": "chop"}]},
+
+  {"name": "back", "from": "back", "to": "thin", "like": "drop2"},
+
+  {"name": "thin", "from": "thin", "to": "drain2", "pal": "heat",
+   "pump": {"pat": "x.........x.....", "step": 0.25, "depth": 0.2, "decay": 0.5},
+   "layers": [{"use": "push", "gain": {"band": "bass", "punch": true, "lo": 0.05, "hi": 0.15}},
+              {"use": "kick"},
+              {"use": "snare", "gain": 0.3},
+              {"use": "chop"},
+              {"use": "callresp", "gain": 0.32}]},
+
+  {"name": "drain2", "from": "drain2", "to": "alone", "like": "drain"},
+
+  {"name": "alone", "from": "alone", "to": "rise", "pal": "cold",
+   "layers": [{"use": "alone"},
+              {"fx": "blades", "seq": ["012"], "step": 4, "rise": 1, "keep": 0.3, "c": 0.4,
+               "ctip": 0.7, "gain": 0.3},
+              {"use": "room", "pal": "cold", "hi": 0.35, "gain": 0.12}]},
+
+  {"name": "rise", "from": "rise", "to": "verse", "pal": "cold", "out": 0.75,
+   "layers": [{"use": "rise", "c": [0.3, 0.7], "gain": [0.02, 0.07]},
+              {"use": "front", "c": [0.5, 0.95], "gain": [0.25, 0.5]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"], "step": {"rise": 1, "97.25": 0.5},
+               "rise": 0.15, "c": 0.4, "ctip": 0.95, "gain": [0.35, 0.7]},
+              {"fx": "sparks", "on": "all", "rate": {"rise": 2, "97.25": 4}, "life": 0.5,
+               "c": 0.95, "gain": {"band": "high", "lo": 0.1, "hi": 0.8}}]},
+
+  {"name": "verse", "from": "verse", "to": "squeeze", "pal": "room",
+   "pump": {"pat": "x.........x.....", "step": 0.25, "depth": 0.2, "decay": 0.5},
+   "layers": [{"use": "room", "hi": 0.6},
+              {"use": "kick", "pal": "room", "c": 0.85, "gain": 0.5},
+              {"use": "snare", "side": "ear1", "pal": "room", "c": 0.6, "ctip": 0.9, "gain": 0.5},
+              {"fx": "sparks", "on": "right", "rate": 2, "life": 1, "loop": 8, "seed": 23,
+               "nbr": 0.85, "pal": "cold", "c": 0.6, "spread": 0.3,
+               "gain": {"band": "mid", "punch": true, "lo": 0, "hi": 0.9}},
+              {"fx": "fill", "on": "ear2", "pal": "cold", "c": 0.55,
+               "gain": {"band": "mid", "lo": 0, "hi": 0.5}},
+              {"fx": "sparks", "on": "all", "rate": 2, "life": 0.5, "pal": "room", "c": 0.95,
+               "gain": {"verse": 0, "vlift": 0.6, "verse2": 0, "vrise": 0.7}}]},
+
+  {"name": "squeeze", "from": "squeeze", "to": "stop3", "pal": "chop",
+   "layers": [{"use": "chop", "gain": {"band": "mid", "punch": true, "lo": 0.25, "hi": 1}},
+              {"use": "callresp", "gain": 0.2},
+              {"fx": "blades", "seq": ["0", "1", "2", "1"],
+               "step": {"squeeze": 2, "118.25": 1, "120.25": 0.5},
+               "rise": 0.2, "c": 0.4, "ctip": 0.9, "gain": [0.3, 0.7]},
+              {"use": "rise", "pal": "heat", "c": [0.2, 0.6], "gain": [0.01, 0.06]},
+              {"use": "front", "pal": "heat", "c": [0.4, 0.9], "gain": [0.1, 0.4]}]},
+
+  {"name": "stop3", "from": "stop3", "to": "stutter", "like": "stop1", "out": 0,
+   "add": [{"fx": "fill", "on": "ears", "pal": "heat", "c": 0.5,
+            "gain": {"stop3": 0, "swell": 0.3}}]},
+
+  {"name": "stutter", "from": "stutter", "to": "drop3", "pal": "heat", "out": 2.75,
+   "layers": [{"use": "push", "gain": {"stutter": 0.26, "124.5625": 0.04, "124.75": 0.26}},
+              {"use": "kick"},
+              {"use": "chop"}]},
+
+  {"name": "drop3", "from": "drop3", "to": "stop4", "like": "drop2"},
+
+  {"name": "stop4", "from": "stop4", "to": "final", "like": "stop2"},
+
+  {"name": "final", "from": "final", "to": "final2", "pal": "heat",
+   "pump": {"pat": "x.........x.....", "step": 0.25, "depth": 0.35, "decay": 0.5},
+   "layers": [{"use": "push", "speed": -1, "ofs": 0.5,
+               "gain": {"band": "bass", "punch": true, "lo": 0.12, "hi": 0.32}},
+              {"use": "kick", "c": 0.95, "gain": 0.7},
+              {"use": "snare", "c": 0.4, "ctip": 0.75, "gain": 0.45, "rim": 0.5},
+              {"use": "chop", "on": "shell", "c": 0.7,
+               "gain": {"band": "mid", "punch": true, "lo": 0.35, "hi": 1}},
+              {"use": "callresp", "gain": 0.3}]},
+
+  {"name": "final2", "from": "final2", "to": "wind", "like": "final",
+   "patch": {"3": {"rate": 4, "life": 0.6}}},
+
+  {"name": "wind", "from": "wind", "to": "last", "pal": "room",
+   "layers": [{"use": "room", "gain": [0.3, 0.12], "hi": 0.7},
+              {"use": "chop", "gain": {"band": "mid", "punch": true, "lo": 0.1, "hi": 0.8}},
+              {"use": "wall"},
+              {"fx": "blades", "seq": ["012"], "step": 2, "side": "alt", "rise": 0.5, "keep": 0.2,
+               "c": 0.45, "ctip": 0.75, "gain": [0.4, 0.15]}]},
+
+  {"name": "last", "from": "last", "to": "end", "pal": "cold",
+   "layers": [{"use": "alone", "gain": [0.7, 0]},
+              {"use": "room", "pal": "cold", "hi": 0.3, "gain": [0.15, 0]}]}
+ ],
+ "hits": [
+  {"name": "OPEN", "at": "open", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "chop", "c": 0.85, "gain": [0.2, 0]},
+    {"use": "ring", "on": "shell", "pal": "chop", "c": 0.6, "gain": 0.6}]},
+  {"name": "PEAK", "at": "peak", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0, "gain": [0.3, 0]},
+    {"use": "ring", "on": "shell", "pal": "heat", "c": 0.85, "gain": 0.7}]},
+  {"name": "DROP 1", "at": "drop1", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.5, "gain": [0.3, 0]},
+    {"use": "ring", "on": "shell", "c": 0.5, "gain": 0.8}]},
+  {"name": "pickup", "at": "pickup2", "beats": 1, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0, "gain": [0.3, 0]}]},
+  {"name": "DROP 2", "at": "drop2", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.5, "gain": [0.3, 0]},
+    {"use": "ring", "on": "shell", "c": 0.5, "gain": 0.8}]},
+  {"name": "back", "at": "back", "beats": 1, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.5, "gain": [0.3, 0]}]},
+  {"name": "LEAVEMEALONE", "at": "title", "beats": 36, "layers": [
+    {"fx": "preset", "name": "text", "on": "face", "fit": true, "mix": "over",
+     "env": {"in": 2, "out": 4}, "params": {"text": "LEAVEMEALONE", "color": "cold@0.85"}}]},
+  {"name": "VERSE", "at": "verse", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "cold", "c": 0.8, "gain": [0.22, 0]},
+    {"use": "ring", "on": "shell", "pal": "room", "c": 0.8, "gain": 0.8}]},
+  {"name": "stutter", "at": "stutter", "beats": 1, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "heat", "c": 0.6, "gain": [0.3, 0]}]},
+  {"name": "DROP 3", "at": "drop3", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.5, "gain": [0.3, 0]},
+    {"use": "ring", "on": "shell", "c": 0.5, "gain": 0.8}]},
+  {"name": "pickup", "at": "pickup4", "beats": 1, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0, "gain": [0.3, 0]}]},
+  {"name": "FINAL", "at": "final", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 1, "gain": [0.22, 0]},
+    {"fx": "fill", "on": "shell", "pal": "pure", "c": 1, "gain": [0.25, 0]},
+    {"use": "ring", "on": "shell", "c": 1}]},
+  {"name": "last", "at": "last", "beats": 4, "layers": [
+    {"fx": "blades", "seq": ["012"], "step": 4, "rise": 0.25, "keep": 0, "pal": "cold",
+     "c": 0.6, "ctip": 0.9, "gain": 0.6}]}
+ ]
+}
