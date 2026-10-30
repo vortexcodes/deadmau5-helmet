@@ -533,6 +533,8 @@ function showRunning() {
 // list, and counted, because "fully offline" is exactly this number
 // reaching five -- and the copies are per address, so the helmet's own
 // network (4.3.2.1) and the home network keep separate sets.
+let songsMissing = 0;
+
 async function refreshSongs() {
   const have = new Set(await tracks.keys());
   const names = Object.keys(D.shows || {});
@@ -541,6 +543,8 @@ async function refreshSongs() {
     o.textContent = (have.has(o.value) ? '✓ ' : '') + o.value.replace(/^deadmau5 - /, '');
   }
   const missing = names.filter(n => !have.has(n));
+  songsMissing = missing.length;
+  if (songFetching) return;          // the progress line is more useful
   $('songsat').textContent = (names.length - missing.length) + ' of ' + names.length
     + ' songs on this phone for ' + location.host
     + (missing.length ? ' · missing: ' + missing.map(n => n.replace(/^deadmau5 - /, '')).join(', ')
@@ -674,6 +678,71 @@ function showPP() {
   $('showpp').disabled = !on;
   $('showpp').textContent = (on && an.el.paused) ? 'play' : 'pause';
 }
+
+// ----------------------------------------------------------------------
+// songs from a laptop on the same network
+// ----------------------------------------------------------------------
+// The controller has room for the cue lists, not the songs, and the
+// songs cannot be put anywhere public.  `mau5offline.py songs` serves
+// them from a laptop and leaves /songs.json on the controller saying
+// where; whatever this phone is missing is fetched once into its own
+// storage.  After that the shows play with no laptop and no network,
+// and nobody had to have the files to begin with.
+let songFetching = false;
+
+async function fetchSongs() {
+  if (songFetching) return;
+  let ptr = null;
+  try {
+    const r = await fetch('/songs.json', { cache: 'no-store' });
+    if (r.ok) ptr = await r.json();
+  } catch (e) {}
+  if (!ptr || !ptr.from || !ptr.songs) return;
+  const have = new Set(await tracks.keys());
+  const want = Object.keys(ptr.songs).filter(n => D.shows[n] && !have.has(n));
+  if (!want.length) return;
+  songFetching = true;
+  const total = want.reduce((s, n) => s + (ptr.songs[n].bytes || 0), 0);
+  let got = 0;
+  const say = (m) => { $('songsat').textContent = m; };
+  try {
+    for (const name of want) {
+      const s = ptr.songs[name];
+      const r = await fetch(ptr.from + s.path);
+      if (!r.ok) throw new Error('the laptop answered ' + r.status);
+      const parts = [];
+      const rd = r.body && r.body.getReader ? r.body.getReader() : null;
+      if (rd) {
+        for (;;) {
+          const step = await rd.read();
+          if (step.done) break;
+          parts.push(step.value);
+          got += step.value.length;
+          say('getting the songs from the laptop · ' + Math.round(got / 1e6)
+              + ' of ' + Math.round(total / 1e6) + ' MB');
+        }
+      } else {
+        const b = await r.blob();
+        parts.push(b);
+        got += b.size;
+      }
+      const f = new File(parts, s.track || name + '.mp3', { type: 'audio/mpeg' });
+      if (!(await tracks.put(name, f))) throw new Error('this browser would not keep it');
+    }
+  } catch (e) {
+    songFetching = false;
+    say('could not get the songs from ' + ptr.from + ' (' + (e.message || e)
+        + ') -- this phone has to be on the same Wi-Fi as the laptop');
+    return;
+  }
+  songFetching = false;
+  await refreshSongs();
+  if ($('showpick').value) showReadyText($('showpick').value);
+}
+// The laptop may start serving after the page is open, so look again
+// now and then -- only while something is missing, and it is one
+// small file on the controller.
+setInterval(() => { if (songsMissing > 0) fetchSongs(); }, 20000);
 
 // All five at once: pick the mp3s together and each goes to the show
 // its name matches, by the same word rule Spotify following uses.
@@ -845,7 +914,7 @@ addEventListener('visibilitychange', () => {
 addEventListener('resize', () => { dots = null; draw(); });
 
 choose(restore() || 'rainbow', true);
-refreshSongs();
+refreshSongs().then(fetchSongs);
 $('bri').value = state.bri;
 $('brival').textContent = state.bri;
 $('cycle').value = state.cycle;

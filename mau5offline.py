@@ -156,13 +156,11 @@ def _shows():
     analyses are two megabytes and the audio is sixty, against about
     nine hundred kilobytes free on the controller.
 
-    It turns out only the first is needed.  The analysis existed to
-    tell the player where the beats and the bands were, and offline
-    the phone is already measuring exactly that from whatever it can
-    hear.  So the cue list rides along at eight to thirteen kilobytes
-    a show and the drive comes from the room.  The one thing lost is
-    the clock: nothing on the phone knows where in the track you are,
-    so the show is started by hand on the first beat.
+    So the cue list rides in the page, the analysis goes up beside it
+    as a compact drive file (deploy_drives), and the song lives on the
+    phone: `songs` serves it from a laptop once and the page keeps it,
+    after which the song is also the clock and nothing has to be
+    started by hand.
     """
     out = {}
     d = os.path.join(HERE, "shows")
@@ -271,6 +269,146 @@ def _find(host):
             "  On the house network it is found by scanning; on the helmet's\n"
             "  own access point it is at 4.3.2.1, so pass --host 4.3.2.1.")
     return found[0]
+
+
+SONGS_PORT = 8799
+SONGS_POINTER = "/songs.json"
+
+
+def _song_files(dirs=None):
+    """Show name -> the song file on this machine, for every show that has one.
+
+    Looked for beside the show files and then at the top of the
+    repository, which is where the tracks have lived; nothing is ever
+    committed, because the repository is public and the tracks are not
+    ours to give away.
+    """
+    look = list(dirs or []) + [os.path.join(HERE, "shows"), HERE]
+    out = {}
+    for name, sh in _shows().items():
+        track = os.path.basename(sh.get("track") or name + ".mp3")
+        for d in look:
+            p = os.path.join(d, track)
+            if os.path.isfile(p):
+                out[name] = p
+                break
+    return out
+
+
+def _address_towards(w):
+    """The address the controller's network knows this machine by."""
+    import socket
+    host = w.base.split("//", 1)[-1].split("/")[0].split(":")[0]
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((host, 80))           # no packet is sent; it picks a route
+        return s.getsockname()[0]
+    finally:
+        s.close()
+
+
+def songs(host=None, port=SONGS_PORT, dirs=None):
+    """Give every phone that opens the page the shows' songs, once.
+
+    The songs cannot live on the controller -- sixty megabytes against
+    under one free -- and cannot be put anywhere public.  So the laptop
+    serves them on the local network for as long as this runs, and
+    leaves a pointer on the controller saying where.  The page reads the
+    pointer, fetches whatever songs the phone does not have yet into its
+    own storage, and from then on plays them with no laptop and no
+    network.  Any phone, no files needed on it first.
+
+    The phone has to be on the same network as this machine, and the
+    copies are kept per address: a phone that will use the helmet's own
+    Wi-Fi at a show wants this run with the laptop on that Wi-Fi too.
+    """
+    import http.server
+    import socketserver
+    import mau5wled
+
+    files = _song_files(dirs)
+    if not files:
+        raise SystemExit("none of the shows' songs are on this machine -- put "
+                         "the mp3s beside the show files, or pass --dir")
+    w = mau5wled.find_one(host)
+    me = _address_towards(w)
+    names = sorted(files)
+    route = {"/songs/%d.mp3" % k: files[n] for k, n in enumerate(names)}
+    pointer = {
+        "from": "http://%s:%d" % (me, port),
+        "songs": {n: {"path": "/songs/%d.mp3" % k,
+                      "track": os.path.basename(files[n]),
+                      "bytes": os.path.getsize(files[n])}
+                  for k, n in enumerate(names)},
+        "since": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+
+    class H(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def _cors(self):
+            # The page is the controller's origin and this is another:
+            # say yes, including Chrome's private-network question.
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Private-Network", "true")
+
+        def do_OPTIONS(self):
+            self.send_response(204)
+            self._cors()
+            self.send_header("Access-Control-Allow-Methods", "GET")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def do_GET(self):
+            p = route.get(self.path.split("?", 1)[0])
+            if p is None:
+                self.send_response(404)
+                self._cors()
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            size = os.path.getsize(p)
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
+            with open(p, "rb") as f:
+                while True:
+                    chunk = f.read(1 << 16)
+                    if not chunk:
+                        break
+                    try:
+                        self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        return
+            print("  sent %s to %s" % (os.path.basename(p), self.client_address[0]))
+
+    class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
+    srv = Server(("0.0.0.0", port), H)
+    _upload(w, SONGS_POINTER, json.dumps(pointer).encode(), "application/json")
+    total = sum(v["bytes"] for v in pointer["songs"].values()) / 1e6
+    print("  serving %d songs, %.0f MB, from %s" % (len(names), total, pointer["from"]))
+    for n in names:
+        print("    %s" % os.path.basename(files[n]))
+    print("  and told the controller, so any phone that opens the page on this")
+    print("  network fetches the songs it is missing and keeps them.")
+    print("  ctrl-c to stop (the pointer is removed again)")
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.server_close()
+        _delete(w, SONGS_POINTER)
+        print("\n  stopped; pointer removed from the controller")
+    return 0
 
 
 def _upload(w, path, data, ctype="text/html"):
@@ -733,6 +871,12 @@ def main(argv=None):
     s = sub.add_parser("check", help="is offline mode actually ready")
     s.add_argument("--host", default=None)
 
+    s = sub.add_parser("songs", help="hand the shows' songs to phones, once")
+    s.add_argument("--host", default=None)
+    s.add_argument("--port", type=int, default=SONGS_PORT)
+    s.add_argument("--dir", action="append", default=None,
+                   help="another folder to look for the mp3s in")
+
     a = ap.parse_args(argv)
     if a.cmd in (None, "build"):
         build()
@@ -755,6 +899,8 @@ def main(argv=None):
             return standby(a.host, a.fx, a.bri, a.boot, a.apply)
         if a.cmd == "check":
             return check(a.host)
+        if a.cmd == "songs":
+            return songs(a.host, a.port, a.dir)
     except mau5wled.WLEDError as e:
         print(e)
         print("\n  `python3 mau5offline.py build` and `serve` need no helmet; "

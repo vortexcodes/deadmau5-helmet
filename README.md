@@ -350,7 +350,8 @@ switch if you want the old behaviour back.
 
 At a show there is no house WiFi worth trusting and no reason to be carrying
 the laptop. The helmet brings up its own access point, the phone joins it,
-opens one page, and all 37 animations run with nothing else involved.
+opens one page, and all 38 animations and the five shows run with nothing else
+involved.
 
 ```bash
 python3 mau5offline.py build              # make the page, no hardware needed
@@ -358,9 +359,19 @@ python3 mau5offline.py serve              # drive it against a fake controller
 python3 mau5offline.py config --host X --ap-psk '…' --apply
 python3 mau5offline.py deploy --host X    # upload it, then read it back
 python3 mau5offline.py check  --host X    # is it actually ready
+python3 mau5offline.py songs  --host X    # hand the shows' songs to phones, once
 ```
 
 Then: join **mau5head-AP**, open **http://4.3.2.1/mau5.htm**.
+
+**The songs.** The controller has under a megabyte free and the five songs are
+61 MB, and they are commercial tracks, so they cannot go anywhere public either.
+`songs` serves them from the laptop and leaves a pointer on the controller;
+any phone that opens the page on the same network fetches whatever it is
+missing and keeps it. From then on, starting a show plays its song with no
+laptop and no network -- and nobody needs the files on their phone first.
+Copies are kept per address, so for shows run it with the laptop and the
+phone both on the helmet's own Wi-Fi.
 
 ### Why the page lives on the controller
 
@@ -523,11 +534,10 @@ Three presets are built to show it, and the older reactive ones (`eq`, `vu`,
 
 ### What offline mode does not do
 
-**Shows.** The animations are all there; the five music shows are not. A show
-needs the track playing on the phone as the clock and its analysis — band
-energies at 40 Hz — as the drive, which is 250 to 670 kB a song before any
-quantising. The cue lists themselves are 13 kB and would go straight over.
-Nothing about the design prevents it; it is the next piece, not a limitation.
+**Find the songs by itself, anywhere.** A phone gets the songs once, from a
+laptop on the same network (`songs` above). With no laptop and no copy on the
+phone, a show can still run silently ("lights only"), but it cannot conjure the
+track.
 
 **Anything with no phone at all.** Join the AP without opening the page and
 you get WLED's own effects, which still work and are a reasonable fallback.
