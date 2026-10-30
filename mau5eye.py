@@ -72,7 +72,7 @@ PAGE = r"""<!doctype html>
 // localhost is the one exception, which is why it works here and
 // nowhere else.  Say so, and offer the link that does work.
 const SECURE = window.isSecureContext && navigator.mediaDevices;
-let stream=null, timer=null, n=0, fails=0;
+let stream=null, timer=null, n=0, fails=0, busy=false;
 const v=document.getElementById('v'), d=document.getElementById('d'),
       s=document.getElementById('s'), sel=document.getElementById('cam');
 const cv=document.createElement('canvas');
@@ -103,17 +103,27 @@ async function start(){
   timer=setInterval(push, 400);
 }
 
+// One upload at a time.  On a phone, encoding and sending a 1080p frame
+// can take longer than the 400 ms tick, and overlapping uploads can land
+// out of order: an older capture arriving last becomes the newest frame,
+// and shot() hands back the previous LED.  A tick that finds one still
+// in flight is skipped, and a send that hangs is abandoned after 5 s so
+// it cannot stop the camera for good.
 async function push(){
-  if(!v.videoWidth) return;
-  cv.width=v.videoWidth; cv.height=v.videoHeight;
-  cv.getContext('2d').drawImage(v,0,0);
-  const b=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.86));
-  if(!b) return;
+  if(!v.videoWidth || busy) return;
+  busy=true;
+  const ac=new AbortController(), give=setTimeout(()=>ac.abort(), 5000);
   try{
-    await fetch('/frame',{method:'POST',headers:{'Content-Type':'image/jpeg'},body:b});
+    cv.width=v.videoWidth; cv.height=v.videoHeight;
+    cv.getContext('2d').drawImage(v,0,0);
+    const b=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.86));
+    if(!b) return;
+    await fetch('/frame',{method:'POST',headers:{'Content-Type':'image/jpeg'},
+                          body:b,signal:ac.signal});
     n++; fails=0; d.className='dot on';
     s.textContent=n+' frames · '+cv.width+'×'+cv.height;
   }catch(e){ fails++; if(fails>2) d.className='dot err'; }
+  finally{ clearTimeout(give); busy=false; }
 }
 
 if(!SECURE){
@@ -150,12 +160,26 @@ class Eye:
         self.n = 0
 
     def put(self, data):
+        # Two uploads at once (two pages open, or an old page still
+        # running) used to share one ".tmp" path: the file could end up
+        # half of each, or the second os.replace found nothing to move
+        # and that request failed.  Each write now has its own temporary
+        # file, and the frame in memory and the one on disk are swapped
+        # together, so they cannot disagree about which is newest.
+        d = os.path.dirname(os.path.abspath(self.path))
         with self.lock:
             self.frame, self.at, self.n = data, time.time(), self.n + 1
-        tmp = self.path + ".tmp"
-        with open(tmp, "wb") as f:
-            f.write(data)
-        os.replace(tmp, self.path)
+            fd, tmp = tempfile.mkstemp(dir=d, prefix=".eye-", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(data)
+                os.replace(tmp, self.path)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
 
     def get(self):
         with self.lock:
@@ -204,8 +228,14 @@ def make_handler(eye, tls_port=8753):
     return H
 
 
+def _opener(tls):
+    ctx = ssl._create_unverified_context() if tls else None
+    return (lambda u, timeout: urllib.request.urlopen(u, timeout=timeout, context=ctx)) \
+        if tls else (lambda u, timeout: urllib.request.urlopen(u, timeout=timeout))
+
+
 def shot(out, host="127.0.0.1", port=8752, fresh=1.5, wait=15.0, tls=False,
-         after=None):
+         after=None, lag=0.0):
     """Pull a frame from a running mau5eye.
 
     `after` is a wall-clock time the frame must postdate.  Freshness
@@ -218,11 +248,17 @@ def shot(out, host="127.0.0.1", port=8752, fresh=1.5, wait=15.0, tls=False,
     discard the first push that arrives: by the second, the capture
     cannot predate the change.  Without this, blanked frames sail
     through the check and look exactly like dead LEDs.
+
+    Nor is the second push enough with a slow camera.  The page draws
+    the <video> element as it is, and with the phone camera that
+    picture is already 1.1-1.5 s old: measured 2026-10-30, a frame
+    pushed 1.08-1.54 s after a change was the first to show it.  `lag`
+    is that delay, margin included -- measure_lag() finds it -- and
+    with it the frame must be pushed after `after + lag`.  0 keeps the
+    old rule, which is only right for a camera with no lag of its own.
     """
     base = "%s://%s:%d" % ("https" if tls else "http", host, port)
-    ctx = ssl._create_unverified_context() if tls else None
-    _open = (lambda u, timeout: urllib.request.urlopen(u, timeout=timeout, context=ctx)) \
-        if tls else (lambda u, timeout: urllib.request.urlopen(u, timeout=timeout))
+    _open = _opener(tls)
     end = time.time() + wait
     start_n = None
     while time.time() < end:
@@ -232,7 +268,7 @@ def shot(out, host="127.0.0.1", port=8752, fresh=1.5, wait=15.0, tls=False,
             if ok and after is not None:
                 if start_n is None:
                     start_n = st.get("frames", 0)
-                ok = ((time.time() - st["age"]) > after
+                ok = ((time.time() - st["age"]) > after + lag
                       and st.get("frames", 0) >= start_n + 2)
             elif ok:
                 ok = st["age"] <= fresh
@@ -246,6 +282,121 @@ def shot(out, host="127.0.0.1", port=8752, fresh=1.5, wait=15.0, tls=False,
         time.sleep(0.3)
     raise SystemExit("no fresh frame from mau5eye at %s -- is the page open "
                      "with the camera started?" % base)
+
+
+# Added to the worst delay measure_lag() sees.  The worst measured on
+# the phone was 1.54 s, and waiting 1.8 s gave frames that all showed
+# the LED just lit; the margin covers encode and upload times varying.
+LAG_MARGIN = 0.3
+# How long a blank is left before a frame of it is taken as the dark
+# reference, before the lag is known: twice the phone's worst.
+LAG_FIRST_GUESS = 3.0
+
+
+class LagError(RuntimeError):
+    """The pattern never showed in the camera, so no lag was measured."""
+
+
+def _newest(base, _open):
+    """The newest frame, its push time and its number -- all one frame.
+
+    Status, the frame, then status again: if another push landed in
+    between, the picture may be newer than the time, so go round again.
+    """
+    for _ in range(5):
+        st = json.load(_open(base + "/api/status", 4))
+        if not st.get("have") or st.get("age") is None:
+            return None
+        at = time.time() - st["age"]
+        data = _open(base + "/latest.jpg", 8).read()
+        if json.load(_open(base + "/api/status", 4)).get("frames") == st.get("frames"):
+            return data, at, st.get("frames", 0)
+    return None
+
+
+def measure_lag(light, blank, host="127.0.0.1", port=8752, trials=3, wait=8.0,
+                margin=LAG_MARGIN, floor=40.0, tls=False, poll=0.05,
+                first_guess=LAG_FIRST_GUESS):
+    """How long after a change the camera first shows it, worst of several.
+
+    light() and blank() put a pattern on the helmet and take it off.
+    Against a frame of the blank, a frame shows the pattern when its
+    brightest difference reaches `floor` over at least four pixels (the
+    rule mau5locate's centroid uses), and a change counts from the first
+    frame that shows the new state *and is followed by one that does*,
+    so a single noisy frame cannot pass for it.  It is timed both ways,
+    on and off, `trials` times each.  Each delay is the camera's own lag
+    plus up to one push interval, depending on where in the interval
+    the change fell, so the worst of them covers the interval too.
+
+    Returns (the lag to give shot(), the delays measured).  Raises
+    LagError if the pattern never shows: out of view, or no camera.
+    """
+    import io
+    import numpy as np
+    from PIL import Image
+    base = "%s://%s:%d" % ("https" if tls else "http", host, port)
+    _open = _opener(tls)
+
+    def newest():
+        try:
+            return _newest(base, _open)
+        except Exception:
+            return None
+
+    def gray(data):
+        return np.asarray(Image.open(io.BytesIO(data)).convert("L")).astype(np.float32)
+
+    def shows(data, ref):
+        g = gray(data)
+        if g.shape != ref.shape:
+            raise LagError("the camera changed resolution while being timed")
+        d = np.clip(g - ref, 0, 255)
+        pk = float(d.max())
+        return pk >= floor and int((d > pk * 0.5).sum()) >= 4
+
+    def first(t, state, ref):
+        """Push time of the first frame after t that shows `state`, and
+        whose next frame does too."""
+        end = time.time() + wait
+        seen = cand = None
+        while time.time() < end:
+            got = newest()
+            if got and got[2] != seen:
+                data, at, seen = got
+                if at > t:
+                    if shows(data, ref) == state:
+                        if cand is not None:
+                            return cand
+                        cand = at
+                    else:
+                        cand = None
+            time.sleep(poll)
+        raise LagError("the pattern never %s within %.0f s"
+                       % ("showed" if state else "went", wait))
+
+    delays = []
+    try:
+        t = time.time(); blank()
+        got, end = None, time.time() + first_guess + wait
+        while time.time() < end:
+            got = newest()
+            if got and got[1] > t + first_guess:
+                break
+            got = None
+            time.sleep(poll)
+        if got is None:
+            raise LagError("no fresh frame from mau5eye at %s -- is the page "
+                           "open with the camera started?" % base)
+        ref = gray(got[0])
+        for _ in range(trials):
+            t = time.time(); light()
+            delays.append(first(t, True, ref) - t)
+            t = time.time(); blank()
+            delays.append(first(t, False, ref) - t)
+    finally:
+        blank()
+    return max(delays) + margin, delays
 
 
 def cert_ips(crt):

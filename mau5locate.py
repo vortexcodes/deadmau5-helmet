@@ -14,8 +14,19 @@ seven.
 Slow and dull -- about three seconds an LED -- but it only has to be
 right once, and it writes as it goes so an interrupted run resumes.
 
-    python3 mau5locate.py --from 398 --to 620
-    python3 mau5locate.py --resume
+It will not write over a file that already holds measurements unless
+told to.  The default --out is the front pose mau5slots reads, and a
+fresh run used to replace it with only the LEDs it had just measured
+-- `--from 398` threw away all 398 shell centroids at the first save.
+--resume continues a file, and only one measured on the chain as it
+is now: every row is stamped with the chain it was measured on, and
+the two pose files from before the cut on 2026-10-29 are keyed by the
+622 chain, so resuming one would file new rows beside old ones that
+are one index apart.
+
+    python3 mau5locate.py --from 0 --to 620 --out data/cal/led_positions_new.csv
+    python3 mau5locate.py --resume --out data/cal/led_positions_new.csv
+    python3 mau5locate.py --from 0 --to 620 --overwrite    # replace the front pose
 """
 
 from __future__ import annotations
@@ -31,11 +42,16 @@ from PIL import Image
 
 import mau5eye
 import mau5power as P
+import mau5slots
 import mau5wled
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "data", "cal", "led_positions.csv")
-FIELDS = ["index", "cx", "cy", "peak", "px_count", "w", "h", "level"]
+# `chain` is the length of the chain the index was measured on, so that
+# mau5slots re-keys a file measured before a cut and leaves one measured
+# after it alone (mau5slots.pose_chain).  Files from before it was
+# written have no such column; load() gives None for it.
+FIELDS = ["index", "cx", "cy", "peak", "px_count", "w", "h", "level", "chain"]
 
 
 def load(path=OUT):
@@ -43,8 +59,10 @@ def load(path=OUT):
         return {}
     out = {}
     for r in csv.DictReader(open(path)):
-        out[int(r["index"])] = {k: (int(r[k]) if k in ("index", "px_count")
-                                    else float(r[k])) for k in FIELDS}
+        row = {k: (int(r[k]) if k in ("index", "px_count") else float(r[k]))
+               for k in FIELDS if k != "chain"}
+        row["chain"] = int(r["chain"]) if (r.get("chain") or "").strip() else None
+        out[int(r["index"])] = row
     return out
 
 
@@ -118,6 +136,62 @@ def blend(a, b, k):
             ta + (tb - ta) * k)
 
 
+def starting_rows(out, resume, overwrite, chain=mau5slots.TOTAL_N):
+    """What a run starts from, decided before anything is lit.
+
+    `chain` is the chain as it is now, whatever --count drives: the
+    controller still drives 622 and the last has nothing behind it.
+    """
+    have = load(out)
+    if not have:
+        return {}
+    name = os.path.relpath(out, HERE)
+    if resume:
+        was = mau5slots.pose_chain(out)
+        if was != chain:
+            raise SystemExit(
+                "%s was measured on the %d chain, before the cut; resuming it "
+                "would file new rows beside old ones one index apart.  Measure "
+                "into a new --out instead." % (name, was))
+        for r in have.values():
+            r["chain"] = chain
+        return have
+    if not overwrite:
+        raise SystemExit(
+            "%s already holds %d measurements.  --resume continues it (same "
+            "chain, camera not moved), --overwrite replaces it, or name a new "
+            "file with --out." % (name, len(have)))
+    return {}
+
+
+def find_lag(st, leds, level, count, port):
+    """Measure the camera's lag on the first of `leds` it can see.
+
+    The phone camera behind mau5eye shows the world 1.1-1.5 s late
+    (measured 2026-10-30), and the run used to wait 0.75 s and take any
+    frame pushed 0.4 s after the change -- so most rows recorded the
+    previous LED, a few caught the dark gap, and the file looked like a
+    clean scan shifted by one index.  Each probe frame is one LED at the
+    run's own level, the same frames the run sends, through the same
+    guard.
+    """
+    for led in leds:
+        buf = np.zeros((count, 3), np.uint8)
+        buf[led] = (level, level, level)
+        try:
+            lag, seen = mau5eye.measure_lag(lambda b=buf: st.show(b), st.dark,
+                                            port=port)
+        except mau5eye.LagError as e:
+            print("  led %d: %s -- trying another" % (led, e))
+            continue
+        print("  camera lag: a change first shows %.2f-%.2f s after it (led %d); "
+              "waiting %.2f s for each frame" % (min(seen), max(seen), led, lag))
+        return lag
+    raise SystemExit("could not see any of LEDs %s light, so the camera's lag is "
+                     "unknown.  Is the camera page running and pointed at them?  "
+                     "--lag gives it by hand." % list(leds))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -129,7 +203,14 @@ def main(argv=None):
     ap.add_argument("--level", type=int, default=45,
                     help="per-channel drive; low keeps the bloom small")
     ap.add_argument("--settle", type=float, default=0.75)
+    ap.add_argument("--lag", type=float, default=None,
+                    help="seconds from a change on the helmet to the first "
+                         "camera frame that shows it, margin included.  "
+                         "Measured at the start of the run unless given")
     ap.add_argument("--resume", action="store_true", help="skip ones already measured")
+    ap.add_argument("--overwrite", action="store_true",
+                    help="replace --out even though it already holds "
+                         "measurements")
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--eye-port", type=int, default=8752)
     ap.add_argument("--fiducial", type=int, default=25,
@@ -147,13 +228,20 @@ def main(argv=None):
                     help="stop if the fiducial moves this many pixels")
     a = ap.parse_args(argv)
 
-    rows = load(a.out) if a.resume else {}
+    chain = mau5slots.TOTAL_N
+    rows = starting_rows(a.out, a.resume, a.overwrite, chain)
     # --to is inclusive, but it still cannot exceed the chain: asking for
     # index 622 of 622 lit nothing and took the run down at the last LED.
     hi = min(a.hi, a.count - 1)
     todo = [i for i in range(a.lo, hi + 1) if i not in rows]
     if not todo:
         print("nothing to do (%d already measured)" % len(rows)); return
+    if a.fid_leds:
+        fids = [int(v) for v in a.fid_leds.split(",") if v.strip()]
+    else:
+        span = max(hi - a.lo, 3)
+        fids = sorted({a.lo, a.lo + span // 3, a.lo + 2 * span // 3})
+    fids = [f for f in fids if a.lo <= f <= hi]
 
     w = mau5wled.find_one(a.host)
     print(w.describe())
@@ -167,11 +255,23 @@ def main(argv=None):
     t0 = time.time()
     misses = []
     drift_log = []
+    # bound before the try, so that stopping before the first LED (no
+    # camera, lag not found) reaches the finally below with its message
+    # rather than a NameError in --track mode
+    marks, raw = [], {}
     try:
+        # Every frame below is taken `lag` after its change: pushed after
+        # the camera can be showing it, not merely after it was made.
+        lag = a.lag
+        if lag is None:
+            lag = find_lag(st, [a.lo] + [f for f in fids if f != a.lo], a.level,
+                           a.count, a.eye_port)
+        else:
+            print("  camera lag: %.2f s, as given" % lag)
         t = time.time(); st.dark(); time.sleep(1.5)
         ref = np.asarray(Image.open(mau5eye.shot(
             os.path.join(HERE, "data", "cal", "_locate_dark.jpg"),
-            port=a.eye_port, wait=30, after=t + 0.7)).convert("L")).astype(np.float32)
+            port=a.eye_port, wait=30, after=t, lag=lag)).convert("L")).astype(np.float32)
 
         # A fiducial, re-measured every so often.  This run takes an
         # hour, and if the camera or the helmet is nudged halfway
@@ -192,12 +292,7 @@ def main(argv=None):
         # on this one: 213 px of drift in five minutes, steadily.  So
         # several fiducials are re-measured as the run goes and every
         # centroid is carried back into the frame the run started in.
-        if a.fid_leds:
-            fids = [int(v) for v in a.fid_leds.split(",") if v.strip()]
-        else:
-            span = max(hi - a.lo, 3)
-            fids = sorted({a.lo, a.lo + span // 3, a.lo + 2 * span // 3})
-        fids = [f for f in fids if a.lo <= f <= hi]
+        # (The fiducials themselves are chosen above, before the lag.)
         base = {}                 # fiducial -> its position at the start
         marks = []                # (n, similarity carrying now -> the start)
         raw = {}                  # led -> (n, cx, cy), before correction
@@ -215,7 +310,7 @@ def main(argv=None):
             buf[led] = (a.level, a.level, a.level)
             t = time.time(); st.show(buf); time.sleep(a.settle)
             f = mau5eye.shot(os.path.join(HERE, "data", "cal", "_locate.jpg"),
-                             port=a.eye_port, wait=30, after=t + 0.4)
+                             port=a.eye_port, wait=30, after=t, lag=lag)
             d = np.clip(np.asarray(Image.open(f).convert("L")).astype(np.float32) - ref,
                         0, 255)
             return centroid(d)
@@ -261,14 +356,14 @@ def main(argv=None):
             buf[led] = (a.level, a.level, a.level)
             t = time.time(); st.show(buf); time.sleep(a.settle)
             f = mau5eye.shot(os.path.join(HERE, "data", "cal", "_locate.jpg"),
-                             port=a.eye_port, wait=30, after=t + 0.4)
+                             port=a.eye_port, wait=30, after=t, lag=lag)
             d = np.clip(np.asarray(Image.open(f).convert("L")).astype(np.float32) - ref,
                         0, 255)
             c = centroid(d)
             if c is None:
                 misses.append(led)
             else:
-                c["index"] = led; c["level"] = a.level
+                c["index"] = led; c["level"] = a.level; c["chain"] = chain
                 if a.track:
                     raw[led] = (n, c["cx"], c["cy"])
                 rows[led] = c
@@ -299,7 +394,11 @@ def main(argv=None):
                 rows[led]["cx"], rows[led]["cy"] = x, y
             print("\n  tracked out up to %.0f px of camera movement across "
                   "%d checkpoints" % (worst, len(marks)))
-        save(rows, a.out)
+        # Nothing measured is nothing to write: a run that stopped before
+        # its first LED -- no camera, lag not found -- used to save an
+        # empty file over whatever --out held.
+        if rows:
+            save(rows, a.out)
     print("\nmeasured %d, missed %d %s" % (len(rows), len(misses), misses[:12]))
     print("wrote %s" % a.out)
 

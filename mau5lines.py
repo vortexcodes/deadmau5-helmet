@@ -154,6 +154,20 @@ class Lines:
         m = np.where(self.members())[0]
         return (int(m[0]), int(m[-1])) if len(m) else (0, 0)
 
+    def whole(self):
+        """Is this line one unbroken run of the chain?
+
+        An adjustment applies to every index from lo to hi, and only a
+        line on the strips or runs axis is reliably that.  An across, up
+        or depth line is LEDs from many strips: across-line 5 lights 12
+        LEDs but its range is 412-502, 91 LEDs of ear1's tubes and rim,
+        and up-line 14 lights 91 over 94-615, 522 across the shell and
+        both ears.  A 'reverse' there would scramble 522 positions in
+        the map every show reads.
+        """
+        m = np.where(self.members())[0]
+        return bool(len(m)) and int(m[-1]) - int(m[0]) + 1 == len(m)
+
     # -- output ---------------------------------------------------------
     def show(self):
         buf = np.zeros((self.n, 3), np.uint8)
@@ -183,7 +197,7 @@ class Lines:
         return {
             "axis": self.axis, "i": self.i, "count": self.count_for(self.axis),
             "label": self.label(), "lit": len(idx),
-            "indices": idx[:400], "lo": lo, "hi": hi,
+            "indices": idx[:400], "lo": lo, "hi": hi, "whole": self.whole(),
             "width": self.width, "level": self.level, "colour": self.colour,
             "on": self.on, "mark": self.marks.get(key),
             "marks": {"good": sum(1 for v in self.marks.values() if v.get("verdict") == "good"),
@@ -209,7 +223,21 @@ class Lines:
         self._write(MARKS, self.marks)
 
     def add_adjust(self, a):
+        """Write down a correction to the line that is lit -- and only
+        when its range is exactly that line (see whole())."""
         a = dict(a)
+        lo, hi = self.span()
+        if not self.whole():
+            n = int(self.members().sum())
+            raise ValueError(
+                "this line is %d LEDs scattered over %d-%d, and a correction "
+                "applies to every index in that range -- %d LEDs that are not "
+                "lit.  Find the run in the strips or runs view and correct it "
+                "there." % (n, lo, hi, hi - lo + 1 - n))
+        if (int(a.get("lo", -1)), int(a.get("hi", -1))) != (lo, hi):
+            raise ValueError("asked to correct %s-%s but %d-%d is lit; the "
+                             "line changed, so look again"
+                             % (a.get("lo"), a.get("hi"), lo, hi))
         a.setdefault("when", time.strftime("%Y-%m-%dT%H:%M:%S"))
         self.adjust.setdefault("spans", []).append(a)
         self._write(ADJUST, self.adjust)
@@ -248,6 +276,7 @@ PAGE = r"""<!doctype html>
  button.good{background:var(--ok);border-color:var(--ok);color:#fff}
  button.bad{background:var(--bad);border-color:var(--bad);color:#fff}
  button.wide{flex:2}
+ button:disabled{opacity:.35}
  input[type=range]{flex:1}
  input[type=text],input[type=number]{background:#15151c;color:var(--fg);
    border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;min-width:0}
@@ -343,7 +372,12 @@ function render() {
   $('sub').textContent = S.lit + ' leds, ' + S.lo + '–' + S.hi
     + ' · line ' + (S.i + 1) + ' of ' + S.count
     + ' · ' + S.marks.good + ' ok, ' + S.marks.bad + ' flagged';
-  $('span').textContent = S.lo + '-' + S.hi;
+  // A correction covers every index from lo to hi, so it is offered only
+  // on a line that is one unbroken run; the server refuses the rest too.
+  $('span').textContent = S.whole ? S.lo + '-' + S.hi
+    : S.lo + '-' + S.hi + ' is not one run (' + S.lit
+      + ' lit) -- correct it from strips or runs';
+  for (const id of ['move', 'shift', 'rev', 'region']) $(id).disabled = !S.whole;
   $('helmet').textContent = S.helmet;
   $('good').className = 'wide' + (S.mark && S.mark.verdict === 'good' ? ' good' : '');
   $('bad').className  = 'wide' + (S.mark && S.mark.verdict === 'bad'  ? ' bad'  : '');
@@ -400,7 +434,9 @@ async function go(body) { S = await api('/api/show', body); render(); }
 
 async function adj(a) {
   a.lo = S.lo; a.hi = S.hi;
-  S = await api('/api/adjust', a);
+  const r = await api('/api/adjust', a);
+  if (r.error) { alert(r.error); S = await api('/api/state'); render(); return; }
+  S = r;
   G = await api('/api/geometry');          // the map moved
   render();
 }

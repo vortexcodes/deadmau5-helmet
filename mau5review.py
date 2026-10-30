@@ -105,28 +105,52 @@ def phase_times(preset, n):
     return [round(per * f, 3) for f in fr]
 
 
-def grab(path, after, port):
-    return mau5eye.shot(path, port=port, after=after, wait=25.0)
+def grab(path, after, port, lag=0.0):
+    return mau5eye.shot(path, port=port, after=after, lag=lag, wait=25.0)
 
 
-def dark_frame(stream, port, tmp, n=2):
-    """Average a couple of blanked frames, for a quieter reference."""
+# Every grab below waits out the camera's lag.  The phone camera shows a
+# change only in frames pushed 1.08-1.54 s after it (measured
+# 2026-10-30), and this used to take frames pushed 0.65-1.15 s after: so
+# each phase photographed the one before, phase 0 of a preset the blank
+# left by the last, and a dark reference could still hold the previous
+# preset -- which the difference then subtracted to nothing, so whole
+# regions looked starved by the guard when they were not.
+
+def dark_frame(stream, port, tmp, n=2, lag=0.0):
+    """Average a couple of blanked frames, for a quieter reference.
+
+    Each grab is its own frame: shot() waits for two fresh pushes.
+    """
+    t0 = time.time()
     stream.dark()
     time.sleep(0.35)
     acc = None
     for i in range(n):
-        p = grab(os.path.join(tmp, "dark%d.jpg" % i), time.time(), port)
+        p = grab(os.path.join(tmp, "dark%d.jpg" % i), t0, port, lag)
         a = np.asarray(Image.open(p).convert("RGB")).astype(np.float32)
         acc = a if acc is None else acc + a
     return acc / n
 
 
-def lit_frame(stream, buf, port, tmp):
-    stream.show(buf)
+def lit_frame(stream, buf, port, tmp, lag=0.0):
+    # the clock starts before the frame goes, not after: the streamer
+    # may send it before show() has even returned
     t0 = time.time()
+    stream.show(buf)
     time.sleep(0.25)
-    p = grab(os.path.join(tmp, "lit.jpg"), t0, port)
+    p = grab(os.path.join(tmp, "lit.jpg"), t0, port, lag)
     return np.asarray(Image.open(p).convert("RGB")).astype(np.float32)
+
+
+def probe_frame(h, level=40):
+    """What to time the camera with: a thin bar across the shell at mid
+    height, dim.  Dimmer than any preset reviewed here, and through the
+    same guard as everything else."""
+    buf = np.zeros((h.n, 3), np.uint8)
+    mid = 0.5 * (float(h.py[h.shell].min()) + float(h.py[h.shell].max()))
+    buf[h.shell & (np.abs(h.py - mid) <= 12.0)] = (level, level, level)
+    return buf
 
 
 def difference(lit, dark, gain=1.0):
@@ -181,6 +205,10 @@ def main(argv=None):
                     help="re-take the dark reference every N presets")
     ap.add_argument("--raw", action="store_true",
                     help="also keep the undifferenced frames")
+    ap.add_argument("--lag", type=float, default=None,
+                    help="seconds from a change on the helmet to the first "
+                         "camera frame that shows it, margin included.  "
+                         "Measured at the start unless given")
     a = ap.parse_args(argv)
 
     os.makedirs(a.out, exist_ok=True)
@@ -205,10 +233,21 @@ def main(argv=None):
     report, tiles = [], []
     t_start = time.time()
     try:
-        dark = dark_frame(stream, a.eye_port, tmp)
+        lag = a.lag
+        if lag is None:
+            probe = probe_frame(h)
+            try:
+                lag, seen = mau5eye.measure_lag(lambda: stream.show(probe), stream.dark,
+                                                port=a.eye_port)
+            except mau5eye.LagError as e:
+                raise SystemExit("could not time the camera (%s); --lag gives "
+                                 "it by hand" % e)
+            print("  camera lag: a change first shows %.2f-%.2f s after it; "
+                  "waiting %.2f s for each frame" % (min(seen), max(seen), lag))
+        dark = dark_frame(stream, a.eye_port, tmp, lag=lag)
         for i, name in enumerate(names):
             if i and i % a.redark == 0:
-                dark = dark_frame(stream, a.eye_port, tmp)
+                dark = dark_frame(stream, a.eye_port, tmp, lag=lag)
             kw = OVERRIDES.get(name, {})
             try:
                 preset = E.make(name, **kw)
@@ -218,7 +257,7 @@ def main(argv=None):
             m = music if name in MUSICAL else None
             for j, t in enumerate(phase_times(preset, a.phases)):
                 buf = np.clip(preset.render(h, t, m) * a.level, 0, 255)
-                lit = lit_frame(stream, buf.astype(np.uint8), a.eye_port, tmp)
+                lit = lit_frame(stream, buf.astype(np.uint8), a.eye_port, tmp, lag)
                 d = difference(lit, dark, a.gain)
                 stem = "%s_%d" % (name, j)
                 Image.fromarray(d).save(os.path.join(a.out, stem + ".jpg"), quality=90)

@@ -25,6 +25,13 @@ HEAT.  Everything at full brightness is roughly 18 A on this helmet and will
 overheat it. This never lights more than --max-lit LEDs at once (default 120)
 and never exceeds --max-bri (default 128/255), both clamped server-side. The
 numbers are deliberately conservative; raise them only if you are watching it.
+
+Each session is saved to its own file, data/cal/walk_YYYYmmdd-HHMMSS.json,
+and only once something has been recorded in it.  It used to write
+data/cal/walk_session.json on every exit: that is the first night's 78-section
+hand walk, which the tests, mau5film, mau5verify and mau5shoot all read, and
+starting this to look at one strip and pressing ctrl-c replaced it with an
+empty session.  To make a new walk the reference, copy it over by hand.
 """
 
 from __future__ import annotations
@@ -42,6 +49,36 @@ import mau5wled
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PAGE = os.path.join(HERE, "remote", "walk.html")
+# The first night's walk: read by everything that checks the map against
+# an instrument that shares nothing with the cameras.  Never written here.
+REFERENCE = "walk_session.json"
+
+
+def session_path(outdir, when=None):
+    """This session's own file, named for when it started."""
+    return os.path.join(outdir, "walk_%s.json"
+                        % time.strftime("%Y%m%d-%H%M%S", time.localtime(when)))
+
+
+def save_session(walk, path):
+    """Write the session if anything was recorded; return the path or None.
+
+    An empty session -- started to look at something, then ctrl-c --
+    is nothing worth a file.  And whatever path it is given, it will
+    not write over the reference walk.
+    """
+    doc = walk.export()
+    if not doc["sections"] and not doc["note"]:
+        return None
+    if os.path.basename(path) == REFERENCE:
+        raise ValueError("%s is the reference walk; save this session elsewhere"
+                         % path)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, indent=1)
+    os.replace(tmp, path)
+    return path
 
 
 class Walk:
@@ -166,7 +203,13 @@ class Walk:
                     sections=s, note=self.note)
 
 
-def make_handler(walk, outdir):
+def make_handler(walk, path):
+    """`path` is this session's own file (session_path)."""
+    def save():
+        fn = save_session(walk, path)
+        return {"saved": fn} if fn else {"saved": None,
+                                         "why": "nothing recorded yet"}
+
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
@@ -198,11 +241,9 @@ def make_handler(walk, outdir):
             if p == "/api/export":
                 return self._send(walk.export())
             if p == "/api/save":
-                os.makedirs(outdir, exist_ok=True)
-                fn = os.path.join(outdir, "walk_session.json")
-                with open(fn, "w", encoding="utf-8") as fh:
-                    json.dump(walk.export(), fh, indent=1)
-                return self._send({"saved": fn})
+                # still answered on GET because remote/walk.html's save
+                # button uses it; it only ever writes this session's file
+                return self._send(save())
             return self._send({"error": "no route " + p}, code=404)
 
         def do_POST(self):
@@ -248,6 +289,8 @@ def make_handler(walk, outdir):
                 walk.note = str(body.get("note", ""))[:400]
             elif p == "/api/correct":
                 walk.correct = bool(body.get("on"))
+            elif p == "/api/save":
+                return self._send(save())
             else:
                 return self._send({"error": "no route " + p}, code=404)
             return self._send(walk.state())
@@ -282,8 +325,9 @@ def main(argv=None):
     w.realtime(True, brightness=255)      # our own cap does the limiting
     pix = mau5wled.Pixels(w, n)
     walk = Walk(pix, n, a.max_lit, a.max_bri, a.idle_blank)
+    fn = session_path(a.out)
 
-    srv = ThreadingHTTPServer(("0.0.0.0", a.port), make_handler(walk, a.out))
+    srv = ThreadingHTTPServer(("0.0.0.0", a.port), make_handler(walk, fn))
     url = "http://%s:%d/" % (lan_ip(), a.port)
     full = n * 0.0192 * 12
     print("\n  open this on your phone:   %s\n" % url)
@@ -299,6 +343,7 @@ def main(argv=None):
                       % (r["fraction"] * 100, r["max_ma"], r["pin"]))
     except Exception:
         pass
+    print("  this session saves to %s" % os.path.relpath(fn, HERE))
     print("  ctrl-c to stop (the helmet blanks on exit)")
     try:
         srv.serve_forever()
@@ -311,11 +356,10 @@ def main(argv=None):
             pix.clear()
         except Exception:
             pass
-        os.makedirs(a.out, exist_ok=True)
-        fn = os.path.join(a.out, "walk_session.json")
-        with open(fn, "w", encoding="utf-8") as fh:
-            json.dump(walk.export(), fh, indent=1)
-        print("session saved -> %s" % fn)
+        if save_session(walk, fn):
+            print("session saved -> %s" % fn)
+        else:
+            print("nothing recorded, nothing written")
 
 
 if __name__ == "__main__":
