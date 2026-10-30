@@ -1137,11 +1137,12 @@ def t_offline_encoder_roundtrip():
         ws = out["ws"]
         if ws:
             # every frame that sends anything ends with the ping that
-            # paces the player, and nothing follows it
-            eq(ws[-1], "p", "a frame must end with its ping")
-            ok(out["busyAfter"] and not out["busyBefore"],
-               "the link must be busy from the ping until the pong")
-            ws = ws[:-1]
+            # paces the player and the filler that keeps the two of them
+            # exactly one TCP segment: 7 + 8 + 1421 = 1436 bytes
+            eq(ws[-2], "p", "a frame must end with its ping")
+            eq(ws[-1], " " * res["filler"], "and the filler after it")
+            eq(len("p") + 6 + res["filler"] + 8, 1436, "ping and filler fill one segment")
+            ws = ws[:-2]
         for m in ws:
             # exactly one TCP segment each, or a repacked stream splits
             # them and the firmware refuses half
@@ -1159,11 +1160,15 @@ def t_offline_encoder_roundtrip():
         other.apply_state(json.loads(out["http"]))
         ok(np.array_equal(other.px, want), "a whole-frame POST shows %d LEDs wrong"
            % int((other.px != want).any(1).sum()))
-    first = {g["id"] for m in sent[0]["ws"][:-1] for g in json.loads(m)["seg"]}
+    first = {g["id"] for m in sent[0]["ws"][:-2] for g in json.loads(m)["seg"]}
     eq(first, set(range(len(res["layout"]))), "the first frame goes whole")
     eq(msgs[-2], 0, "a repeated frame should send nothing")
     eq(sent[-2]["ret"], 0, "and say so, so it still counts as shown")
     eq(msgs[-1], 1, "one changed LED should send one segment")
+    dp = res["depth"]
+    lim = res["depthLimit"]
+    ok(all(not x["busy"] for x in dp[:lim]), "the link refused a frame before %d were in flight" % lim)
+    ok(dp[lim]["busy"] and dp[lim]["ret"] == -1, "a frame beyond %d in flight must wait" % lim)
     hb = res["handBack"]
     ok(not hb["missing"], "handing back to a preset that is not there leaves the helmet lit")
     ok(hb["present"], "a standby preset that exists should be handed back to")
@@ -1446,6 +1451,26 @@ GROUPS = {
     "camera": [t_eye_after],
     "audio": [t_tempo_truth, t_beat_alignment],
 }
+
+# More tests can live in tests_more/<name>.py, each defining GROUP, a
+# list of t_ functions run under the module's name -- so several changes
+# can add tests without all editing the table above.
+def _more():
+    import importlib.util
+    d = os.path.join(HERE, "tests_more")
+    if not os.path.isdir(d):
+        return
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".py") or fn.startswith("_"):
+            continue
+        spec = importlib.util.spec_from_file_location("tests_more_" + fn[:-3],
+                                                      os.path.join(d, fn))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        GROUPS[fn[:-3]] = list(getattr(mod, "GROUP", []))
+
+
+_more()
 
 if __name__ == "__main__":
     want = sys.argv[1:] or sorted(GROUPS)

@@ -42,6 +42,16 @@
 const FFT_FAST = 1024;              // level, flux, bands
 const FFT_SLOW = 8192;              // pitch, centroid
 const TICK_MS = 20;                 // 50 Hz analysis, independent of render
+
+// A level is a meter, not a sample: up at once, down gently.  Raw, a
+// band could jump by a third of its height between two 20 ms ticks, and
+// on the helmet an equaliser driven by that twitched like a fault --
+// the owner's word was jitter, and it showed on eq far more than on the
+// presets that do not listen.  Per analysis tick: RISE of the way up,
+// FALL of the way down, so a drop takes about 150 ms to settle.
+const RISE = 0.7;
+const FALL = 0.12;
+function meter(prev, v) { return prev + (v - prev) * (v > prev ? RISE : FALL); }
 const PITCH_LO = 120, PITCH_HI = 2000;
 const BAND_LO = 40, BAND_HI = 12000;
 
@@ -348,7 +358,8 @@ class Analyser {
       }
       const m = c ? s / c : 0;
       const e = this._b3gain[name].push(20 * Math.log10(m + 1e-4));
-      this.b3[name] = e;
+      // the energy is metered; the punch below is the raw edge, on purpose
+      this.b3[name] = meter(this.b3[name], e);
       const d = e - this._b3prev[name];
       this._b3prev[name] = e;
       this.p3[name] = Math.max(d > 0 ? d * 6 : 0, this.p3[name] * 0.86);
@@ -428,6 +439,8 @@ class Analyser {
       this._bandCache[nb] = edges;
       this._bandGain = this._bandGain || {};
       this._bandGain[nb] = [];
+      this._bandMeter = this._bandMeter || {};
+      this._bandMeter[nb] = new Float64Array(nb);
       for (let b = 0; b < nb; b++) this._bandGain[nb].push(new AutoGain(-60, -20));
     }
     const out = new Float64Array(nb);
@@ -439,7 +452,8 @@ class Analyser {
       // carries a twentieth of the energy of the bass and would
       // otherwise never move -- the same reason band_curves normalises
       // per band on the laptop.
-      out[b] = this._bandGain[nb][b].push(20 * Math.log10(m + 1e-4));
+      const v = this._bandGain[nb][b].push(20 * Math.log10(m + 1e-4));
+      out[b] = this._bandMeter[nb][b] = meter(this._bandMeter[nb][b], v);
     }
     this._bandVal[nb] = out;
     return out;

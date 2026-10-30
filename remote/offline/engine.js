@@ -396,6 +396,9 @@ def('police', { hz: 2.5 },
     }
   });
 
+// How far below its top a bar fades in, in units of the helmet's height.
+const EQ_EDGE = 0.08;
+
 def('eq', { bands: 12, lo: [0, 80, 255], hi: [255, 0, 120] },
   function (h, t, music, out) {
     const nb = this.p.bands, LO = this.p.lo, HI = this.p.hi;
@@ -409,7 +412,8 @@ def('eq', { bands: 12, lo: [0, 80, 255], hi: [255, 0, 120] },
     for (let i = 0; i < h.n; i++) {
       const band = clamp(Math.trunc(h.nfa[i] * nb), 0, nb - 1);
       const e = h.nel[i];
-      const k = e <= amp[band] ? 1 : 0;
+      // a soft top, so a bar rises smoothly instead of a row at a time
+      const k = clamp((amp[band] - e) / EQ_EDGE, 0, 1);
       out[i * 3] = k * (LO[0] * (1 - e) + HI[0] * e);
       out[i * 3 + 1] = k * (LO[1] * (1 - e) + HI[1] * e);
       out[i * 3 + 2] = k * (LO[2] * (1 - e) + HI[2] * e);

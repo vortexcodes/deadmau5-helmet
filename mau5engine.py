@@ -450,6 +450,10 @@ class Equaliser(Preset):
     """Bars per azimuth column, height driven by the music."""
     name = "eq"
     params = {"bands": 12, "lo": (0, 80, 255), "hi": (255, 0, 120)}
+    # How far below its top a bar fades in, in units of the helmet's
+    # height: the LED the edge passes through is lit in proportion, so a
+    # bar rises smoothly instead of a row at a time.
+    EDGE = 0.08
 
     def render(self, h, t, music=None):
         nb = self.p["bands"]
@@ -459,7 +463,7 @@ class Equaliser(Preset):
         else:
             amp = 0.5 + 0.5 * np.sin(t * 2.0 + np.arange(nb) * 0.9)
         lvl = amp[band]
-        k = (h.nel <= lvl).astype(float)
+        k = np.clip((lvl - h.nel) / self.EDGE, 0.0, 1.0)
         col = (np.array(self.p["lo"])[None, :] * (1 - h.nel)[:, None]
                + np.array(self.p["hi"])[None, :] * h.nel[:, None])
         return k[:, None] * col

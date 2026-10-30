@@ -41,6 +41,7 @@ const Q = new URLSearchParams(location.search);
 const link = new M.Link({
   count: helmet.n, strips: D.strips, standby: D.standby || null,
   origin: Q.get('api') || '', token: Q.get('t') || '',
+  ackDelay: Number(Q.get('ackdelay')) || 0,   // testing: act like a phone
 });
 // For a console, or a bench driving the page from outside: what the
 // link has sent, skipped, and had refused.

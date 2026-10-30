@@ -139,12 +139,25 @@ const PAD = 1428;
 // How often every segment is sent whether it changed or not.
 const KEYFRAME_MS = 1000;
 
-// A frame whose pong has not come back by now is given up on: the
-// next frame goes whole, and the player carries on.  About three times
-// the slowest frame measured, because a lost pong freezes the helmet
-// for exactly this long -- one in a two-minute sweep, at 1000 ms, was
-// a visible stall.
-const PONG_TIMEOUT_MS = 300;
+// Frames allowed on their way at once.  One was the obvious choice and
+// it tied the frame rate to the round trip: a laptop gets its pong in
+// 20 ms, but a phone on WiFi dozes between packets and takes 100 or
+// more, and with a 100 ms return path one frame in flight gave plasma
+// 5 fps and eyes 7.5.  Three gave 15.5 and 20.5, and 30 for eyes at
+// laptop speed, with the queue still no deeper than three frames.
+const DEPTH = 2;
+
+// Sent with each ping, so that the ping and this together are exactly
+// one 1436-byte segment (7 bytes for 'p', 8 of header and 1421 of
+// spaces for this) and the padding of whatever follows them survives.
+// The firmware parses it as JSON, fails on the first character it
+// cannot use and answers nothing.
+const FILLER = ' '.repeat(1421);
+
+// A frame whose pong has not come back by now is given up on, and the
+// next frame goes whole.  With three in flight a lost pong only holds
+// one of the three slots, so this can afford to be patient.
+const PONG_TIMEOUT_MS = 1000;
 
 // A POST that has not come back by now is not coming back.  Without a
 // limit, two requests the controller never answered pinned the player
@@ -293,8 +306,16 @@ class Link {
     this.streaming = false;
     this._reopenAt = 0;
     this._opening = false;
-    // When the last frame's 'p' went, or 0 when its pong is back.
-    this.awaiting = 0;
+    // When each unacknowledged frame's 'p' went, oldest first.
+    this.unacked = [];
+    this.depth = opts.depth || DEPTH;
+    // For testing a phone from a laptop: hold every pong this long.
+    this.ackDelay = opts.ackDelay || 0;
+    // How often the controller has been finishing frames, smoothed; the
+    // player spaces its frames by this so they arrive evenly rather
+    // than in bursts whenever a slot frees.
+    this.paceMs = 0;
+    this._lastPong = 0;
     this.sent = 0; this.bytes = 0; this.failed = 0; this.refused = 0;
     this.lost = 0; this.messages = 0;
     // How long a frame takes to reach the strip: send to pong, or a
@@ -379,11 +400,8 @@ class Link {
         ws.onmessage = (e) => {
           this.messages++;
           if (e.data === 'pong') {
-            if (this.awaiting) {
-              this.rtt = this.rtt * 0.8 + (performance.now() - this.awaiting) * 0.2;
-              this.awaiting = 0;
-              this.onready();
-            }
+            if (this.ackDelay) setTimeout(() => this._pong(), this.ackDelay);
+            else this._pong();
           } else if (typeof e.data === 'string' && e.data.length < 64
                      && e.data.indexOf('"error"') >= 0) {
             this.refused++;
@@ -391,7 +409,7 @@ class Link {
           }
         };
         const gone = () => {
-          if (this.ws === ws) { this.ws = null; this.awaiting = 0; this.dirty(); }
+          if (this.ws === ws) { this.ws = null; this.unacked = []; this.dirty(); }
         };
         ws.onclose = gone;
         ws.onerror = gone;
@@ -399,6 +417,20 @@ class Link {
       };
       ws.onerror = () => { clearTimeout(giveUp); resolve(false); };
     });
+  }
+
+  // A frame is on the strip: messages are handled in order, so the
+  // pong answers the oldest frame still waiting.
+  _pong() {
+    if (!this.unacked.length) return;
+    const now = performance.now();
+    this.rtt = this.rtt * 0.8 + (now - this.unacked.shift()) * 0.2;
+    if (this._lastPong) {
+      const gap = Math.min(now - this._lastPong, 250);
+      this.paceMs = this.paceMs ? this.paceMs * 0.85 + gap * 0.15 : gap;
+    }
+    this._lastPong = now;
+    this.onready();
   }
 
   // The controller closes the socket now and then -- seen during a
@@ -575,8 +607,14 @@ class Link {
   // draws nothing until it is not: a frame drawn now would only be
   // shown late.
   busy(now) {
-    if (this.ws && this.ws.readyState === 1)
-      return this.awaiting > 0 && now - this.awaiting < PONG_TIMEOUT_MS;
+    if (this.ws && this.ws.readyState === 1) {
+      while (this.unacked.length && now - this.unacked[0] > PONG_TIMEOUT_MS) {
+        this.unacked.shift();       // that pong never came: start again whole
+        this.lost++;
+        this.dirty();
+      }
+      return this.unacked.length >= this.depth;
+    }
     return this.inflight >= this.maxInflight;
   }
 
@@ -589,11 +627,6 @@ class Link {
     if (this.busy(now)) { this.failed++; return -1; }
 
     if (ws) {
-      if (this.awaiting) {          // that pong never came: start again whole
-        this.lost++;
-        this.awaiting = 0;
-        this.dirty();
-      }
       const key = now - this._keyAt >= KEYFRAME_MS;
       const todo = this.frags(frame, key);
       if (key) this._keyAt = now;
@@ -605,7 +638,8 @@ class Link {
       }
       for (const [s, f] of todo) this.last[s] = f;
       ws.send('p');
-      this.awaiting = now;
+      ws.send(FILLER);
+      this.unacked.push(now);
       this.path = 'ws';
       this.sent++; this.bytes += bytes;
       this.armDeadman(false);
@@ -647,7 +681,7 @@ class Link {
 }
 
 const api = { Link, encode, flatten, bodyFor, fragFor, pack, layout, makePerm, ORDERS,
-              PAD, SEG_MAX, KEYFRAME_MS };
+              PAD, SEG_MAX, KEYFRAME_MS, DEPTH, FILLER };
 root.MAU5 = Object.assign(root.MAU5 || {}, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
