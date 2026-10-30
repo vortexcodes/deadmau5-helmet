@@ -1137,12 +1137,15 @@ def t_offline_encoder_roundtrip():
         ws = out["ws"]
         if ws:
             # every frame that sends anything ends with the ping that
-            # paces the player and the filler that keeps the two of them
-            # exactly one TCP segment: 7 + 8 + 1421 = 1436 bytes
-            eq(ws[-2], "p", "a frame must end with its ping")
-            eq(ws[-1], " " * res["filler"], "and the filler after it")
+            # paces the player -- and, only when frames may overlap, the
+            # filler that keeps the two of them exactly one TCP segment:
+            # 7 + 8 + 1421 = 1436 bytes
+            if res["depthLimit"] > 1:
+                eq(ws[-1], " " * res["filler"], "the filler after the ping")
+                ws = ws[:-1]
+            eq(ws[-1], "p", "a frame must end with its ping")
             eq(len("p") + 6 + res["filler"] + 8, 1436, "ping and filler fill one segment")
-            ws = ws[:-2]
+            ws = ws[:-1]
         for m in ws:
             # exactly one TCP segment each, or a repacked stream splits
             # them and the firmware refuses half
@@ -1160,7 +1163,7 @@ def t_offline_encoder_roundtrip():
         other.apply_state(json.loads(out["http"]))
         ok(np.array_equal(other.px, want), "a whole-frame POST shows %d LEDs wrong"
            % int((other.px != want).any(1).sum()))
-    first = {g["id"] for m in sent[0]["ws"][:-2] for g in json.loads(m)["seg"]}
+    first = {g["id"] for m in sent[0]["ws"] if m.startswith("{") for g in json.loads(m)["seg"]}
     eq(first, set(range(len(res["layout"]))), "the first frame goes whole")
     eq(msgs[-2], 0, "a repeated frame should send nothing")
     eq(sent[-2]["ret"], 0, "and say so, so it still counts as shown")

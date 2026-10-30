@@ -289,8 +289,10 @@ function fakeWs(onSend) {
 const frameN = (n, k) => { const f = new Uint8Array(n * 3); f[0] = k & 255; f[1] = 1; return f; };
 
 // -- a late pong is not credited to a newer frame ------------------------
+// (with frames overlapping, which the page ships off -- DEPTH is 1 on
+// WLED 0.15.4 -- but which a later firmware may allow: keep it right)
 {
-  const L = new W.Link({ count: 62, deadmanMins: 0 });
+  const L = new W.Link({ count: 62, deadmanMins: 0, depth: 2 });
   L.ws = fakeWs();
   L.dirty();
   let ready = 0;
@@ -317,7 +319,7 @@ const frameN = (n, k) => { const f = new Uint8Array(n * 3); f[0] = k & 255; f[1]
 
 // -- pongs that never come are given up on, and sending resumes ----------
 {
-  const L = new W.Link({ count: 62, deadmanMins: 0 });
+  const L = new W.Link({ count: 62, deadmanMins: 0, depth: 2 });
   L.ws = fakeWs();
   T = 0;   L.send(frameN(62, 1));
   T = 10;  L.send(frameN(62, 2));
@@ -338,7 +340,7 @@ const frameN = (n, k) => { const f = new Uint8Array(n * 3); f[0] = k & 255; f[1]
 function stallModel(stallLen) {
   T = 5;
   const N = 621, MS = 12, END = 14000, STALL = 3000;
-  const L = new W.Link({ count: N, deadmanMins: 0 });
+  const L = new W.Link({ count: N, deadmanMins: 0, depth: 2 });
   const events = []; let seq = 0;
   const at = (t, fn) => { events.push([t, seq++, fn]); events.sort((x, y) => x[0] - y[0] || x[1] - y[1]); };
   let free = 0, real = 0;

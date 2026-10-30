@@ -46,3 +46,6 @@ data/web/
 
 # Finder litter
 .DS_Store
+
+# agent worktrees
+.claude/worktrees/

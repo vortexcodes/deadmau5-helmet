@@ -370,20 +370,14 @@ def t_ctl_render_error_keeps_the_stream():
     ctl = mau5ctl.Controller(pix, fps=50, wled=None)
     try:
         ctl.set_preset("rainbow")
-        try:
-            ctl.set_preset("rainbow", period=0.0)
-            ok(False, "rainbow at period 0 was accepted")
-        except ValueError as e:
-            ok("kept what was playing" in str(e), str(e))
-        eq(ctl.params.get("period"), E.REGISTRY["rainbow"].params["period"],
-           "the refused settings replaced the old ones")
-        for name, kw in (("breathe", {"period": 0.0}), ("eq", {"bands": 0}),
-                         ("confetti", {"fade": 0.0})):
-            try:
-                ctl.set_preset(name, **kw)
-                ok(False, "%s %s was accepted" % (name, kw))
-            except ValueError:
-                pass
+        # A slider at its end used to be refused here because it threw;
+        # the engine now holds such values at the slider's floor, so they
+        # are taken and render finite -- which is what matters.
+        for name, kw in (("rainbow", {"period": 0.0}), ("breathe", {"period": 0.0}),
+                         ("eq", {"bands": 0}), ("confetti", {"fade": 0.0})):
+            ctl.set_preset(name, **kw)
+            f = np.asarray(ctl.preset.render(h, 1.234), float)
+            ok(np.isfinite(f).all(), "%s %s renders non-finite" % (name, kw))
         time.sleep(0.2)
         # Now one that fails anyway, mid-run.
         with ctl.lock:

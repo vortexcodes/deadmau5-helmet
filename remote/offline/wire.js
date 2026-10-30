@@ -139,13 +139,18 @@ const PAD = 1428;
 // How often every segment is sent whether it changed or not.
 const KEYFRAME_MS = 1000;
 
-// Frames allowed on their way at once.  One was the obvious choice and
-// it tied the frame rate to the round trip: a laptop gets its pong in
-// 20 ms, but a phone on WiFi dozes between packets and takes 100 or
-// more, and with a 100 ms return path one frame in flight gave plasma
-// 5 fps and eyes 7.5.  Three gave 15.5 and 20.5, and 30 for eyes at
-// laptop speed, with the queue still no deeper than three frames.
-const DEPTH = 2;
+// Frames allowed on their way at once.  More than one would help a
+// phone a great deal: a laptop gets its pong in 20 ms, but a phone on
+// WiFi dozes between packets and takes 100 or more, and with a 100 ms
+// return path one frame in flight gave plasma 5 fps and eyes 7.5 where
+// three gave 15.5 and 20.5.  But this controller cannot take it.  In
+// monitored sweeps of every preset, two or three frames in flight
+// rebooted WLED 0.15.4 in every run -- free memory sliding from 115 kB
+// to under 80 kB and then a restart -- while one frame in flight ran
+// sweep after sweep with no restart.  A helmet that goes black for ten
+// seconds mid-show is worse than one that runs at 15 fps, so it is one,
+// until the firmware can take more (WLED 16 takes binary frames).
+const DEPTH = 1;
 
 // Sent with each ping, so that the ping and this together are exactly
 // one 1436-byte segment (7 bytes for 'p', 8 of header and 1421 of
@@ -512,8 +517,30 @@ class Link {
     if (!this.streaming || this._opening || now < this._reopenAt) return;
     this._reopenAt = now + REOPEN_MS;
     this._opening = true;
-    this.openSocket(1500).then(() => { this._opening = false; },
-                               () => { this._opening = false; });
+    this.openSocket(1500).then((ok) => {
+      this._opening = false;
+      if (ok && this.streaming) this._relayout();
+    }, () => { this._opening = false; });
+  }
+
+  // Put the helmet back the way begin() left it.  A lost socket is
+  // usually a controller that restarted -- seen several times tonight
+  // under load -- and a restarted controller comes up off, with one
+  // unfrozen segment: frames for segments 1-9 then go nowhere and the
+  // helmet stays dark until somebody presses stop and start.  Sending
+  // the layout again is harmless when nothing restarted, so it is sent
+  // on every reconnect, with the dead man armed in the same breath.
+  async _relayout() {
+    try {
+      await this.postJSON({
+        on: true, live: false, bri: this.bri, transition: 0, tt: 0,
+        nl: this.deadmanMins
+          ? { on: true, mode: 0, dur: this.deadmanMins, tbri: 0 } : undefined,
+        seg: this.segLayout(),
+      });
+      this.relayouts = (this.relayouts || 0) + 1;
+      this.dirty();
+    } catch (e) { /* the next reconnect tries again */ }
   }
 
   async hello() {
@@ -787,7 +814,9 @@ class Link {
       }
       for (const [s, f] of todo) this.last[s] = f;
       ws.send('p');
-      ws.send(FILLER);
+      // only when frames overlap can a short 'p' be repacked into the
+      // middle of the next frame's padding; alone in flight it cannot
+      if (this.depth > 1) ws.send(FILLER);
       this.unacked.push(now);
       this.path = 'ws';
       this.sent++; this.bytes += bytes;
