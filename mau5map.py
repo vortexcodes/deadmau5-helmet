@@ -66,7 +66,8 @@ def apply_adjustments(rows, path=ADJUST):
       move     add (dx, dy, dz) mm to the span's positions
       reverse  turn the span's positions end for end
       shift    take each LED's position from `by` places further
-               along its own strip -- the correction for LEDs cut
+               along its own strip (on an ear, its own region, never
+               the other ear's) -- the correction for LEDs cut
                out of a run, where the chain does not skip but the
                geometry does
       region   relabel the span, for a run that is not on the
@@ -99,13 +100,23 @@ def apply_adjustments(rows, path=ADJUST):
                 r["x"], r["y"], r["z"] = p
         elif op == "shift":
             by = int(a.get("by", 0))
-            for g in set(r["group"] for r in span):
-                strip = [r for r in rows if r["group"] == g]
-                strip.sort(key=lambda r: r["pos_in_strip"])
+            # A strip is its group *and* its strip name.  Every ear row
+            # has group -1, and pos_in_strip starts again at 0 in each of
+            # the four ear regions, so by group alone the "strip" was all
+            # 223 ear LEDs interleaved by position: shifting 500-505 by
+            # one gave ear1's rim the positions of ear2's, 518-523, on
+            # the far side of the head.  The name is the CAD strip on
+            # the shell and the region on an ear, and a 'region' relabel
+            # leaves it alone, so a relabelled run keeps its own strip.
+            def strip_of(r):
+                return (r["group"], r.get("strip"))
+            for g in set(strip_of(r) for r in span):
+                strip = [r for r in rows if strip_of(r) == g]
+                strip.sort(key=lambda r: (r["pos_in_strip"], r["index"]))
                 pts = [(r["x"], r["y"], r["z"]) for r in strip]
                 at = {r["index"]: i for i, r in enumerate(strip)}
                 for r in span:
-                    if r["group"] != g:
+                    if strip_of(r) != g:
                         continue
                     j = min(max(at[r["index"]] + by, 0), len(pts) - 1)
                     r["x"], r["y"], r["z"] = pts[j]

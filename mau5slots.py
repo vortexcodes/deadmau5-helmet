@@ -104,15 +104,98 @@ ROT = 38                 # the chain starts at CAD strip B39
 # old 493 was.
 CUT = (492,)
 
+# Which chain a pose file was measured on, by its length.  CUT is only
+# right for a file measured before the cut: one measured since is keyed
+# by the chain as it is, and re-keying it again throws away the real
+# 492, files 493 as 492, ear2's first rim LED (510) as ear1's last, and
+# leaves 620 with nothing -- every ear LED one place off, about 50 mm
+# round a rim, and nothing downstream can tell.  So each file says
+# which chain it is: mau5locate stamps every row it writes with a
+# `chain` column, and pose_chain() reads it.
+BEFORE_CUT = TOTAL_N + len(CUT)        # 622
+
 
 def after_cut(meas):
-    """Pose centroids keyed by the chain as it is now, not as it was."""
+    """Pose centroids keyed by the chain as it is now, not as it was.
+
+    Only for a file measured on the chain before the cut -- see
+    pose_chain() and rekey(), which decide that per file.
+    """
     out = {}
     for i, uv in meas.items():
         if i in CUT:
             continue
         out[i - sum(1 for c in CUT if c < i)] = uv
     return out
+
+
+def pose_chain(path, min_peak=40.0):
+    """The chain a pose file was measured on: TOTAL_N or BEFORE_CUT.
+
+    A file written by mau5locate since the cut says so in its `chain`
+    column.  The two files measured before it have no such column, and
+    say it another way: each has a strong centroid at index 621 (peaks
+    229 and 214), and on the chain as it is 621 lights nothing.  A file
+    with neither, and centroids at or past the cut, could be either,
+    and the two readings put every ear LED one place apart, so it is
+    refused rather than guessed.  One with nothing past the cut reads
+    the same either way.
+    """
+    if not os.path.exists(path):
+        return TOTAL_N
+    stamps, past_end, past_cut = set(), False, False
+    for r in csv.DictReader(open(path)):
+        try:
+            i = int(r["index"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        stamps.add((r.get("chain") or "").strip())
+        past_cut |= i >= min(CUT)
+        try:
+            past_end |= i >= TOTAL_N and float(r["peak"]) >= min_peak
+        except (KeyError, ValueError, TypeError):
+            pass
+    name = os.path.relpath(path, HERE)
+    if stamps - {""}:
+        if len(stamps) > 1:
+            raise SystemExit("%s mixes rows measured on different chains (%s) -- "
+                             "its indices cannot all be keyed the same way"
+                             % (name, ", ".join(sorted(s or "unstamped" for s in stamps))))
+        stamp = stamps.pop()
+        try:
+            chain = int(stamp)
+        except ValueError:
+            raise SystemExit("%s: chain %r is not a number of LEDs" % (name, stamp))
+        if chain not in (TOTAL_N, BEFORE_CUT):
+            raise SystemExit("%s was measured on a %d-LED chain; this knows only %d "
+                             "(before the cut) and %d (now)"
+                             % (name, chain, BEFORE_CUT, TOTAL_N))
+        return chain
+    if past_end:
+        return BEFORE_CUT
+    if not past_cut:
+        return TOTAL_N
+    raise SystemExit("%s has centroids past the cut at %d but does not say which "
+                     "chain it was measured on.  Add a `chain` column: %d on every "
+                     "row if it was measured before the cut on 2026-10-29, %d if after."
+                     % (name, min(CUT), BEFORE_CUT, TOTAL_N))
+
+
+def rekey(meas, chain):
+    """Anything keyed by chain index, re-keyed to the chain as it is now."""
+    if chain == BEFORE_CUT:
+        meas = after_cut(meas)
+    elif chain != TOTAL_N:
+        raise SystemExit("no way to re-key a %d-LED chain to %d" % (chain, TOTAL_N))
+    # 621 lights nothing now, so a centroid filed there is a reflection
+    return {i: v for i, v in meas.items() if 0 <= i < TOTAL_N}
+
+
+def load_pose(path, min_peak=40.0):
+    """A pose file's centroids keyed by the chain as it is now, and the
+    chain it was measured on."""
+    chain = pose_chain(path, min_peak)
+    return rekey(load_centroids(path, min_peak), chain), chain
 
 # Where the wiring is not the CAD's list: the channels interrupted by
 # the ear mounts, each split into a strip above the mount and one below.
@@ -736,12 +819,19 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     cad_rows, xyz, strips, order = load_cad()
-    meas = {k: after_cut(load_centroids(p)) for k, p in POSES.items()}
+    # Each pose re-keyed by the chain it was itself measured on, so a
+    # view re-measured since the cut can sit beside one from before it.
+    meas, chains = {}, {}
+    for k, p in POSES.items():
+        meas[k], chains[k] = load_pose(p)
     missing = [k for k, v in meas.items() if not v]
     if missing:
         raise SystemExit("no centroids for %s -- run mau5locate first" % missing)
     print("CAD: %d slots, chain B %d strips; centroids: %s"
           % (len(xyz), len(order), ", ".join("%s %d" % (k, len(v)) for k, v in meas.items())))
+    print("  measured on: %s" % ", ".join(
+        "%s the %d chain%s" % (k, c, ", re-keyed past the cut" if c == BEFORE_CUT else "")
+        for k, c in chains.items()))
 
     shell, path, cams = solve_shell(xyz, strips, order, meas)
     on = [(i, shell.states[s]) for i, s in enumerate(path) if s != shell.off]

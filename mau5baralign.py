@@ -31,19 +31,38 @@ from PIL import Image
 import mau5engine as E
 import mau5eye
 import mau5locate
+import mau5slots
 import mau5wled
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHOTS = os.path.join(HERE, "data", "cal", "baralign")
 
 
-def sweep(h, steps, thick, level, settle, host, eye_port, out, margin=40.0):
+def measured(path=mau5locate.OUT):
+    """The camera centroids, keyed by the chain as it is now.
+
+    The front pose was measured before the cut on 2026-10-29, on the
+    622 chain, and the map is the 621 one: read raw, old LED i (which
+    is new LED i-1 from 492 up) was scored against new LED i's height,
+    so every ear figure was off by one LED pitch, about 50 mm on a rim,
+    and the kinks report could flag cuts that are not there.
+    """
+    return mau5slots.rekey(mau5locate.load(path), mau5slots.pose_chain(path))
+
+
+def sweep(h, steps, thick, level, settle, host, eye_port, out, margin=40.0, lag=None):
     """Sweep past both ends by `margin`.
 
     Without it the LEDs at the extremes see a truncated response -- the
     bar arrives but never leaves -- which drags their weighted mean
     inwards and shows up as a slope below one that looks like a map
     error and is not.
+
+    Every frame waits out the camera's lag, measured first with a bar
+    from the sweep itself unless given.  The phone camera shows a change
+    1.1-1.5 s late, and settle 1.1 plus a push 0.4 s after the change
+    left little margin: a frame of the step before is a bar one step
+    low, which reads as a map error.
     """
     os.makedirs(out, exist_ok=True)
     lo, hi = float(h.py.min()) - margin, float(h.py.max()) + margin
@@ -52,15 +71,27 @@ def sweep(h, steps, thick, level, settle, host, eye_port, out, margin=40.0):
     w.realtime(True, brightness=255)
     st = mau5wled.Streamer(mau5wled.Pixels(w, h.n), fps=20)
     try:
+        if lag is None:
+            probe = np.zeros((h.n, 3), np.uint8)
+            probe[np.abs(h.py - 0.5 * (lo + hi)) <= thick / 2] = (level, level, level)
+            try:
+                lag, seen = mau5eye.measure_lag(lambda: st.show(probe), st.dark,
+                                                port=eye_port)
+            except mau5eye.LagError as e:
+                raise SystemExit("could not time the camera (%s); --lag gives "
+                                 "it by hand" % e)
+            print("  camera lag: a change first shows %.2f-%.2f s after it; "
+                  "waiting %.2f s for each frame" % (min(seen), max(seen), lag))
         t = time.time(); st.dark(); time.sleep(1.6)
-        mau5eye.shot(os.path.join(out, "dark.jpg"), port=eye_port, wait=30, after=t + 0.8)
+        mau5eye.shot(os.path.join(out, "dark.jpg"), port=eye_port, wait=30,
+                     after=t, lag=lag)
         for k in range(steps):
             pos = lo + (hi - lo) * k / (steps - 1.0)
             buf = np.zeros((h.n, 3), np.uint8)
             buf[np.abs(h.py - pos) <= thick / 2] = (level, level, level)
             t = time.time(); st.show(buf); time.sleep(settle)
             mau5eye.shot(os.path.join(out, "s%02d.jpg" % k), port=eye_port,
-                         wait=30, after=t + 0.4)
+                         wait=30, after=t, lag=lag)
     finally:
         st.stop()
     return lo, hi
@@ -235,17 +266,21 @@ def main(argv=None):
                     help="sweep this far past each end, so the extremes are "
                          "not truncated")
     ap.add_argument("--reuse", action="store_true", help="analyse the last sweep")
+    ap.add_argument("--lag", type=float, default=None,
+                    help="seconds from a change on the helmet to the first "
+                         "camera frame that shows it, margin included.  "
+                         "Measured at the start unless given")
     a = ap.parse_args(argv)
 
     h = E.Helmet()
-    meas = mau5locate.load()
+    meas = measured()
     if not meas:
         raise SystemExit("no measured centroids -- run mau5locate first")
     lo, hi = float(h.py.min()) - a.margin, float(h.py.max()) + a.margin
     if not a.reuse:
         print("sweeping %d steps, %.0f mm bar, level %d ..." % (a.steps, a.thick, a.level))
         lo, hi = sweep(h, a.steps, a.thick, a.level, a.settle, a.host,
-                       a.eye_port, a.out, a.margin)
+                       a.eye_port, a.out, a.margin, a.lag)
     res = analyse(h, a.steps, lo, hi, a.out, meas)
     print("\n%d of %d LEDs answered the sweep" % (len(res), h.n))
     report(h, res)
