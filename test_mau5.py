@@ -1460,6 +1460,9 @@ def _more():
     d = os.path.join(HERE, "tests_more")
     if not os.path.isdir(d):
         return
+    # One copy of this module, so `from test_mau5 import note` in a
+    # tests_more file reaches the NOTES that get printed.
+    sys.modules.setdefault("test_mau5", sys.modules[__name__])
     for fn in sorted(os.listdir(d)):
         if not fn.endswith(".py") or fn.startswith("_"):
             continue
@@ -1467,7 +1470,11 @@ def _more():
                                                       os.path.join(d, fn))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        GROUPS[fn[:-3]] = list(getattr(mod, "GROUP", []))
+        # Added to a group of the same name, never instead of it: a file
+        # called shows.py once silently dropped the main show tests.
+        have = GROUPS.setdefault(fn[:-3], [])
+        names = {f.__name__ for f in have}
+        have.extend(f for f in getattr(mod, "GROUP", []) if f.__name__ not in names)
 
 
 _more()
