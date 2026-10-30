@@ -9,12 +9,13 @@ It decodes the audio, finds the tempo and the downbeat, measures how loud each
 bar is, and turns that into a `mau5fx.Timeline`: quiet bars get a slow swell,
 builds get rising pulses, drops get the face and the blades on every beat.
 Then it hands the result to `mau5build`, so you end up with the same three
-files any other show produces -- `shows/<name>.fseq`, the media, and the FPP
-playlist.
+files any other show produces -- `shows/superseded/<name>.fseq`, the media,
+and the FPP playlist.  (Not `shows/` itself: that is where the choreographed
+shows live, and everything that lists them takes any JSON there for one.)
 
-The beat grid is written to `shows/<name>.beats`, one time per line. That file
-is what the show is cued from, so if the analysis gets a track wrong you can
-edit it (or tap one out by hand) and re-run with `--beats`.
+The beat grid is written to `shows/superseded/<name>.beats`, one time per
+line. That file is what the show is cued from, so if the analysis gets a track
+wrong you can edit it (or tap one out by hand) and re-run with `--beats`.
 
 Analysis is offline and needs no extra packages: decoding shells out to
 `afconvert` (macOS) or `ffmpeg`, and the rest is numpy. Nothing here runs at
@@ -564,6 +565,19 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
     wav = decode(path)
     a, sr = load_wav(wav)
     dur = len(a) / sr
+    # Two floors, both from the arithmetic below rather than taste, and
+    # both said plainly, because under either one the analysis did not
+    # fail so much as fall over somewhere unrelated.  The onset baseline
+    # is a 41-frame mean, about half a second, and a shorter envelope
+    # was handed a 41-long baseline to subtract ("operands could not be
+    # broadcast").  bar_energy smooths over three bars, so it needs
+    # three bars' worth of values: with fewer it raised "v cannot be
+    # empty", or returned three levels for one bar and sections that ran
+    # past the end of the bar list.  A stinger has no bars to light.
+    if len(a) < N_FFT + 40 * HOP:
+        raise ValueError("%s is %.2f s long; the analysis needs at least "
+                         "%.2f s, and a show wants several bars"
+                         % (path, dur, (N_FFT + 40 * HOP) / float(sr)))
     env, fps, env_t0 = onset_envelope(a, sr)
 
     if beats_file:
@@ -585,6 +599,11 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
 
     ph = downbeat_phase(env, fps, beats - env_t0)
     bars = beats[ph::4]
+    if len(bars) < 4:                     # three whole bars, see above
+        raise ValueError("%s is %.1f s long and holds %d downbeat%s at "
+                         "%.1f bpm; the analysis needs at least four"
+                         % (path, dur, len(bars), "" if len(bars) == 1 else "s",
+                            bpm))
     energy = bar_energy(a, sr, bars, env, fps, env_t0)
     levels = energy_levels(energy)
 
@@ -630,8 +649,7 @@ def main(argv=None):
         an = analyse(path, a.bpm, a.offset, a.beats)
         dur = min(an["duration"], a.seconds) if a.seconds else an["duration"]
 
-        base = os.path.dirname(os.path.abspath(h.path))
-        out_dir = os.path.join(base, h.cfg["show"].get("shows_dir", "shows"))
+        out_dir = mau5build.out_dir_for(h)          # see there for why
         os.makedirs(out_dir, exist_ok=True)
         mau5fx.Beats(an["beats"]).save(os.path.join(out_dir, name + ".beats"))
 
@@ -659,12 +677,12 @@ def main(argv=None):
         built.append(name)
 
     if built:
+        first = os.path.join(mau5build.out_dir_for(h), built[0] + ".fseq")
         print("\nbuilt: %s" % ", ".join(built))
-        print("watch one:   python3 mau5sim.py --fseq shows/%s.fseq" % built[0])
+        print("watch one:   python3 mau5sim.py --fseq '%s'" % first)
         print("send to Pi:  python3 mau5build.py upload --name %s" % built[0])
     if a.preview and built:
-        os.execv(sys.executable, [sys.executable, "mau5sim.py", "--fseq",
-                                  os.path.join("shows", built[0] + ".fseq")])
+        os.execv(sys.executable, [sys.executable, "mau5sim.py", "--fseq", first])
 
 
 class FrameSource:
