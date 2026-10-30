@@ -230,6 +230,10 @@ function step() {
     state.fps = frames * 1000 / (now - lastReport);
     frames = 0; lastReport = now;
     $('fps').textContent = state.fps.toFixed(0);
+    // How long a frame takes to reach the strip.  With one frame in
+    // flight this is also what caps the frame rate: a phone whose WiFi
+    // dozes shows 100 ms or more here, a laptop about 20.
+    $('lag').textContent = link.rtt ? link.rtt.toFixed(0) + ' ms' : '-';
     $('ma').textContent = rep.total_ma.toFixed(0);
     $('w').textContent = rep.watts.toFixed(1);
     $('therm').textContent = rep.thermal ? rep.thermal.full_pct.toFixed(0) + '%' : '-';
