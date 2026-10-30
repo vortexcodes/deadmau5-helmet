@@ -27,6 +27,7 @@ import base64
 import socket
 import mimetypes
 import os
+import re
 import threading
 import time
 import urllib.parse
@@ -383,8 +384,11 @@ class Controller:
                     # not: it models heat in an object that is not
                     # here, and letting it drain means a preview left
                     # open for two minutes fades to almost nothing and
-                    # looks like a bug.  Hold it full and report what
-                    # the real helmet would settle to instead.
+                    # looks like a bug.  Hold its headroom full instead
+                    # -- _t0_sim never moves, so the bucket never
+                    # charges and the preview shows the burst level --
+                    # and let the state's sustained_w, which the heat
+                    # note prints, say what the real helmet settles to.
                     shown, rep = self.guard.apply(np.clip(buf, 0, 255),
                                                   now=self._t0_sim, gain=self.gain)
                     self.last_power = rep
@@ -578,6 +582,46 @@ def _jsonable(d):
     return out
 
 
+UNSATISFIABLE = "unsatisfiable"
+_RANGE = re.compile(r"bytes=([0-9]*)-([0-9]*)", re.ASCII | re.IGNORECASE)
+
+
+def byte_range(header, size):
+    """The (start, end) a Range header asks for, inclusive, or None.
+
+    None means serve the whole file with a 200, which a server is
+    always allowed to do in place of a range, and is the answer to
+    anything this does not understand: several ranges at once, a unit
+    that is not bytes, or a range that ends before it starts.
+    UNSATISFIABLE means the request is well formed and lies wholly past
+    the end of the file, which is a 416.
+
+    This used to split on the dash and int() both halves.  "bytes=-128",
+    the last 128 bytes -- how a player looks for an ID3v1 tag -- came
+    back as the first 129; a start past the end, which a stale request
+    after a track change produces, sent a negative Content-Length; and
+    "bytes=abc-" or a multi-range raised out of the handler, so the
+    phone got no answer at all.
+    """
+    m = _RANGE.fullmatch((header or "").strip())
+    if not m or not (m.group(1) or m.group(2)):
+        return None
+    a, b = m.group(1), m.group(2)
+    if not a:
+        # The suffix form: the last N bytes, all of them if N is more.
+        n = int(b)
+        if n == 0 or size == 0:
+            return UNSATISFIABLE
+        return max(0, size - n), size - 1
+    start = int(a)
+    if b and int(b) < start:
+        return None
+    if start >= size:
+        return UNSATISFIABLE
+    end = int(b) if b else size - 1
+    return start, min(end, size - 1)
+
+
 def make_handler(ctl):
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -686,13 +730,14 @@ def make_handler(ctl):
                 return self._send({"error": "no such track"}, code=404)
             size = os.path.getsize(full)
             ctype = mimetypes.guess_type(full)[0] or "audio/mpeg"
-            rng = self.headers.get("Range")
-            start, end = 0, size - 1
-            if rng and rng.startswith("bytes="):
-                a, _, b = rng[6:].partition("-")
-                start = int(a) if a else 0
-                end = int(b) if b else size - 1
-            end = min(end, size - 1)
+            rng = byte_range(self.headers.get("Range"), size)
+            if rng == UNSATISFIABLE:
+                self.send_response(416)
+                self.send_header("Content-Range", "bytes */%d" % size)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            start, end = rng or (0, size - 1)
             n = end - start + 1
             self.send_response(206 if rng else 200)
             self.send_header("Content-Type", ctype)
@@ -718,7 +763,18 @@ def make_handler(ctl):
 
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path
-            n = int(self.headers.get("Content-Length") or 0)
+            # Before the try below, so a length that is not a length
+            # used to raise out of the handler with no reply; and a
+            # negative one is read(-1), which waits for the client to
+            # hang up.  The body cannot be found without it, so the
+            # connection cannot be reused either.
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                if n < 0:
+                    raise ValueError(n)
+            except ValueError:
+                self.close_connection = True
+                return self._send({"error": "bad Content-Length"}, code=400)
             raw = self.rfile.read(n)
             # JSON only.  This listens on every interface with no login,
             # and a text/plain POST is one any web page can send from any

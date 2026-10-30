@@ -20,10 +20,12 @@ Two things it settles that nothing else can:
   for with the colours read back.
 
 The preview subsamples: the firmware serves at most a couple of
-hundred LEDs per frame, every n'th one, so `n` comes back with the
-data and the indices are 0, n, 2n ...  That is plenty to measure a
-level and to see which end of the chain is lit, and it is not a
-substitute for the camera when the question is *where* an LED is.
+hundred LEDs per frame, every n'th one.  `n` is not in the frame; it
+is the bus length over the samples that came back, so main() reads
+the length first, and the indices are 0, n, 2n ...  That is plenty
+to measure a level and to see which end of the chain is lit, and it
+is not a substitute for the camera when the question is *where* an
+LED is.
 
     python3 mau5peek.py --host 192.168.10.172
     python3 mau5peek.py --watch 10
@@ -201,25 +203,41 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
 
+    import mau5wled
     host = a.host
     if not host:
-        import mau5wled
         w = (mau5wled.scan_subnet() or [None])[0]
         if w is None:
             raise SystemExit("no controller found")
         host = w.base.split("//", 1)[-1]
+    else:
+        w = mau5wled.WLED(host)
+
+    # The step is not in the frame: its header is "L" and a version
+    # byte, so how far apart the samples are is only known against how
+    # many LEDs the bus drives.  Without that, live() divided the sample
+    # count by itself and every reading said "every 1th LED" whatever
+    # the firmware had skipped -- and a couple of hundred samples of a
+    # 622 bus, called every LED, reads as the first two hundred being
+    # all there is.  Unknown is printed as unknown.
+    try:
+        total = w.count or None
+    except Exception:
+        total = None
 
     with Peek(host) as p:
         t0 = time.time()
         while True:
-            step, rgb = p.live()
+            step, rgb = p.live(total)
+            if not total:
+                step = None
             s = summarise(rgb)
             s["every"] = step
             if a.json:
                 print(json.dumps(s))
             else:
-                print("  every %dth LED · %d sampled · %d lit · max %d · mean %.1f"
-                      % (step, s["sampled"], s["lit"], s["max"], s["mean"]))
+                print("  every %sth LED · %d sampled · %d lit · max %d · mean %.1f"
+                      % (step or "?", s["sampled"], s["lit"], s["max"], s["mean"]))
             if time.time() - t0 >= a.watch:
                 break
             time.sleep(0.4)
