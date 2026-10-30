@@ -129,15 +129,22 @@ class WLED:
         which would quietly truncate a walk of the chain.
 
         Defaults for pin, colour order and LED type come from the bus
-        that is already there, so this only changes the layout.
+        that is already there, so this only changes the layout -- and so
+        does everything else on it, because the new bus starts as a copy
+        of the old one.  It used to be built from pin, order, type and ref alone,
+        which dropped the bus's own maxpwr and ledma -- the per-bus
+        limiter `mau5offline.py config` sets from power.json, and the one
+        WLED 0.15 actually enforces -- and a bus posted without them
+        takes the firmware's defaults instead.
         """
         ins = self.cfg().get("hw", {}).get("led", {}).get("ins", [])
         b0 = ins[0] if ins else {}
-        bus = {"start": 0, "len": int(count),
-               "pin": [int(pin) if pin is not None else (b0.get("pin") or [16])[0]],
-               "order": int(order) if order is not None else b0.get("order", 0),
-               "type": int(kind) if kind is not None else b0.get("type", 22),
-               "rev": False, "skip": 0, "ref": b0.get("ref", False)}
+        bus = dict(b0)
+        bus.update({"start": 0, "len": int(count),
+                    "pin": [int(pin) if pin is not None else (b0.get("pin") or [16])[0]],
+                    "order": int(order) if order is not None else b0.get("order", 0),
+                    "type": int(kind) if kind is not None else b0.get("type", 22),
+                    "rev": False, "skip": 0, "ref": b0.get("ref", False)})
         self._post("/json/cfg", {"hw": {"led": {"total": int(count),
                                                 "ins": [bus]}}})
         time.sleep(1.5)                       # the bus manager restarts
@@ -206,8 +213,18 @@ class WLED:
 
         Without this a stream can arrive and be ignored, or be scaled down by
         whatever preset was last running -- which looks exactly like bad wiring.
+
+        It also disarms the phone's dead man.  The offline player keeps
+        WLED's nightlight armed (instant mode, a minute, to brightness 0)
+        and only its release() turns it off; a phone that died or walked
+        out of range never sent that.  The nightlight then fired under
+        the laptop's stream, set brightness 0, and the helmet went black
+        a minute into the hand-over with the UI still showing a preset --
+        and stayed black, because realtime had already been switched on
+        and is not re-sent.  ``lor`` 0 is the same kind of leftover: a
+        live override that tells the controller to ignore the stream.
         """
-        body = {"on": True, "live": bool(on)}
+        body = {"on": True, "live": bool(on), "nl": {"on": False}, "lor": 0}
         if brightness is not None:
             body["bri"] = int(brightness)
         return self._post("/json/state", body)
@@ -301,21 +318,35 @@ class Pixels:
 
     # -- sending ----------------------------------------------------------
     def send(self, buf, correct=True, gain=1.0):
-        """buf: (count, 3) uint8 in true RGB.  Sent as one DDP frame.
+        """buf: (count, 3) in true RGB, uint8 or float.  Sent as one DDP frame.
 
         `gain` (at most 1) dims the frame after the guard -- a show's beat
         pulse, which the guard would otherwise flatten.
+
+        A float frame goes to the guard as floats.  It used to be cast to
+        uint8 first, which wraps rather than clips: -1 became 255, 256
+        became 0, 300 became 44.  mau5ctl hands over float frames, and
+        ordinary settings leave 0..255 -- plasma with sat 3 asks for
+        channels down to -765, breathe with floor 1.2 for 290 -- so the
+        helmet lit bright pastels where the simulator and the phone, which
+        both clip, showed the colour, and breathe's peak flickered to black.
         """
-        a = np.asarray(buf, np.uint8)
+        with np.errstate(over="ignore", invalid="ignore"):
+            a = np.asarray(buf, np.float32)
         if a.ndim == 1:
             a = a.reshape(-1, 3)
         if len(a) < self.count:
-            a = np.vstack([a, np.zeros((self.count - len(a), 3), np.uint8)])
+            a = np.vstack([a, np.zeros((self.count - len(a), 3), np.float32)])
         a = a[:self.count]
         if self.guard is not None:
             a, self.last_power = self.guard.apply(a, gain=gain)
-        elif gain < 1.0:
-            a = (a * max(float(gain), 0.0)).astype(np.uint8)
+        else:
+            # unguarded on purpose (guard=False), but still clipped: a
+            # cast is not a clip, and NaN has no uint8 at all
+            a = np.clip(np.nan_to_num(a, nan=0.0, posinf=255.0, neginf=0.0), 0, 255)
+            if gain < 1.0:
+                a = a * max(float(gain), 0.0)
+            a = a.astype(np.uint8)
         # What the helmet is actually showing, in true RGB -- after the
         # guard has had its say but before the per-strip colour-order
         # permutation, which is a property of the wiring and not of the

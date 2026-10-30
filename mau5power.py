@@ -34,6 +34,7 @@ A frame is never passed through unchanged on trust.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 
@@ -44,6 +45,17 @@ DEFAULT = os.path.join(HERE, "data", "cal", "power.json")
 
 MA_PER_LED_FULL_WHITE = 19.0      # WS2815 at 12 V
 MA_PER_LED_STANDBY = 1.0          # drawn whenever the rail is live
+
+# How fast the governor may give light back, as a factor on its scale
+# per second (PowerGuard.apply has the measurements).  Taking light away
+# is never slowed: that is what keeps every frame inside the budget.
+# GOV_MIN_DT is the step a call counts as when the clock does not move
+# -- mau5ctl's preview holds it still on purpose, and the scale must
+# still be able to come back -- and GOV_FROM the lowest scale the ramp
+# starts from, so a governor driven to zero can climb out at all.
+GOV_RISE = 1.0
+GOV_MIN_DT = 1.0 / 40.0
+GOV_FROM = 0.01
 
 
 class Region:
@@ -135,6 +147,12 @@ class ThermalBudget:
     def update(self, led_watts, now=None):
         """Charge the bucket for the energy just delivered."""
         now = time.monotonic() if now is None else now
+        # NaN plus anything is NaN and the clamp below keeps it, so one
+        # bad reading used to switch the ramp off for good (the phone's
+        # twin did exactly that).  A reading that is not a number is not
+        # a reading: skip it and keep the level we had.
+        if not (math.isfinite(led_watts) and math.isfinite(now)):
+            return self.allowance_w()
         if self._last is None:
             self._last = now
             return self.allowance_w()
@@ -180,6 +198,18 @@ class PowerGuard:
                 self._ceil[lo:hi + 1] = r.ceiling
                 self._shed[lo:hi + 1] = r.shed
                 self._floor[lo:hi + 1] = min(r.floor, r.ceiling)
+        # The ceiling is a soft knee (see apply).  It starts to bend at
+        # _klo and has _kw left above that before the ceiling.  The bend
+        # is placed so that full drive, 255, is four widths past it:
+        # e**-4 short of the ceiling, under 2%, so the top end the
+        # ceilings were tuned for is where it was.  On a ceiling of 255
+        # it never bends -- a tube is not dimmed by a ceiling it cannot
+        # reach -- and on a rim at 160 only the top 20% does.
+        c = self._ceil.astype(np.float64)
+        self._klo = np.minimum(np.maximum((4.0 * c - 255.0) / 3.0, 0.0), c)
+        self._kw = c - self._klo
+        self._gov_s = 1.0          # the governor's scale on the last frame
+        self._gov_t = None         # and when that was
 
     # -- estimates ------------------------------------------------------
     def _per_led_ma(self, out):
@@ -215,17 +245,57 @@ class PowerGuard:
         governor exist to take away again, so on loud material the pulse
         vanished.  Dimming the result can only stay inside the limits.
         """
-        out = np.asarray(buf, np.float32).reshape(-1, 3)[:self.count].copy()
+        now = time.monotonic() if now is None else now
+        with np.errstate(over="ignore", invalid="ignore"):
+            out = np.asarray(buf, np.float32).reshape(-1, 3)[:self.count].copy()
+        # Only the LEDs both the frame and the profile have: a frame
+        # shorter than the profile used to fail on the ceiling below,
+        # and the phone's twin read past its end into NaN.
+        m = len(out)
+        # Anything that is not a number is dark, and infinity is full.
+        # np.clip passes NaN through untouched, and the phone guard's
+        # clamp did the same: one NaN frame made its current NaN, which
+        # no budget compares greater than, and its thermal level NaN for
+        # good -- governor and thermal ramp off until the page reloaded.
+        np.nan_to_num(out, copy=False, nan=0.0, posinf=255.0, neginf=0.0)
         np.clip(out, 0, 255, out)
         asked = self.frame_ma(out)
+        amx = out.max(1)               # what was asked of each LED, for the floor
 
-        np.minimum(out, self._ceil[:, None], out)
+        # -- the ceiling, as a soft knee ---------------------------------
+        # It was min(v, c), a clip, and presets render up to 255 against
+        # a shell ceiling of 64.  Everything above a quarter of full came
+        # out the same, so a soft shape became a flat disc: the eyes
+        # draw a gradient, and 80% of their lit LEDs left here at 90% of
+        # the frame's maximum or more, popping on and off at the edge as
+        # they moved instead of fading.  Saturated colours suffered the
+        # same way -- orange (255, 128, 0) clipped to yellow.
+        #
+        # Below _klo nothing changes.  Above it the value bends towards
+        # the ceiling, with slope one at the bend so there is no kink:
+        #     lo + w * (1 - exp(-(v - lo) / w))
+        # which is below both v and the ceiling for every v, so it can
+        # only take current away.  On the shell, a quarter of full, the
+        # bend starts at zero -- c * (1 - exp(-v / c)) -- so its dim
+        # colours come out a little dimmer as well (20 -> 17, 64 -> 40),
+        # and its full ones 2% dimmer.  The eyes now leave about 40% of
+        # their lit LEDs in that top tenth instead of 80%, and through
+        # the phone's twin the shell's frame-to-frame jitter on eq and
+        # the Dimension Remix eq cue fell by 35-60%.
+        v = out.astype(np.float64)
+        lo, w = self._klo[:m, None], self._kw[:m, None]
+        bent = v > lo
+        if bent.any():
+            wd = np.where(w > 0, w, 1.0)       # no room to bend: a hard clip
+            with np.errstate(over="ignore", invalid="ignore"):   # LEDs below lo
+                soft = np.where(w > 0, lo - w * np.expm1(-(v - lo) / wd), lo)
+            out[:] = np.where(bent, soft, v)
         after_ceiling = self.frame_ma(out)
 
         # -- each region inside its own allowance -----------------------
         hit = []
         for r in self.regions:
-            lo, hi = max(0, r.lo), min(self.count - 1, r.hi)
+            lo, hi = max(0, r.lo), min(m - 1, r.hi)
             if hi < lo:
                 continue
             seg = out[lo:hi + 1]
@@ -261,28 +331,62 @@ class PowerGuard:
         # of what survived its region, so the floored LEDs take their
         # few milliamps off the top and everything else sheds around
         # them.  Still monotonic in s, so the bisection stands.
+        #
+        # And s gives light back slowly.  Solved afresh every frame, it
+        # moved with whatever the ears were doing, and the shell, at
+        # s ** 6, moved six times as far the other way: eq bars or a
+        # sparkle overlay on the tubes pumped the shell frame to frame.
+        # So s may never be more than GOV_RISE e-folds per second above
+        # the last frame's -- a compressor's slow release -- while a
+        # smaller s still applies at once.  Never above the s solved for,
+        # so never over budget; and it runs on frames under budget too,
+        # or the climb back would be one jump.  Measured through the
+        # phone's twin with the test suite's music drive, at 15 and 40
+        # fps, where the governor binds -- blades, spectrum, the Dimension
+        # Remix blades cue, beneath's split under a sparkle overlay -- it
+        # took a further 3-17% off the shell's frame-to-frame jitter on
+        # top of the soft ceiling, for 2-6% of their current.  A rate per
+        # region, so the shell climbs no faster than the tubes, lost 30%
+        # of the light on that split and made it jitter more: one frame
+        # over budget then held the shell down for two seconds.  Half
+        # this rate cost up to 15%.
+        cap = 1.0
+        if self._gov_s < 1.0:
+            dt = (now - self._gov_t
+                  if self._gov_t is not None and math.isfinite(now) else 0.0)
+            cap = min(1.0, max(self._gov_s, GOV_FROM)
+                      * math.exp(GOV_RISE * min(max(dt, GOV_MIN_DT), 5.0)))
+        over = after_region > budget and after_region > 0
         governed = floored = False
-        if after_region > budget and after_region > 0:
+        scale = 1.0
+        if over or cap < 1.0:
             per = self._per_led_ma(out)
             omx = out.max(1)
-            amx = np.asarray(buf, np.float32).reshape(-1, 3)[:self.count].max(1)
             lit = (amx > 0) & (omx > 1e-6)
-            fs = np.zeros(self.count, np.float32)
-            np.divide(self._floor, omx, out=fs, where=lit)
+            fs = np.zeros(m, np.float32)
+            np.divide(self._floor[:m], omx, out=fs, where=lit)
             np.clip(fs, 0.0, 1.0, out=fs)
             if float((per * fs).sum()) > budget:
                 fs[:] = 0.0            # the floor does not fit; budget wins
-            lo_s, hi_s = 0.0, 1.0
-            for _ in range(40):
-                mid = (lo_s + hi_s) / 2.0
-                if float((per * np.maximum(mid ** self._shed, fs)).sum()) > budget:
-                    hi_s = mid
-                else:
-                    lo_s = mid
-            scale = np.maximum(lo_s ** self._shed, fs)
-            out *= scale[:, None]
-            governed = True
-            floored = bool((fs > lo_s ** self._shed).any())
+            shed = self._shed[:m]
+            lo_s = 1.0
+            if over:
+                lo_s, hi_s = 0.0, 1.0
+                for _ in range(40):
+                    mid = (lo_s + hi_s) / 2.0
+                    if float((per * np.maximum(mid ** shed, fs)).sum()) > budget:
+                        hi_s = mid
+                    else:
+                        lo_s = mid
+            scale = min(lo_s, cap)
+            if scale < 1.0:
+                base = scale ** shed
+                out *= np.maximum(base, fs)[:, None]
+                governed = after_region > 0
+                floored = bool((fs > base).any())
+        self._gov_s = scale
+        if math.isfinite(now):
+            self._gov_t = now
 
         g = min(max(float(gain), 0.0), 1.0)
         if g < 1.0:

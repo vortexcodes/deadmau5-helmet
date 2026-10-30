@@ -475,6 +475,9 @@ def('sprite', { sprite: 'smile', color: [0, 255, 255], bg: [0, 0, 0],
     }
   });
 
+// How far inside its edge an eye fades in, in mm: about one LED pitch.
+const EYE_EDGE = 12.0;
+
 def('eyes', { color: [0, 255, 255], period: 5.0, size: 58.0, y: 95.0,
               spread: 78.0, blink_every: 4.0 },
   function (h, t, music, out) {
@@ -486,7 +489,9 @@ def('eyes', { color: [0, 255, 255], period: 5.0, size: 58.0, y: 95.0,
       const cx = side * this.p.spread + look;
       for (let i = 0; i < h.n; i++) {
         const d = Math.hypot(h.px[i] - cx, (h.py[i] - yy) * 1.25);
-        let k = Math.pow(clamp(1 - d / size, 0, 1), 0.6);
+        // the rim fades in over about one LED pitch (mau5engine.Eyes)
+        const e = clamp((size - d) / EYE_EDGE, 0, 1);
+        let k = Math.pow(clamp(1 - d / size, 0, 1), 0.6) * e * e * (3 - 2 * e);
         if (blink) k *= clamp(1 - Math.abs(h.py[i] - yy) / 10.0, 0, 1);
         out[i * 3] += k * c[0]; out[i * 3 + 1] += k * c[1]; out[i * 3 + 2] += k * c[2];
       }
@@ -788,6 +793,42 @@ function accepts(name, kw) {
   return out;
 }
 
+// mau5engine.POSITIVE: parameters divided by, or counting something,
+// which a slider pulled to zero turned into NaN on every pixel -- and one
+// NaN frame used to switch the power guard's governor off for good.
+// COUNTS are the ones whose Python defaults are ints; JavaScript cannot
+// tell 12 from 12.0, so they are named.  test_mau5 holds both lists to
+// the Python's.
+const POSITIVE = new Set(['period', 'width', 'soft', 'tail', 'fade', 'length',
+                          'size', 'cell', 'every', 'blink_every', 'decay',
+                          'step', 'rise', 'x_half', 'cycle', 'bands',
+                          'columns', 'rings']);
+const COUNTS = new Set(['arms', 'bands', 'columns', 'cycle', 'from', 'gap',
+                        'rings', 'sectors']);
+// A POSITIVE float is held to a twentieth of its default, its slider's
+// left end: a period of a millisecond is a strobe, not an animation, and
+// restore() brings back whatever was saved, zeros from before included.
+const LEAST = 0.05, MIN_POSITIVE = 1e-3, RISE_MAX = 0.95;
+
+// mau5engine._sane: hold numeric parameters where a preset can render
+// them, whatever a slider or a saved setting asks for.
+function sane(defaults, p) {
+  for (const k of Object.keys(defaults)) {
+    const d = defaults[k];
+    if (typeof d !== 'number') continue;
+    let v = p[k];
+    if (typeof v === 'boolean') v = v ? 1 : 0;
+    if (typeof v !== 'number' || !Number.isFinite(v)) p[k] = d;
+    else if (COUNTS.has(k)) p[k] = Math.max(Math.floor(v + 0.5), POSITIVE.has(k) ? 1 : 0);
+    else if (POSITIVE.has(k) && d > 0) {
+      const least = Math.max(d * LEAST, MIN_POSITIVE);
+      if (v < least) p[k] = least;
+      else if (k === 'rise' && v > RISE_MAX) p[k] = RISE_MAX;
+    }
+  }
+  return p;
+}
+
 function make(name, params, h, fonts) {
   const spec = REGISTRY[name];
   if (!spec) throw new Error('no preset ' + name);
@@ -796,6 +837,7 @@ function make(name, params, h, fonts) {
     if (!(k in p)) throw new Error(name + ' has no parameter ' + k);
     p[k] = params[k];
   }
+  sane(spec.params, p);
   const inst = { name: name, p: p, fonts: fonts, s: null };
   inst.s = spec.init ? spec.init(h, p, fonts) : null;
   inst.render = spec.render;
@@ -912,7 +954,8 @@ def('blades', { color: [0, 170, 255], tip: [255, 255, 255], bed: [0, 8, 18],
   });
 
 const api = { hsv, hashSin, paint, makeHelmet, make, accepts, REGISTRY,
-              textBitmap, glyphBitmap, digitBitmap, spriteBitmap, fract, pmod };
+              textBitmap, glyphBitmap, digitBitmap, spriteBitmap, fract, pmod,
+              POSITIVE, COUNTS };
 root.MAU5 = Object.assign(root.MAU5 || {}, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 

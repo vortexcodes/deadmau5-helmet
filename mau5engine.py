@@ -26,6 +26,7 @@ own frame, which is not the obvious one:
 from __future__ import annotations
 
 import math
+import numbers
 import os
 
 import numpy as np
@@ -156,6 +157,74 @@ def hsv(h, s=1.0, v=1.0):
 
 
 # ----------------------------------------------------------------------
+# Parameters something is divided by, or that count something.  At zero
+# a preset raised ZeroDivisionError here and painted NaN on the phone,
+# and spec() offered zero at the left end of every one of their sliders:
+# rainbow's period pulled all the way down was enough, and on the phone
+# that one NaN frame switched the power guard's governor off for good.
+# Only where the default is above zero -- gradient's period of 0 means
+# "hold still" and alignbar's grid of 0 means "no grid".  engine.js
+# keeps the same list, and a test holds the two to it.
+POSITIVE = frozenset(("period", "width", "soft", "tail", "fade", "length",
+                      "size", "cell", "every", "blink_every", "decay",
+                      "step", "rise", "x_half", "cycle", "bands",
+                      "columns", "rings"))
+# Fractions, where more than one leaves 0..255: sat above 1 makes hsv()
+# return negative channels, a floor or a keep above 1 a peak above full.
+# The slider stops at 1.  make() does not hold them to it -- the guard
+# clips whatever arrives, on the wire as well as on the phone now.
+UNIT = frozenset(("sat", "floor", "keep", "value", "duty", "density",
+                  "shellmix", "tilt", "hold"))
+# The least a POSITIVE float may be: a twentieth of its default, and the
+# left end of its slider.  Not merely "above zero": a period of a
+# millisecond sampled at 25 fps is a different colour every frame, a
+# strobe across the whole helmet, and the phone restores whatever was
+# saved -- zeros included, from before this.  The shows are well clear
+# (the nearest is wipe at 0.345 s, 9% of its default).  blades divides
+# by 1 - rise as well, so rise stops short of 1.
+LEAST = 0.05
+MIN_POSITIVE = 1e-3
+RISE_MAX = 0.95
+
+
+def _least(d):
+    """The smallest value a POSITIVE float with default `d` may take."""
+    return max(d * LEAST, MIN_POSITIVE)
+
+
+def _sane(defaults, p):
+    """Hold a preset's numeric parameters where it can render them, in place.
+
+    Whatever a slider, Randomise, an HTTP call or a hand-written show
+    asks for.  A count is rounded to a whole number -- half up, which
+    JavaScript's Math.floor(v + 0.5) agrees with and Python's round()
+    does not -- and is never negative; a POSITIVE one is at least 1 and
+    a POSITIVE float at least _least(default).  Something that is not a
+    finite number becomes the default: None, a string, NaN -- the phone
+    saves settings as JSON, where NaN comes back as null, and JavaScript
+    divides by null as if it were zero.  engine.js's make() does the same.
+    """
+    for k, d in defaults.items():
+        if isinstance(d, bool) or not isinstance(d, (int, float)):
+            continue
+        v = p.get(k)
+        try:
+            x = float(v) if isinstance(v, numbers.Real) else math.nan
+        except OverflowError:                   # an int too big for a float
+            x = math.nan
+        if not math.isfinite(x):
+            p[k] = d
+        elif isinstance(d, int):
+            p[k] = max(int(math.floor(x + 0.5)), 1 if k in POSITIVE else 0)
+        elif k in POSITIVE and d > 0:
+            if x < _least(d):
+                p[k] = _least(d)
+            elif k == "rise" and x > RISE_MAX:
+                p[k] = RISE_MAX
+    return p
+
+
+# ----------------------------------------------------------------------
 class Preset:
     """A named, parameterised effect.
 
@@ -179,6 +248,7 @@ class Preset:
         if bad:
             raise ValueError("%s has no parameter %s" % (self.name, sorted(bad)))
         self.p.update(kw)
+        _sane(self.params, self.p)
 
     @classmethod
     def accepts(cls, kw):
@@ -211,9 +281,26 @@ class Preset:
                 out.append({"name": k, "kind": "color", "value": list(v)})
             elif isinstance(v, bool):
                 out.append({"name": k, "kind": "bool", "value": v})
-            elif isinstance(v, (int, float)):
+            elif isinstance(v, int):
+                # A count: whole numbers only.  eq's bands stepped by
+                # 0.48, and one notch asked numpy for band 12.48 (an
+                # IndexError) and the phone for a Float64Array of that
+                # length (a RangeError).
+                lo = 1 if k in POSITIVE else 0
+                out.append({"name": k, "kind": "number", "value": v,
+                            "min": lo, "max": max(v * 4, v + 1), "step": 1})
+            elif isinstance(v, float):
                 lo = 0.0 if v >= 0 else v * 3
                 hi = max(v * 4.0, v + 1.0) if v >= 0 else 0.0
+                # Never zero where zero divides: the slider's end is a
+                # twentieth of the default, a fast animation rather than
+                # a crash, and make() holds anything else to the same.
+                if k in POSITIVE and v > 0:
+                    lo = _least(v)
+                if k in UNIT:
+                    hi = min(hi, 1.0)
+                if k == "rise":
+                    hi = min(hi, RISE_MAX)
                 out.append({"name": k, "kind": "number", "value": v,
                             "min": round(lo, 3), "max": round(hi, 3),
                             "step": round(max((hi - lo) / 100.0, 0.001), 4)})
@@ -637,6 +724,14 @@ class Eyes(Preset):
     name = "eyes"
     params = {"color": (0, 255, 255), "period": 5.0, "size": 58.0,
               "y": 95.0, "spread": 78.0, "blink_every": 4.0}
+    # How far inside its edge an eye fades in, in mm: about one LED
+    # pitch (9 mm to the nearest neighbour across the eye area, 12-15
+    # between strips).  The 0.6 power alone is vertical at the edge, so
+    # an LED the edge crossed went from dark to nearly two-thirds of the
+    # shell's ceiling in one frame -- 2.3 such pops a frame at 15 fps as
+    # the eyes looked left and right, measured through the guard; 1.0
+    # with this, and most of what is left is the blink.
+    EDGE = 12.0
 
     def render(self, h, t, music=None):
         out = np.zeros((h.n, 3))
@@ -645,7 +740,8 @@ class Eyes(Preset):
         for side in (-1, 1):
             cx = side * self.p["spread"] + look
             d = np.hypot(h.px - cx, (h.py - self.p["y"]) * 1.25)
-            k = np.clip(1 - d / self.p["size"], 0, 1) ** 0.6
+            e = np.clip((self.p["size"] - d) / self.EDGE, 0, 1)
+            k = np.clip(1 - d / self.p["size"], 0, 1) ** 0.6 * e * e * (3 - 2 * e)
             if blink:
                 k *= np.clip(1 - np.abs(h.py - self.p["y"]) / 10.0, 0, 1)
             out += k[:, None] * np.array(self.p["color"])
@@ -1243,8 +1339,13 @@ def lock_time(music, name, params, t):
 
 
 def make(name, **kw):
+    # ValueError, the same as an unknown parameter.  This was SystemExit,
+    # which is not an Exception: a show cue naming a preset that does not
+    # exist went straight through mau5ctl's `except Exception` when the
+    # cue first rendered, and the frame loop thread died without a word
+    # while the page still said the show was playing.
     if name not in REGISTRY:
-        raise SystemExit("no preset %r.  Known: %s"
+        raise ValueError("no preset %r.  Known: %s"
                          % (name, ", ".join(sorted(REGISTRY))))
     return REGISTRY[name](**kw)
 
