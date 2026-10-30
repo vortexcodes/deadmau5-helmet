@@ -39,6 +39,16 @@ warnings.filterwarnings("ignore", message=".*encountered in matmul")
 HERE = os.path.dirname(os.path.abspath(__file__))
 CAL = os.path.join(HERE, "data", "cal")
 OUT = os.path.join(CAL, "localisation.mp4")
+# The daylight photograph from the high camera pose, which the ears
+# scene draws the CAD outline on.  It used to be read from eye.jpg, but
+# that is mau5eye's live output: rewritten with every frame the camera
+# pushes, ignored by git, and by the next camera session a dark room
+# seen from somewhere else -- so the scene drew the high camera's
+# outline over an unrelated frame, and showed the CAD missing the ears
+# it says it lands on.  Nothing writes this file; it is saved here by
+# hand, from the high pose, and without it the scene leaves the photo
+# out rather than use whatever the camera last saw.
+HIGH_PHOTO = os.path.join(CAL, "high_pose_daylight.jpg")
 W, H = 1280, 720
 FOOT = 96                      # the title strip along the bottom
 FPS = 30
@@ -556,19 +566,24 @@ def s_walk(M, n):
 
 
 def s_ears(M, n):
-    photo = Image.open(os.path.join(CAL, "eye.jpg")).convert("RGB")
-    cams = {k: np.array(v) for k, v in M.rep["cameras"].items()}
-    hi = cams["high"]
-    ears = (M.part == "ear1") | (M.part == "ear2")
-    T = M.V[M.F[ears]]
-    q = mau5slots.project(hi, T.reshape(-1, 3)).reshape(-1, 3, 2)
-    over = Image.new("L", photo.size, 0)
-    od = ImageDraw.Draw(over)
-    for tr in q:
-        od.polygon([tuple(p) for p in tr], fill=255)
-    # thick enough to read at video size
-    edge = np.asarray(over.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.MaxFilter(5))) > 0
-    half = n // 2
+    if not os.path.exists(HIGH_PHOTO):
+        # No photograph, no claim about one: the tubes fill the scene.
+        print("  ears: no %s, so the CAD outline is not drawn on a photo"
+              % os.path.relpath(HIGH_PHOTO, HERE))
+        photo, half = None, 0
+    else:
+        photo, half = Image.open(HIGH_PHOTO).convert("RGB"), n // 2
+        cams = {k: np.array(v) for k, v in M.rep["cameras"].items()}
+        hi = cams["high"]
+        ears = (M.part == "ear1") | (M.part == "ear2")
+        T = M.V[M.F[ears]]
+        q = mau5slots.project(hi, T.reshape(-1, 3)).reshape(-1, 3, 2)
+        over = Image.new("L", photo.size, 0)
+        od = ImageDraw.Draw(over)
+        for tr in q:
+            od.polygon([tuple(p) for p in tr], fill=255)
+        # thick enough to read at video size
+        edge = np.asarray(over.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.MaxFilter(5))) > 0
     for i in range(n):
         if i < half:
             im = photo.resize((W, H))
@@ -599,8 +614,10 @@ def s_ears(M, n):
             label(d, (64, 122), "blue: out and back along three tubes  ·  orange: the rim",
                   (200, 205, 210), F_BODY)
         yield foot(im, 9, "The ears stay where the CAD has them",
-                   "The outline lands on the real ears, so the cameras only decide where along "
-                   "which tube each LED sits -- the part they can measure.")
+                   ("The outline lands on the real ears, so the cameras only decide where along "
+                    "which tube each LED sits -- the part they can measure.") if photo is not None else
+                   ("The cameras only decide where along which tube each LED sits -- "
+                    "the part they can measure."))
 
 
 def s_compare(M, n):

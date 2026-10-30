@@ -30,12 +30,45 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 import numpy as np
 
+import mau5map
 import mau5wled
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 RED, GRN, BLU, WHT, YEL, CYN = ((255, 0, 0), (0, 255, 0), (0, 0, 255),
                                 (255, 255, 255), (255, 200, 0), (0, 255, 255))
+
+
+def _regions():
+    """Each region of the map as (lo, hi), both inclusive, in chain order.
+
+    The ear checks used to be written as literal indices, and the
+    literals outlived what they described: one segment cut off the near
+    rim on 2026-10-29 moved every ear LED after it down by one, and the
+    'first rim' of the colour-order check had been on ear1's tubes all
+    along.  The map is where the regions are kept up to date, so they
+    are read from it.  A region relabelled in adjust.json can come out
+    in two pieces; the longest piece is the one used.
+    """
+    runs = []
+    for r in mau5map.load():
+        if runs and runs[-1][0] == r["region"] and runs[-1][2] == r["index"] - 1:
+            runs[-1][2] = r["index"]
+        else:
+            runs.append([r["region"], r["index"], r["index"]])
+    best = {}
+    for name, lo, hi in runs:
+        if name not in best or hi - lo > best[name][1] - best[name][0]:
+            best[name] = (lo, hi)
+    return dict(sorted(best.items(), key=lambda kv: kv[1][0]))
+
+
+def _middle(lo, hi, n=11):
+    """`n` LEDs from the middle of lo..hi, clear of both ends, where a
+    boundary that is out by one would otherwise land in the span."""
+    k = min(n, hi - lo + 1)
+    a = (lo + hi + 1 - k) // 2
+    return a, a + k - 1
 
 
 def build_checks(session):
@@ -47,9 +80,16 @@ def build_checks(session):
     off directly instead of guessed at from a photograph where white
     spans and sensor saturation have smeared everything together.
 
-    Spans are (first, last, colour, label), both ends inclusive.
+    Spans are (first, last, colour, label), both ends inclusive.  The
+    shell checks are about the walk and keep its indices, none of which
+    the cut moved; the ear spans come from the map's regions.
     """
-    last = max(x["end"] for x in session["sections"])
+    # Nothing may run past the end of either the walk or the map.  The
+    # walk was taken before the cut and still ends at 622, so on its own
+    # it let through two indices that have nothing behind them.
+    last = min(max(x["end"] for x in session["sections"]),
+               mau5map.TOTAL_N - 1)
+    reg = _regions()
     C = []
 
     C.append(dict(
@@ -99,21 +139,26 @@ def build_checks(session):
              "back green or blue are wired in a different channel order "
              "from the bus setting.",
         settles="Which index ranges need a channel permutation.",
-        spans=[(150, 160, RED, "shell"), (420, 430, RED, "first tube run"),
-               (470, 480, RED, "first rim"), (520, 530, RED, "second rim"),
-               (600, 610, RED, "second tube run")]))
+        # One span from the middle of every region, so each rim -- the
+        # span strips.json says is wired differently -- is lit.
+        spans=[_middle(lo, hi) + (RED, name.replace("_", " "))
+               for name, (lo, hi) in reg.items()]))
 
+    t1, r1 = reg["ear1_tubes"], reg["ear1_rim"]
+    r2, t2 = reg["ear2_rim"], reg["ear2_tubes"]
     C.append(dict(
         id="ears-a", title="Ear grouping, first half",
         look="RED and GREEN, on the first ear in the chain.",
-        settles="Whether 399-510 splits into tubes then rim.",
-        spans=[(399, 461, RED, "tubes?"), (462, 510, GRN, "rim?")]))
+        settles="Whether %d-%d splits into tubes then rim at %d, as the "
+                "map has it." % (t1[0], r1[1], r1[0]),
+        spans=[(t1[0], t1[1], RED, "tubes?"), (r1[0], r1[1], GRN, "rim?")]))
 
     C.append(dict(
         id="ears-b", title="Ear grouping, second half",
         look="RED and GREEN, on the second ear.",
-        settles="Whether 511-622 is rim then tubes.",
-        spans=[(511, 557, RED, "rim?"), (558, 622, GRN, "tubes?")]))
+        settles="Whether %d-%d is rim then tubes from %d, as the map has "
+                "it." % (r2[0], t2[1], t2[0]),
+        spans=[(r2[0], r2[1], RED, "rim?"), (t2[0], t2[1], GRN, "tubes?")]))
 
     C.append(dict(
         id="bottom-mirror", title="Symmetry check",
@@ -125,8 +170,8 @@ def build_checks(session):
     for c in C:
         bad = [sp for sp in c["spans"] if sp[1] > last]
         if bad:
-            raise SystemExit("check %r runs past the walked chain (last "
-                             "index %d): %s" % (c["id"], last, bad))
+            raise SystemExit("check %r runs past the chain (last index "
+                             "%d): %s" % (c["id"], last, bad))
         chans = [tuple(sp[2]) for sp in c["spans"]]
         if c["id"] != "colour-order" and len(set(chans)) != len(chans):
             raise SystemExit("check %r reuses a channel, so the difference "

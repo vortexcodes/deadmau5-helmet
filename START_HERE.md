@@ -4,8 +4,11 @@
 git clone https://github.com/vortexcodes/deadmau5-helmet.git
 cd deadmau5-helmet
 python3 -m pip install numpy pillow matplotlib
-python3 test_mau5.py                            # 41 checks, no hardware needed
+python3 test_mau5.py                            # about a hundred checks, no hardware needed
 ```
+
+Install `node` as well: the checks of the phone player's JavaScript, its
+power guard among them, run under it, and are skipped without it.
 
 Then start Claude Code in that folder.
 
