@@ -171,6 +171,15 @@ const PONG_TIMEOUT_MS = 1000;
 // its late pongs counted against the right frames.
 const OWED_QUIET_MS = 1500;
 
+// Both of those were sized for several frames in flight.  With one, a
+// lost pong freezes the helmet for the timeout and the quiet wait
+// together -- 2.5 s, which a measured sweep showed as a visible stall --
+// and a late pong credited to the next frame costs at most one frame of
+// overlap.  So one frame in flight gives up sooner: still well past the
+// slowest phone round trip seen (about 300 ms).
+const PONG_TIMEOUT_1_MS = 600;
+const OWED_QUIET_1_MS = 300;
+
 // A POST that has not come back by now is not coming back.  Without a
 // limit, two requests the controller never answered pinned the player
 // at its in-flight ceiling and the helmet froze for good -- seen after
@@ -339,6 +348,8 @@ class Link {
     this.owed = 0;
     this._owedAt = 0;
     this.depth = opts.depth || DEPTH;
+    this.pongTimeout = this.depth > 1 ? PONG_TIMEOUT_MS : PONG_TIMEOUT_1_MS;
+    this.owedQuiet = this.depth > 1 ? OWED_QUIET_MS : OWED_QUIET_1_MS;
     // For testing a phone from a laptop: hold every pong this long.
     this.ackDelay = opts.ackDelay || 0;
     // How often the controller has been finishing frames, smoothed; the
@@ -778,7 +789,7 @@ class Link {
   // stalled is not helped by more frames anyway.
   busy(now) {
     if (this.ws && this.ws.readyState === 1) {
-      if (this.unacked.length && now - this.unacked[0] > PONG_TIMEOUT_MS) {
+      if (this.unacked.length && now - this.unacked[0] > this.pongTimeout) {
         this.lost += this.unacked.length;
         this.owed += this.unacked.length;
         this.unacked = [];
@@ -786,7 +797,7 @@ class Link {
         this.dirty();               // whatever happened, start again whole
       }
       if (this.owed) {
-        if (now - this._owedAt < OWED_QUIET_MS) return true;
+        if (now - this._owedAt < this.owedQuiet) return true;
         this.owed = 0;              // that long without a word: those were lost
       }
       return this.unacked.length >= this.depth;
