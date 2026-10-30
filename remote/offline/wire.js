@@ -159,6 +159,13 @@ const FILLER = ' '.repeat(1421);
 // one of the three slots, so this can afford to be patient.
 const PONG_TIMEOUT_MS = 1000;
 
+// After giving up on frames, how long the player waits for their pongs
+// before deciding they were lost rather than late.  Nothing is sent
+// meanwhile -- see busy() -- so this is also the longest a controller
+// that has stalled can stay silent, past PONG_TIMEOUT_MS, and still have
+// its late pongs counted against the right frames.
+const OWED_QUIET_MS = 1500;
+
 // A POST that has not come back by now is not coming back.  Without a
 // limit, two requests the controller never answered pinned the player
 // at its in-flight ceiling and the helmet froze for good -- seen after
@@ -166,6 +173,20 @@ const PONG_TIMEOUT_MS = 1000;
 // closed the websocket.
 const POST_TIMEOUT_MS = 2500;
 const REOPEN_MS = 3000;
+
+// The same for the requests that set the helmet up and arm the dead
+// man.  They had no limit at all, so a controller that took the
+// connection and never answered hung start() for good -- with the
+// segments already frozen by begin's layout if it was the dead man's
+// POST that hung.  Longer than a frame's, because these are rare and a
+// controller busy with a show can be slow to get to them.
+const REQ_TIMEOUT_MS = 5000;
+
+// The dead man is re-armed this often while frames flow, and retried
+// this soon when re-arming failed: after a dropout the first arm that
+// gets through is also what turns the helmet back on (armDeadman).
+const DEADMAN_EVERY_MS = 20000;
+const DEADMAN_RETRY_MS = 3000;
 
 // The chain cut into equal segments of at most SEG_MAX.
 function layout(count, segMax) {
@@ -308,6 +329,10 @@ class Link {
     this._opening = false;
     // When each unacknowledged frame's 'p' went, oldest first.
     this.unacked = [];
+    // Pongs still to come for frames already given up on, and when the
+    // controller was last heard from about them.  See busy().
+    this.owed = 0;
+    this._owedAt = 0;
     this.depth = opts.depth || DEPTH;
     // For testing a phone from a laptop: hold every pong this long.
     this.ackDelay = opts.ackDelay || 0;
@@ -324,6 +349,20 @@ class Link {
     this.frozen = false;
     this.deadmanMins = opts.deadmanMins === undefined ? 1 : opts.deadmanMins;
     this._lastDeadman = 0;
+    // When an arm last got through (Date.now()), whether the last try
+    // failed, and whether one is on its way.  See armDeadman().
+    this._armedOk = 0;
+    this._armFailed = false;
+    this._arming = false;
+    // Bumped by begin() and release(), so a re-arm still on its way can
+    // tell that the page has let go since it started.
+    this._session = 0;
+    // The brightness the page asked for: begin()'s, then the slider's.
+    // Put back when the dead man may have fired while frames still flow.
+    this.bri = 255;
+    // Times the helmet was turned back on that way, for the page to say so.
+    this.revived = 0;
+    this.reqTimeout = opts.reqTimeout || REQ_TIMEOUT_MS;
     this.onstatus = opts.onstatus || function () {};
     // Called when the controller has finished a frame, so a player
     // waiting on busy() can draw the next one at once, not at its next
@@ -348,21 +387,44 @@ class Link {
 
   hdrs(extra) { return Object.assign({}, this.headers, extra || {}); }
 
+  // One request with a time limit that covers reading the answer as
+  // well as getting it: a controller can send the headers and then sit
+  // on the body.
+  async _req(path, init, what, read) {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), this.reqTimeout) : null;
+    try {
+      const r = await fetch(this.url(path), Object.assign(
+        { cache: 'no-store' }, init, ctl ? { signal: ctl.signal } : {}));
+      if (!r.ok) throw new Error(what + ' -> ' + r.status);
+      return await read(r);
+    } catch (e) {
+      if (ctl && ctl.signal.aborted)
+        throw new Error(what + ': no answer from the controller in '
+                        + Math.round(this.reqTimeout / 1000) + ' s');
+      throw e;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   async getJSON(path) {
-    const r = await fetch(this.url(path),
-                          { cache: 'no-store', headers: this.hdrs() });
-    if (!r.ok) throw new Error(path + ' -> ' + r.status);
-    return r.json();
+    return this._req(path, { headers: this.hdrs() }, path, r => r.json());
   }
 
   async postJSON(obj) {
-    const r = await fetch(this.url('/json/state'), {
-      method: 'POST', cache: 'no-store',
+    return this._req('/json/state', {
+      method: 'POST',
       headers: this.hdrs({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(obj),
-    });
-    if (!r.ok) throw new Error('state -> ' + r.status);
-    return r.text();
+    }, 'state', r => r.text());
+  }
+
+  // The brightness slider.  Remembered, because it is what the dead
+  // man's re-arm puts back if the helmet went dark under the page.
+  setBri(bri) {
+    this.bri = bri;
+    return this.postJSON({ bri: bri });
   }
 
   // Forget what the controller is showing, so the next frame is sent
@@ -409,7 +471,7 @@ class Link {
           }
         };
         const gone = () => {
-          if (this.ws === ws) { this.ws = null; this.unacked = []; this.dirty(); }
+          if (this.ws === ws) { this.ws = null; this.unacked = []; this.owed = 0; this.dirty(); }
         };
         ws.onclose = gone;
         ws.onerror = gone;
@@ -422,6 +484,16 @@ class Link {
   // A frame is on the strip: messages are handled in order, so the
   // pong answers the oldest frame still waiting.
   _pong() {
+    if (this.owed) {
+      // A frame already given up on, answering late.  Nothing has been
+      // sent since it was given up on, so it can be nobody else's.
+      this.owed--;
+      this._owedAt = performance.now();
+      if (!this.owed) this.onready();
+      return;
+    }
+    // Later even than that, or a stray: there is nothing it can belong
+    // to, and crediting it to a newer frame is the drift busy() avoids.
     if (!this.unacked.length) return;
     const now = performance.now();
     this.rtt = this.rtt * 0.8 + (now - this.unacked.shift()) * 0.2;
@@ -483,6 +555,8 @@ class Link {
   }
 
   async begin(bri) {
+    this._session++;
+    this.bri = bri === undefined ? 255 : bri;
     let ids = [];
     try { ids = ((await this.getJSON('/json/state')).seg || []).map(s => s.id); } catch (e) {}
     await this.postJSON({
@@ -493,8 +567,17 @@ class Link {
       // goes away, which is precisely the moment somebody switches
       // to the phone and concludes offline mode is broken.
       on: true, live: false,
-      bri: bri === undefined ? 255 : bri,
+      bri: this.bri,
       transition: 0, tt: 0,
+      // The dead man rides in with the layout, so there is no moment
+      // with the segments frozen and nothing armed to let them go: the
+      // separate arm that follows used to be that moment, and if it
+      // hung or the page died before it, the frame latched for good.
+      // A nightlight that is already running is not restarted by this
+      // (WLED only reads the duration when one starts), which is why
+      // armDeadman(true) still follows.
+      nl: this.deadmanMins
+        ? { on: true, mode: 0, dur: this.deadmanMins, tbri: 0 } : undefined,
       seg: this.segLayout(ids),
     });
     await this.armDeadman(true);
@@ -523,15 +606,55 @@ class Link {
   // switches off when it expires, so re-arming it a few times a minute
   // turns it into a dead man's handle: the helmet goes dark about a
   // minute after the phone stops talking, and never while it is.
+  //
+  // And when it has fired, nothing else turns the helmet back on.  The
+  // nightlight sets bri to 0; the pixel writes carry no `on`, so WLED
+  // goes on taking frames into a dark helmet, and the page went on
+  // counting them at a healthy frame rate -- after any minute without a
+  // successful arm: a WiFi dropout, the wearer walking off past the
+  // access point's reach, a stalled tab.  So an arm that comes after
+  // most of a minute without one also puts on and bri back.  It
+  // re-freezes the segments in the same request, because WLED's
+  // deserializeState unfreezes every segment when a request turns it on
+  // ("unfreeze all segments when turning on" -- read in the firmware
+  // source, not measured on the helmet; if it does not, the freeze is a
+  // no-op) and the running effect would paint over the frames; and the
+  // next frame goes whole.  In normal running arms come every 20 s and
+  // this is never sent.
   async armDeadman(force) {
     if (!this.deadmanMins) return;
     const now = Date.now();
-    if (!force && now - this._lastDeadman < 20000) return;
+    const every = this._armFailed ? DEADMAN_RETRY_MS : DEADMAN_EVERY_MS;
+    if (!force && (this._arming || now - this._lastDeadman < every)) return;
     this._lastDeadman = now;
+    this._arming = true;
+    const session = this._session;
+    const revive = !force
+      && now - this._armedOk > this.deadmanMins * 60000 - DEADMAN_EVERY_MS;
     try {
       await this.postJSON({ nl: { on: false } });
-      await this.postJSON({ nl: { on: true, mode: 0, dur: this.deadmanMins, tbri: 0 } });
-    } catch (e) { /* older firmware: the pagehide handler still covers it */ }
+      // Let go of meanwhile: arming now would only undo the release.
+      if (session !== this._session) return;
+      const nl = { on: true, mode: 0, dur: this.deadmanMins, tbri: 0 };
+      if (revive && this.streaming) {
+        await this.postJSON({
+          on: true, bri: this.bri, nl: nl,
+          seg: this.segs.map((_, id) => ({ id: id, frz: true })),
+        });
+        this.revived++;
+        this.dirty();
+      } else {
+        await this.postJSON({ nl: nl });
+      }
+      this._armedOk = Date.now();
+      this._armFailed = false;
+    } catch (e) {
+      // older firmware, or no answer: the pagehide handler still covers
+      // the first, and the second is retried soon
+      this._armFailed = true;
+    } finally {
+      this._arming = false;
+    }
   }
 
   // Hand the chain back as one unfrozen segment and leave the helmet
@@ -546,6 +669,7 @@ class Link {
   async release() {
     this.frozen = false;
     this.streaming = false;
+    this._session++;
     const seg = [{ id: 0, start: 0, stop: this.ledCount, frz: false }]
       .concat(this.segs.slice(1).map((_, k) => ({ id: k + 1, stop: 0 })));
     // Two ways to let go, and the default is not "off".
@@ -606,12 +730,37 @@ class Link {
   // Is the controller still busy with the last frame?  The player
   // draws nothing until it is not: a frame drawn now would only be
   // shown late.
+  //
+  // A pong that has not come in time may be lost or only late, and the
+  // two cannot be told apart: WLED's pong carries nothing to say which
+  // ping it answers.  Dropping just the overdue frame and sending on
+  // went wrong for late ones, which is what a controller stall makes:
+  // the late pong arrived after newer frames had gone out, was credited
+  // to the oldest of them, and from then on every pong to the frame
+  // before its own -- one frame more queued than the page believed, per
+  // stall, for good while the controller was the bottleneck.  Simulated
+  // at 12 ms a message, one 1.2 s stall took the helmet from 118 ms
+  // behind the music to 239, and a 2.2 s one to 359.
+  //
+  // So when the oldest is overdue, every frame still waiting is given
+  // up on together -- the ones behind it are behind it in the
+  // controller's queue as well -- and nothing more is sent until their
+  // pongs have all come back, or none has for OWED_QUIET_MS.  Every pong
+  // that arrives in between can only be one of theirs, and once they
+  // are accounted for the count is exact again.  A controller that has
+  // stalled is not helped by more frames anyway.
   busy(now) {
     if (this.ws && this.ws.readyState === 1) {
-      while (this.unacked.length && now - this.unacked[0] > PONG_TIMEOUT_MS) {
-        this.unacked.shift();       // that pong never came: start again whole
-        this.lost++;
-        this.dirty();
+      if (this.unacked.length && now - this.unacked[0] > PONG_TIMEOUT_MS) {
+        this.lost += this.unacked.length;
+        this.owed += this.unacked.length;
+        this.unacked = [];
+        this._owedAt = now;
+        this.dirty();               // whatever happened, start again whole
+      }
+      if (this.owed) {
+        if (now - this._owedAt < OWED_QUIET_MS) return true;
+        this.owed = 0;              // that long without a word: those were lost
       }
       return this.unacked.length >= this.depth;
     }
