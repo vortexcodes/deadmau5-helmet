@@ -55,6 +55,11 @@ class TrackDrive {
     this.chroma = new Uint8Array(buf, p, nbars * 12);
 
     this.bands = true;
+    // Its beats are the laptop's analysis, the grid mau5show.Player
+    // locks effects to -- so a show may lock to it too, when the show
+    // says its analysis was confident (show.js).  The live analyser's
+    // grid is an estimate and carries no such mark.
+    this.analysed = true;
     this.bpm = this.beats.length > 1
       ? 60 / ((this.beats[this.beats.length - 1] - this.beats[0])
               / (this.beats.length - 1))

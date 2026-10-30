@@ -24,6 +24,38 @@ const M = root.MAU5;
 
 function pmod(a, b) { const r = a % b; return r < 0 ? r + b : r; }
 
+// The beat pulse and the downbeat accent, as mau5show.beat_gain and
+// mau5show.accent_level -- the reasoning is there, the numbers here
+// must stay the same.  In short: the old pulse lasted a third of a
+// beat, 115 ms at 174 bpm, which a phone sending a frame every 36-70 ms
+// caught at a random height or not at all, so every beat flashed
+// differently.  Now it holds its peak for PULSE_HOLD_S first, so some
+// frame always lands on the full beat, and the floor between beats
+// drops just enough that a beat averages the same as it did -- the
+// same current over a song, only placed where it can be seen.
+const PULSE_HOLD_S = 0.07;
+const ACCENT_PEAK = 0.45;
+const ACCENT_WINDOW_S = 0.08;     // isDownbeat's own window
+
+function beatGain(ph, bpm, amp) {
+  const spb = 60 / Math.max(bpm || 0, 1e-6);
+  const hold = Math.min(PULSE_HOLD_S / spb, 0.25);
+  const x = Math.max(0, ph - hold);
+  const k = Math.pow(Math.max(0, 1 - x * 3), 2);
+  const mean0 = (1 + amp / 9) / (1 + amp);
+  const area = hold + 1 / 9;
+  const floor = (mean0 - area) / (1 - area);
+  if (floor >= 0) return floor + (1 - floor) * k;
+  return k * mean0 / area;
+}
+
+function accentLevel(bpm) {
+  const spb = 60 / Math.max(bpm || 0, 1e-6);
+  const win = ACCENT_WINDOW_S / spb;
+  const m = Math.min(win, 1 / 6);
+  return ACCENT_PEAK * (m - 3 * m * m) / win;
+}
+
 // How long one visual cycle of a preset lasts, from its own period
 // parameter.  mau5engine.cycle_seconds.
 function cycleSeconds(name, params, tbl) {
@@ -68,10 +100,16 @@ class ShowPlayer {
     this.dyn = show.dynamics === undefined ? 0.72 : show.dynamics;
     this.dynGamma = show.dynamics_gamma === undefined ? 0.7 : show.dynamics_gamma;
     // The laptop decides this from how well the tempo estimate locked
-    // onto the track.  Live there is no such confidence to appeal to,
-    // and an effect quantised to a grid that is only approximately
-    // where the beats are lands wrong on purpose rather than at
-    // random -- which is worse.  So: only if the show insists.
+    // onto the track, and mau5show.build writes that verdict into the
+    // show as `lock`.  It holds for a TrackDrive, which carries that
+    // same analysis' beat grid -- and four of the five shows lock on
+    // the laptop, so leaving them free here put every strobe and chase
+    // on the phone a fixed fraction of a beat off the kicks (0.75 of a
+    // beat on Strobe, whose first beat is at 0.35 s).  Live there is no
+    // such confidence to appeal to: the grid is an estimate from
+    // onsets, and an effect quantised to a grid that is only
+    // approximately where the beats are lands wrong on purpose rather
+    // than at random -- which is worse.  So only on an analysed grid.
     this.lock = show.lock === true;
     this.cues = show.cues.slice().sort((a, b) => a.start - b.start);
     this.duration = show.duration || (this.cues.length
@@ -104,7 +142,7 @@ class ShowPlayer {
       inst = M.make(name, params, this.h, this.fonts);
       this.cache.set(key, inst);
     }
-    const te = (this.lock && music)
+    const te = (this.lock && music && music.analysed === true)
       ? lockTime(music, name, params, t, this.tbl) : t;
     out.fill(0);
     inst.render(this.h, te, music, out);
@@ -180,12 +218,12 @@ class ShowPlayer {
       // Handed over as `gain`, at most 1, for the sender to apply after
       // the guard (mau5show.Player.frame has the whole story).
       if (this.pulse > 0 && lvl >= 1) {
-        const k = Math.pow(Math.max(0, 1 - ph * 3), 2);
-        const amp = this.pulse * (0.4 + 0.3 * lvl);
-        this.gain = (1 + amp * k) / (1 + amp);
+        this.gain = beatGain(ph, music.bpm, this.pulse * (0.4 + 0.3 * lvl));
       }
-      if (this.accent && lvl >= 2 && music.isDownbeat(t)) {
-        const k = Math.max(0, 1 - ph * 6) * 0.45;
+      // ph < 0.5: isDownbeat is true either side of the bar, and the
+      // flash belongs after it
+      if (this.accent && lvl >= 2 && ph < 0.5 && music.isDownbeat(t)) {
+        const k = accentLevel(music.bpm);
         if (k > 0) for (let q = 0; q < out.length; q++) out[q] += k * 255;
       }
     }
@@ -196,7 +234,7 @@ class ShowPlayer {
   }
 }
 
-const api = { ShowPlayer, cycleSeconds, lockTime };
+const api = { ShowPlayer, cycleSeconds, lockTime, beatGain, accentLevel };
 root.MAU5 = Object.assign(root.MAU5 || {}, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
