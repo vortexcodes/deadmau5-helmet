@@ -1,0 +1,228 @@
+{
+ "v": 1,
+ "show": "deadmau5 - Strobe (Dimension Remix)",
+ "about": "Bars of the analysis grid: bar b starts at 1.037 + 1.379 b seconds, 224 bars, 174 BPM. The analysis puts its bar line one beat early: the kick, every entry, both drops and every phrase restart land on its beat two, so every mark here sits at .25, a beat past the grid's downbeat. Strobe's own language comes back -- the same sixteen-spark constellation (loop 16, seed 3) whenever the melody is alone, ice for the climb, dawn for the second breakdown, the strobe palette under the drops, the ladder, the spin, the ring, the X eyes -- and the remix adds its own: the two-step breakbeat played on the ears, the kick on both ears' tubes on 1 and the and-of-3, the snare in hot volt pink on the left half and ear 1 on beat 2, answered by the right half and ear 2 on beat 4. Every phrase restart has a one-beat hole in the bass before it, and the helmet goes dark for exactly that beat. The kick runs the tubes at under half and the snares at 0.6 on purpose: a full-bright ear flash takes the whole 1000 mA and the governor sheds the shell at s^6, which left the snare halves dark on the face. Nothing on the shell, and no pump, pulses faster than a beat (2.9 Hz); only the ear blades go to 8ths, and to 16ths for single bars before a restart. White once, on drop 2.",
+ "lead": 0,
+ "marks": {
+  "hush": 11.25, "boom": 15.25, "title": 17.25, "call": 31.25,
+  "climb": 47.25, "drums": 63.25, "lift": 71.25, "rise": 75.25, "suck": 78.25,
+  "drop": 79.25, "fill1": 94.25, "dropB": 95.25, "fill2": 110.25, "dropC": 111.25,
+  "fill3": 126.25, "brk": 127.25, "eyes": 143.25, "pickup": 150.25, "build": 151.25,
+  "suck2": 158.25, "drop2": 159.25, "fill4": 174.25, "drop2B": 175.25, "fill5": 190.25,
+  "drop2C": 191.25, "runout": 205.25, "last": 207.25, "gone": 213.25
+ },
+ "palettes": {
+  "ice": [[0, 0, 0], [0, 20, 90], [0, 140, 255], [200, 240, 255]],
+  "dawn": [[8, 0, 24], [110, 0, 170], [255, 40, 110], [255, 170, 60]],
+  "strobe": {"stops": [[0, 60, 255], [0, 230, 255], [255, 255, 255], [120, 0, 255]], "wrap": true},
+  "volt": [[0, 40, 255], [255, 0, 110], [255, 220, 235]],
+  "pure": [[0, 0, 255], [0, 200, 255], [255, 255, 255]]
+ },
+ "motifs": {
+  "arp": {"fx": "sparks", "on": "face", "rate": 2, "life": 1.5, "loop": 16, "seed": 3,
+          "pal": "ice", "c": 0.75, "spread": 0.2, "gain": 0.6},
+  "spin": {"fx": "grad", "on": "rims", "axis": "a", "scale": 4, "speed": 0.25, "gain": 0.25},
+  "ladder": {"fx": "blades", "seq": ["012"], "step": 1, "side": "alt", "rise": 0.12,
+             "keep": 0.15, "c": 0.6, "ctip": 1},
+  "ring": {"fx": "sweep", "on": "all", "axis": "r", "shape": "p", "mode": "band",
+           "from": 0, "to": 1.2, "width": 0.25, "pal": "pure", "c": 0},
+  "climb": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "fill",
+            "soft": 0.15, "from": -0.1, "to": 1.05},
+  "suckband": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "band",
+               "width": 0.12, "from": 0, "to": 1.1, "c": 0.9, "gain": [0.2, 0.7]},
+  "kick": {"fx": "fill", "on": "tubes", "pal": "ice", "c": 0.66, "gain": 0.45,
+           "gate": {"pat": "x.........x.....", "step": 0.25, "decay": 0.75}},
+  "snares": [{"fx": "fill", "on": "left+ear1", "pal": "volt", "c": 0.5, "gain": 0.6,
+              "gate": {"pat": "....x...........", "step": 0.25, "decay": 1}},
+             {"fx": "fill", "on": "right+ear2", "pal": "volt", "c": 0.5, "gain": 0.6,
+              "gate": {"pat": "............x...", "step": 0.25, "decay": 1}}],
+  "bassglow": {"fx": "grad", "on": "shell", "axis": "a", "scale": 1, "speed": 0.25, "pal": "ice",
+               "hi": 0.6, "gain": {"band": "bass", "punch": true, "lo": 0.05, "hi": 0.25}},
+  "twostep": [{"use": "kick"}, {"use": "snares"}],
+  "roll": {"fx": "blades", "seq": ["0", "1", "2", "012"], "step": 0.5, "side": "alt",
+           "rise": 0.25, "keep": 0.1, "pal": "strobe", "c": 0.25, "ctip": 0.75},
+  "surge": {"fx": "grad", "on": "shell", "axis": "a", "scale": 3, "speed": 0.25, "wave": "saw",
+            "pal": "strobe", "gain": {"band": "bass", "punch": true, "lo": 0.1, "hi": 0.35}},
+  "bloom": {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.25, "gain": 0.6,
+            "gate": {"pat": "x", "step": 16, "decay": 6}},
+  "land": {"use": "ring", "pal": "volt", "c": 0.5}
+ },
+ "scenes": [
+  {"name": "breakbeat", "from": -0.75, "to": "hush", "pal": "ice",
+   "layers": [{"use": "kick", "gain": 0.35,
+               "gate": {"pat": "x...x.....x.....", "step": 0.25, "decay": 0.6}},
+              {"fx": "fill", "on": "rims", "pal": "pure", "c": 0.5, "gain": 0.8,
+               "gate": {"pat": "....x.......x...", "step": 0.25, "decay": 0.75}},
+              {"fx": "grad", "on": "shell", "axis": "y", "speed": 0.03125, "hi": 0.45,
+               "gain": [0.25, 0.5]}],
+   "each": {"env": {"out": 16}}},
+
+  {"name": "hush", "from": "hush", "to": "boom", "pal": "ice",
+   "layers": [{"use": "arp", "env": {"in": 8}},
+              {"use": "spin"}]},
+
+  {"name": "filter", "from": "boom", "to": "call", "pal": "ice",
+   "layers": [{"use": "arp", "gain": {"band": "high", "lo": 0.05, "hi": 0.75}},
+              {"use": "spin", "speed": 0.125, "gain": 0.2},
+              {"fx": "fill", "on": "ears", "c": 0.4, "gain": {"band": "bass", "lo": 0, "hi": 0.2}}]},
+
+  {"name": "call", "from": "call", "to": "climb", "pal": "ice",
+   "layers": [{"use": "arp", "rate": {"call": 2, "39.25": 4},
+               "gain": {"band": "high", "lo": 0.25, "hi": 0.9}},
+              {"fx": "grad", "on": "shell", "axis": "y", "speed": 0.03125, "hi": 0.5,
+               "gain": [0.15, 0.35]},
+              {"fx": "blades", "seq": ["012"], "step": 4, "side": "alt", "keep": 0, "c": 0.66,
+               "gain": {"band": "bass", "punch": true, "lo": 0, "hi": 1}},
+              {"use": "spin"}]},
+
+  {"name": "climb", "from": "climb", "to": "drums", "pal": "ice",
+   "layers": [{"use": "climb", "c": [0.3, 0.95], "gain": 0.6},
+              {"fx": "blades", "seq": ["0", "1", "2", "1"], "step": 1, "rise": 0.15, "c": 0.6,
+               "gain": [0.45, 0.85]},
+              {"use": "arp", "rate": 4, "life": 0.75, "c": 0.9,
+               "gain": {"band": "high", "lo": 0.3, "hi": 1}},
+              {"use": "spin", "gain": 0.3},
+              {"use": "bloom"}]},
+
+  {"name": "drums", "from": "drums", "to": "lift", "pal": "ice",
+   "layers": [{"fx": "grad", "on": "shell", "axis": "y", "scale": 0.8, "speed": 0.125,
+               "warp": 0.25, "wspeed": 0.0625, "gain": [0.4, 0.7]},
+              {"use": "kick", "gain": {"drums": 0.2, "65.25": 0.35, "69.25": 0.5}},
+              {"use": "arp", "rate": 4, "life": 0.5, "c": 0.9},
+              {"use": "spin", "speed": 0.5, "gain": 0.4},
+              {"use": "bloom", "on": "rims"}]},
+
+  {"name": "lift", "from": "lift", "to": "rise", "pal": "strobe",
+   "pump": {"pat": "x...x.......x...", "step": 0.25, "depth": 0.25, "decay": 0.5},
+   "layers": [{"fx": "grad", "on": "shell", "axis": "a", "scale": 2, "speed": 0.25,
+               "wave": "saw", "gain": 0.3},
+              {"use": "ladder", "c": 0.25, "ctip": 0.75, "rim": 0.6, "gain": 0.9},
+              {"use": "snares", "gain": 0.6}]},
+
+  {"name": "rise", "from": "rise", "to": "suck", "pal": "ice",
+   "layers": [{"use": "climb", "c": [0.2, 0.95], "gain": [0.4, 0.9]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"],
+               "step": {"rise": 1, "76.25": 0.5, "77.25": 0.25}, "c": 0.5, "gain": [0.5, 1]},
+              {"fx": "sparks", "on": "all", "rate": {"rise": 2, "76.25": 4, "77.25": 8},
+               "life": 0.5, "c": 1, "gain": {"band": "high", "lo": 0.2, "hi": 1}},
+              {"use": "spin", "speed": {"rise": 0.5, "77.25": 1}, "gain": 0.4}]},
+
+  {"name": "suck", "from": "suck", "to": "drop", "pal": "ice", "out": 1,
+   "layers": [{"use": "spin", "gain": 0.35, "env": {"out": 2}},
+              {"use": "suckband"}]},
+
+  {"name": "drop A", "from": "drop", "to": "fill1", "pal": "strobe",
+   "pump": {"pat": "x...x.......x...", "step": 0.25, "depth": 0.25, "decay": 0.5},
+   "layers": [{"use": "bassglow"},
+              {"use": "twostep"},
+              {"use": "arp", "rate": 4, "life": 0.5, "c": 0.66}]},
+
+  {"name": "fill 1", "from": "fill1", "to": "dropB", "pal": "strobe", "out": 1,
+   "layers": [{"fx": "blades", "seq": ["0", "1", "2"], "step": 0.25, "side": "both",
+               "rise": 0.5, "keep": 0.2, "c": 0.25, "ctip": 0.75, "gain": 0.9},
+              {"use": "suckband", "pal": "strobe", "c": 0.25, "gain": [0.3, 0.8]},
+              {"use": "spin", "speed": 1, "gain": 0.4}]},
+
+  {"name": "drop B", "from": "dropB", "to": "fill2", "pal": "strobe",
+   "pump": {"pat": "x...x.......x...", "step": 0.25, "depth": 0.25, "decay": 0.5},
+   "layers": [{"fx": "fill", "on": "left", "pal": "volt", "c": 0.5, "gain": 0.9,
+               "gate": {"pat": "....x...........", "step": 0.25, "decay": 2, "floor": 0.08}},
+              {"fx": "fill", "on": "right", "pal": "volt", "c": 0.5, "gain": 0.9,
+               "gate": {"pat": "............x...", "step": 0.25, "decay": 2, "floor": 0.08}},
+              {"use": "roll", "gain": 0.9},
+              {"fx": "grad", "on": "shell", "axis": "y", "speed": 0.0625, "pal": "ice", "gain": 0.15},
+              {"use": "spin", "gain": 0.4}]},
+
+  {"name": "fill 2", "from": "fill2", "to": "dropC", "like": "fill 1"},
+
+  {"name": "drop A+", "from": "dropC", "to": "fill3", "like": "drop A",
+   "add": [{"fx": "sparks", "on": "all", "rate": 2, "life": 1, "c": 1,
+            "gain": {"band": "high", "lo": 0.2, "hi": 0.8}}]},
+
+  {"name": "fill 3", "from": "fill3", "to": "brk", "like": "fill 1"},
+
+  {"name": "breakdown", "from": "brk", "to": "eyes", "pal": "dawn",
+   "layers": [{"use": "arp", "pal": "dawn", "c": 0.5, "life": 2, "gain": 0.45},
+              {"use": "spin", "speed": 0.125, "gain": 0.3},
+              {"fx": "grad", "on": "shell", "axis": "y", "speed": 0.03125, "hi": 0.6, "gain": 0.25},
+              {"use": "bloom", "pal": "dawn", "c": 0.9}]},
+
+  {"name": "eyes", "from": "eyes", "to": "build", "pal": "dawn",
+   "layers": [{"fx": "preset", "name": "sprite", "on": "face",
+               "params": {"sprite": "x_eyes", "color": "dawn@0.66"}, "gain": 0.6,
+               "gate": {"pat": "x", "step": 4, "decay": 4, "floor": 0.5}},
+              {"use": "spin", "gain": 0.25},
+              {"fx": "blades", "seq": ["012"], "step": 8, "rise": 1, "keep": 0.3, "c": 0.5,
+               "gain": 0.35}]},
+
+  {"name": "build", "from": "build", "to": "suck2", "pal": "dawn",
+   "layers": [{"use": "climb", "c": [0.2, 0.95], "gain": [0.4, 0.9]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"],
+               "step": {"build": 2, "153.25": 1, "155.25": 0.5, "157.25": 0.25}, "c": 0.5,
+               "gain": [0.4, 1]},
+              {"fx": "sparks", "on": "all", "rate": {"build": 1, "153.25": 2, "155.25": 4},
+               "life": 0.5, "c": 1, "gain": {"band": "high", "lo": 0.2, "hi": 1}},
+              {"use": "spin", "speed": {"build": 0.25, "153.25": 0.5, "157.25": 1}, "gain": 0.4}]},
+
+  {"name": "suck 2", "from": "suck2", "to": "drop2", "like": "suck"},
+
+  {"name": "drop2 A", "from": "drop2", "to": "fill4", "like": "drop A"},
+
+  {"name": "fill 4", "from": "fill4", "to": "drop2B", "like": "fill 1"},
+
+  {"name": "drop2 B", "from": "drop2B", "to": "fill5", "like": "drop B",
+   "add": [{"use": "arp", "rate": 4, "life": 0.5, "c": 0.66}]},
+
+  {"name": "fill 5", "from": "fill5", "to": "drop2C", "like": "fill 1"},
+
+  {"name": "drop2 all", "from": "drop2C", "to": "runout", "pal": "strobe",
+   "pump": {"pat": "x...x.......x...", "step": 0.25, "depth": 0.25, "decay": 0.5},
+   "layers": [{"use": "surge"},
+              {"use": "twostep"},
+              {"use": "roll", "gain": 0.6, "mix": "max"},
+              {"fx": "sparks", "on": "all", "rate": 2, "life": 1, "c": 1,
+               "gain": {"band": "high", "lo": 0.2, "hi": 0.8}}]},
+
+  {"name": "runout", "from": "runout", "to": "last", "pal": "strobe", "out": 1,
+   "layers": [{"use": "climb", "c": [0.25, 1], "gain": [0.5, 0.9]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"],
+               "step": {"runout": 0.5, "206.25": 0.25}, "side": "alt", "rise": 0.25,
+               "c": 0.25, "ctip": 0.75, "gain": 1},
+              {"use": "snares", "gain": 0.5},
+              {"use": "spin", "speed": 1, "gain": 0.5}]},
+
+  {"name": "outro", "from": "last", "to": "gone", "pal": "ice",
+   "layers": [{"use": "arp", "gain": [0.6, 0.05]},
+              {"use": "spin", "gain": [0.3, 0.05]},
+              {"fx": "fill", "on": "ears", "c": 0.5, "gain": {"band": "bass", "lo": 0, "hi": 0.5}}]}
+ ],
+ "hits": [
+  {"name": "boom", "at": "boom", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0, "gain": [1, 0]},
+    {"use": "ring"}]},
+  {"name": "STROBE (DIMENSION)", "at": "title", "beats": 56, "layers": [
+    {"fx": "preset", "name": "text", "on": "face", "fit": true, "mix": "over",
+     "env": {"in": 2, "out": 4}, "params": {"text": "STROBE (DIMENSION)", "color": "ice@1"}}]},
+  {"name": "lift", "at": "lift", "beats": 1, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.5, "gain": [1, 0]},
+    {"use": "ring", "c": 0.5}]},
+  {"name": "DROP", "at": "drop", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.5, "gain": [0.6, 0]},
+    {"use": "land"}]},
+  {"name": "B", "at": "dropB", "beats": 2, "layers": [{"use": "land"}]},
+  {"name": "A+", "at": "dropC", "beats": 2, "layers": [{"use": "land"}]},
+  {"name": "break", "at": "brk", "beats": 2, "layers": [
+    {"use": "ring", "pal": "dawn", "c": 0.9}]},
+  {"name": "pickup", "at": "pickup", "beats": 4, "layers": [
+    {"fx": "blades", "seq": ["0", "1", "2", "012"], "step": 0.5, "side": "alt", "rise": 0.25,
+     "pal": "dawn", "c": 0.5, "ctip": 1, "gain": [0.3, 0.8]}]},
+  {"name": "DROP 2", "at": "drop2", "beats": 2, "layers": [
+    {"fx": "fill", "on": "all", "pal": "pure", "c": 1, "gain": [1, 0]},
+    {"use": "ring", "c": 1}]},
+  {"name": "B2", "at": "drop2B", "beats": 2, "layers": [{"use": "land"}]},
+  {"name": "all", "at": "drop2C", "beats": 2, "layers": [{"use": "land"}]},
+  {"name": "last", "at": "last", "beats": 4, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "ice", "c": 0.66, "gain": [1, 0]},
+    {"fx": "blades", "seq": ["012"], "step": 4, "rise": 0.25, "keep": 0, "pal": "ice", "c": 0.66}]}
+ ]
+}
