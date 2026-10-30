@@ -43,17 +43,28 @@ process.stdin.on('end', () => {
     },
   };
 
+  // A TrackDrive's mark, so band-driven scenes read the curves; without
+  // it they take the midpoint, as they do off the live analyser.
+  if (job.analysed) music.analysed = true;
+
   const out = {};
   const buf = new Float32Array(h.n * 3);
   for (const name of job.shows) {
+    // Warmed up on a separate player, so the timed one starts with no
+    // history a stateful cue preset could carry into the comparison.
+    const warm = new S.ShowPlayer(D.shows[name], h, D);
+    for (const t of job.times) warm.frame(t, music, buf);
     const p = new S.ShowPlayer(D.shows[name], h, D);
-    const frames = [], gains = [];
+    const frames = [], gains = [], labels = [], ms = [];
     for (const t of job.times) {
-      p.frame(t, music, buf);
+      const t0 = process.hrtime.bigint();
+      const r = p.frame(t, music, buf);
+      ms.push(Number(process.hrtime.bigint() - t0) / 1e6);
       frames.push(Array.from(buf, v => Math.round(v * 1000) / 1000));
       gains.push(p.gain);
+      labels.push(r ? r.preset : null);
     }
-    out[name] = { frames, gains };
+    out[name] = { frames, gains, labels, scenes: !!p.scenes, ms };
   }
   process.stdout.write(JSON.stringify(out));
 });

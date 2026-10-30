@@ -309,6 +309,10 @@ def t_phone_locks_like_the_laptop_on_an_analysed_grid():
 
     class Confident(_ShowDrive):
         lock_conf = 0.30
+        # An analysis of the track, as mau5show.Music says it is and as
+        # the JS twin below says with `analysed: true` -- so a scene
+        # show's band-driven values read the curves on both sides.
+        analysed = True
 
     data = mau5offline.bundle()
     if not data.get("shows"):

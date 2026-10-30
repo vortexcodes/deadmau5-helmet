@@ -90,6 +90,12 @@ def _cache_fits(z, cache, path):
 class Music:
     """Per-frame curves the presets can ask about."""
 
+    # Said in so many words, as drive.js's TrackDrive says it: this is an
+    # analysis of the track, so its band curves may drive a scene.  A
+    # stand-in without the mark -- the live analyser, a test's drive --
+    # gets the scenes' fixed midpoint instead, deterministically.
+    analysed = True
+
     def __init__(self, path, fps=40, verbose=False, cache=None):
         self.path, self.fps = path, fps
         stamp = None
@@ -536,6 +542,12 @@ def build(track, fps=40, out=None, seed=None, verbose=False):
             "beats": len(m.beats), "analysis": base + ".analysis.npz",
             "fade": 0.45, "accent": True, "pulse": 0.40,
             "lock": bool(conf == conf and conf >= LOCK_MIN), "cues": cues}
+    # A song with a hand-written treatment keeps it through a rebuild of
+    # the cue list: compiled afresh against the analysis just made, so a
+    # re-analysed track cannot keep a choreography on the old grid.
+    import mau5scene
+    if os.path.exists(mau5scene.treatment_path(base)):
+        show["scenes"] = mau5scene.compile_for(base, m)
     out = out or os.path.join(SHOWS, base + ".json")
     json.dump(show, open(out, "w"), indent=1)
     if verbose:
@@ -678,6 +690,15 @@ class Player:
         self.lock = (conf == conf and conf >= LOCK_MIN) and want is not False
         self._cache = {}
         self._cues = sorted(show["cues"], key=lambda c: c["start"])
+        # A choreographed show (mau5scene) plays instead of the cue list
+        # when it has one.  The cue list stays, as the thing to fall back
+        # on: `mode: "cues"` in the show or MAU5_CUES=1 asks for it, and
+        # a scene renderer that throws gets it automatically.
+        self.scenes, self.label = None, None
+        if (show.get("scenes") and show.get("mode") != "cues"
+                and not os.environ.get("MAU5_CUES")):
+            import mau5scene
+            self.scenes = mau5scene.Scenes(show["scenes"], self.h)
 
     def _preset(self, cue):
         key = (cue["preset"], json.dumps(cue["params"], sort_keys=True))
@@ -740,6 +761,14 @@ class Player:
         return np.maximum(out, lay) if ov.get("mix") == "max" else out + lay
 
     def frame(self, t):
+        if self.scenes is not None:
+            try:
+                out, self.gain, self.label = self.scenes.frame(t, self.music)
+                return out
+            except Exception as e:      # a black helmet is the worst outcome
+                print("mau5show: the scenes failed (%s: %s) -- playing the cue "
+                      "list" % (type(e).__name__, e))
+                self.scenes, self.label = None, None
         self.gain = 1.0
         cur = self.cue_at(t)
         if cur is None:

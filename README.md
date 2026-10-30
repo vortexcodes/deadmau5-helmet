@@ -37,6 +37,7 @@ the map
 effects and shows
   mau5engine.py     37 presets written against geometry, not a grid
   mau5song.py       analyses a track; mau5show.py builds and plays a show
+  mau5scene.py      compiles a song's own choreography into its show
   mau5tune.py       scores how well a show follows its music
 
 output and power
@@ -183,6 +184,32 @@ its own filesystem, and that page runs the engine, the power guard
 and the show player itself -- see "Offline mode" below. Starting a
 show plays its song out of the phone; the first time, the page asks
 for the file and keeps it.
+
+## Scene shows: a song's own choreography
+
+A built show is a cue list: a stock preset per phrase, picked from a
+pool. Strobe and Ghosts n Stuff now also carry a treatment written by
+hand for that song, `shows/scenes/<song>.scene.json`, in bars against
+the song's own bar map: its palettes, motifs that come back when the
+music does, builds that grow, a dark beat before each drop, the drop on
+the bar where the bass lands, a title that crosses the face once, and
+the ears played as their own instrument. `mau5scene.py compile` turns
+it into `scenes` inside the show and leaves the cue list where it was.
+
+```
+python3 mau5scene.py bars    "deadmau5 - Strobe" 200 220   # the bar map, to place marks
+python3 mau5scene.py compile "deadmau5 - Strobe"           # lint, show the marks, write the show
+python3 mau5scene.py check   "deadmau5 - Strobe"           # every scene through the guard
+python3 mau5show.py preview "shows/deadmau5 - Strobe.json" --start 395 --seconds 25
+```
+
+Laptop and phone play the scenes wherever a show has them, and render
+the same frame to a hundredth of a count. The cue list comes back
+with `MAU5_CUES=1` (laptop), `?cues` on the page's address (phone),
+`"mode": "cues"` in the show, or by itself if the scenes ever throw.
+None of this has been seen on the helmet yet: watch Strobe from 6:41
+(bar 213 into the drop at 217) and Ghosts from 1:45 (bar 61 into 63)
+from the side as well as the front.
 
 ## Reading the strip back
 
