@@ -3,14 +3,15 @@
 
     ./mau5build.py build  --name intro --audio intro.mp3 --effect myfx.py:show
     ./mau5build.py build  --name intro --audio intro.mp3 --fseq from_xlights.fseq
-    ./mau5build.py check  shows/intro.fseq
+    ./mau5build.py check  shows/superseded/intro.fseq
     ./mau5build.py upload --name intro
     ./mau5build.py deploy --name intro --audio intro.mp3 --effect myfx.py:show
     ./mau5build.py status | playlists | start intro | stop | volume 70
 
-``build`` writes ``shows/<name>.fseq``, copies the audio next to it, and writes
-``shows/<name>.json`` -- the FPP playlist.  ``upload`` pushes all three to the
-Pi and creates the playlist, so the FPP web UI never has to be opened.
+``build`` writes ``shows/superseded/<name>.fseq``, copies the audio next to it,
+and writes ``shows/superseded/<name>.json`` -- the FPP playlist.  ``upload``
+pushes all three to the Pi and creates the playlist, so the FPP web UI never
+has to be opened.
 
 Nothing uploads if the sequence does not match the helmet.  A show built for
 the wrong LED count is the failure mode that costs you a set, so the check is
@@ -325,10 +326,25 @@ def playlist_json(name, fseq_name, media_name, duration):
     }
 
 
+def out_dir_for(helmet):
+    """Where build and upload keep their files: <shows_dir>/superseded.
+
+    Not shows/ itself.  The choreographed shows live there, and
+    everything that lists them -- mau5ctl, mau5doctor, the tests --
+    takes every *.json in it for a show.  A playlist written beside
+    them was offered as a show that would not load (it has no
+    "track"), stopped mau5doctor's shows check dead, and under a show's
+    own name replaced that show's cue list.  shows/superseded/ is where
+    this output was already being moved by hand, and nothing lists it.
+    """
+    base = os.path.dirname(os.path.abspath(helmet.path))
+    return os.path.join(base, helmet.cfg["show"].get("shows_dir", "shows"),
+                        "superseded")
+
+
 def build(helmet, name, audio=None, effect=None, fseq=None, seconds=None,
           compression="none", out_dir=None, timeline=None):
-    base = os.path.dirname(os.path.abspath(helmet.path))
-    out_dir = out_dir or os.path.join(base, helmet.cfg["show"].get("shows_dir", "shows"))
+    out_dir = out_dir or out_dir_for(helmet)
     os.makedirs(out_dir, exist_ok=True)
     fseq_out = os.path.join(out_dir, name + ".fseq")
 
@@ -379,8 +395,7 @@ def build(helmet, name, audio=None, effect=None, fseq=None, seconds=None,
 
 
 def upload(helmet, name, host=None, dry_run=False, force=False, out_dir=None):
-    base = os.path.dirname(os.path.abspath(helmet.path))
-    out_dir = out_dir or os.path.join(base, helmet.cfg["show"].get("shows_dir", "shows"))
+    out_dir = out_dir or out_dir_for(helmet)
     fseq_path = os.path.join(out_dir, name + ".fseq")
     pl_path = os.path.join(out_dir, name + ".json")
     if not os.path.exists(fseq_path):

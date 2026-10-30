@@ -122,14 +122,43 @@ class Camera:
         for line in iter(self.proc.stderr.readline, b""):
             self._err.append(line.decode("utf-8", "replace"))
 
-    def grab(self, fresh=2, timeout=5.0):
-        """Return a frame captured at least ``fresh`` frames after now."""
+    def grab(self, fresh=2, timeout=None):
+        """Return a frame captured at least ``fresh`` frames after now.
+
+        None if that many have not arrived within ``timeout``.  It used
+        to hand back the newest frame regardless, which is a frame from
+        before the change the caller is waiting to see -- and once
+        ffmpeg has died, the same frame for every change from then on,
+        so a scan recorded every later LED at the last one's position
+        without a word.  A stale frame looks exactly like a live one.
+
+        The default timeout is 5 s, or longer when ``fresh`` asks for
+        more than half the nominal rate delivers in that time, so a
+        generous ``scan --fresh`` is waited out rather than turned into
+        a miss on every LED.
+        """
+        if timeout is None:
+            timeout = max(5.0, 2.0 * max(1, fresh) / float(max(1, self.fps)))
         with self._lock:
             want = self._count + max(1, fresh)
             t0 = time.monotonic()
             while self._count < want and time.monotonic() - t0 < timeout:
                 self._lock.wait(0.1)
-            return None if self._frame is None else self._frame.copy()
+            if self._count < want or self._frame is None:
+                return None
+            return self._frame.copy()
+
+    def dark(self, n=3, fresh=2):
+        """The mean of ``n`` fresh frames, as the reference with nothing lit.
+
+        Raises rather than returning None: everything after it is
+        measured against this frame, so there is no going on without it.
+        """
+        frames = [self.grab(fresh=fresh) for _ in range(n)]
+        if any(f is None for f in frames):
+            raise SystemExit("the camera stopped sending frames before the "
+                             "dark reference was taken")
+        return np.stack(frames).mean(0).astype(np.uint8)
 
     def stop(self):
         self._stop = True
@@ -194,28 +223,59 @@ def find_blob(frame, dark, window=81, min_score=18.0):
 # --------------------------------------------------------------------------
 # scanning
 # --------------------------------------------------------------------------
-def measure_latency(cam, pix, tries=6):
-    """How many frames behind the camera is? Flash everything and watch."""
+# How long measure_latency watches for one flash before calling it a
+# miss.  mau5eye's first guess for the phone camera, which is twice the
+# worst it was measured at (1.54 s) -- about 90 frames at 30 fps.  It
+# used to look 11 frames ahead and then clamp what it found to 6, so a
+# camera slower than that was scanned 6 frames after each change and
+# every LED was recorded where the one before it had been.
+LATENCY_WATCH_S = 3.0
+
+
+def measure_latency(cam, pix, tries=6, watch=LATENCY_WATCH_S):
+    """How many frames behind the camera is? Flash everything and watch.
+
+    Raises when no flash is ever seen.  It used to return 3, a guess,
+    and a scan run on a guessed latency reads every LED from the wrong
+    frame with nothing to say so.
+    """
     pix.clear()
     time.sleep(0.4)
-    dark = cam.grab(fresh=3).astype(np.int16)
     lag = []
     for _ in range(tries):
         pix.clear()
         time.sleep(0.25)
-        base = cam.grab(fresh=2).astype(np.int16)
+        # The reference has to be dark, and on a camera slower than the
+        # pause above the last flash is still on screen: every later try
+        # then compared lit against lit and saw nothing, holding the
+        # helmet white for the whole watch.  Wait out what was measured.
+        base = cam.grab(fresh=2 + (max(lag) if lag else 0))
+        if base is None:
+            break                                   # no camera: say so below
+        base = base.astype(np.int16)
         pix.all((255, 255, 255))
-        for k in range(1, 12):
-            f = cam.grab(fresh=1).astype(np.int16)
-            if float(np.clip(f - base, 0, None).mean()) > 4.0:
+        end = time.monotonic() + watch
+        k = 0
+        while time.monotonic() < end:
+            f = cam.grab(fresh=1)
+            if f is None:
+                break
+            k += 1
+            if float(np.clip(f.astype(np.int16) - base, 0, None).mean()) > 4.0:
                 lag.append(k)
                 break
         pix.clear()
         time.sleep(0.2)
     pix.clear()
     if not lag:
-        return 3
-    return int(min(6, max(2, round(float(np.median(lag)) + 1))))
+        raise SystemExit(
+            "the camera never saw the helmet flash (watched %.0f s, %d times).\n"
+            "  Is it pointed at the helmet, and still sending frames?  If the\n"
+            "  latency is known, `scan --fresh N` skips this measurement."
+            % (watch, tries))
+    # No ceiling: more frames than needed only makes a scan slower, and
+    # fewer reads every LED from before it lit.
+    return int(max(2, round(float(np.median(lag)) + 1)))
 
 
 def scan_view(host, view, count=None, device="0", width=1280, height=720,
@@ -239,7 +299,7 @@ def scan_view(host, view, count=None, device="0", width=1280, height=720,
 
         pix.clear()
         time.sleep(0.6)
-        dark = np.stack([cam.grab(fresh=2) for _ in range(3)]).mean(0).astype(np.uint8)
+        dark = cam.dark()
 
         hits = {}
         t0 = time.monotonic()
@@ -296,7 +356,7 @@ def scan_order(host, count=None, device="0", width=1280, height=720, fps=30,
     with Camera(device, width, height, fps) as cam:
         lag = measure_latency(cam, pix)
         pix.clear(); time.sleep(0.5)
-        dark = np.stack([cam.grab(fresh=2) for _ in range(3)]).mean(0).astype(np.uint8)
+        dark = cam.dark()
         for i in range(0, n, group):
             resp = []
             for k in range(3):
@@ -786,6 +846,9 @@ def live(host, count=None, device=None, width=1280, height=720, fps=30):
                     continue
                 name = (line.split(None, 1) + ["snap"])[1]
                 f = cam.grab(fresh=3)
+                if f is None:
+                    print("  no new frame from the camera -- not saving an old one")
+                    continue
                 os.makedirs(CAL_DIR, exist_ok=True)
                 p = os.path.join(CAL_DIR, "%s.png" % name.replace(" ", "_"))
                 try:

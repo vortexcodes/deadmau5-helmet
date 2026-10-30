@@ -181,16 +181,32 @@ tick(); restart(); status(); setInterval(status, 4000);
 
 
 class Relay:
-    def __init__(self, token, helmet=None, eye="127.0.0.1:8752"):
+    def __init__(self, token, helmet=None, eye="127.0.0.1:8752",
+                 allow_open=False):
         self.token = token
         self.eye = eye
         self.helmet = helmet
+        self.allow_open = allow_open
         self.lock = threading.Lock()
 
     def ok(self, given):
-        # constant time, because this is the only thing between the
-        # internet and a controller with no authentication of its own
-        return bool(self.token) and hmac.compare_digest(str(given), self.token)
+        # An empty token lets everyone in only under --allow-open, which
+        # used to answer 403 to everything because the empty token
+        # matched nothing.  Without the flag it still lets nobody in, so
+        # a MAU5_TOKEN that went missing cannot quietly open the door.
+        if not self.token:
+            return bool(self.allow_open)
+        # Constant time, because this is the only thing between the
+        # internet and a controller with no authentication of its own.
+        # Bytes, because compare_digest refuses a str with anything
+        # outside ASCII in it: a ?t=%C3%A9, or a token pasted with a
+        # smart quote, raised in the handler and dropped the connection
+        # with no answer, which looks exactly like the tunnel being down.
+        # (surrogateescape for a token that came in through argv or the
+        # environment as bytes that were not UTF-8.)
+        return hmac.compare_digest(
+            str(given).encode("utf-8", "surrogateescape"),
+            self.token.encode("utf-8", "surrogateescape"))
 
     def _eye(self, path, timeout=8):
         with urllib.request.urlopen("http://%s%s" % (self.eye, path),
@@ -330,6 +346,25 @@ def make_handler(relay):
     return H
 
 
+def write_url_file(path, public, token, ssh_host=None):
+    """Leave the public addresses where the far end can find them.
+
+    The relay URL (with its token, hence 0600) and the SSH tunnel's
+    host, whichever of them exist.  Best effort: a file that cannot be
+    written is no reason to stop serving.
+    """
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            if public:
+                f.write("%s/%s\n" % (public, ("?t=" + token) if token else ""))
+            if ssh_host:
+                f.write("ssh host: %s\n" % ssh_host)
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -361,6 +396,13 @@ def main(argv=None):
             "  This proxies a controller that has no authentication of its\n"
             "  own, so the token is the only thing in the way.  Make one:\n"
             "    python3 -c \"import secrets;print(secrets.token_urlsafe(24))\"")
+    if not a.token and a.tunnel:
+        # --allow-open is for a network you trust, and a quick tunnel is
+        # the whole internet: its URL is public the moment it exists.
+        # Open mode never served anything before, so this pairing was
+        # harmless by accident; now that it works it has to be refused.
+        raise SystemExit("refusing --allow-open with --tunnel: the tunnel is "
+                         "public, so it needs --token.")
 
     host = a.host
     if not host:
@@ -372,7 +414,7 @@ def main(argv=None):
     if not host:
         print("  no controller found; the camera will work and /helmet will not")
 
-    relay = Relay(a.token, host, a.eye)
+    relay = Relay(a.token, host, a.eye, allow_open=a.allow_open)
     srv = ThreadingHTTPServer((a.bind, a.port), make_handler(relay))
     scheme = "http"
     if a.tls:
@@ -398,16 +440,6 @@ def main(argv=None):
                              "brings a real one.")
         print("  opening a Cloudflare tunnel...")
         tunnel, public = start_tunnel(a.port)
-        try:
-            os.makedirs(os.path.dirname(a.url_file), exist_ok=True)
-            with open(a.url_file, "w") as f:
-                f.write("%s/%s\n" % (public,
-                                      ("?t=" + a.token) if a.token else ""))
-                if ssh_host:
-                    f.write("ssh host: %s\n" % ssh_host)
-            os.chmod(a.url_file, 0o600)
-        except OSError:
-            pass
 
     if a.ssh:
         # Tailscale would have been the obvious way to get a shell
@@ -427,6 +459,13 @@ def main(argv=None):
             print("  opening an SSH tunnel...")
             ssh_tunnel, ssh_host = start_tunnel(22, scheme="ssh")
         probe.close()
+
+    # Written once both tunnels are up.  It used to be written straight
+    # after the HTTP one, before the SSH tunnel had a hostname, so the
+    # shell host -- the one thing you cannot get from the far end any
+    # other way -- never reached the file.
+    if public or ssh_host:
+        write_url_file(a.url_file, public, a.token, ssh_host)
 
     ip = mau5wled.lan_ip()
     q = ("?t=" + a.token) if a.token else ""
