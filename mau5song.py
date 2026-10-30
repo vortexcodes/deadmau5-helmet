@@ -48,16 +48,52 @@ ONSET_BIAS_S = 0.0133
 # --------------------------------------------------------------------------
 # decode + analyse
 # --------------------------------------------------------------------------
+def track_stamp(path):
+    """Which audio a file holds: its size and a hash of its contents.
+
+    A content hash rather than a modification time, because copying a
+    track in from Finder or with `cp -p` keeps the old file's time, and
+    a replaced track that looks older than its cache is exactly the one
+    that must not be taken for the original.  About 40 ms for a 20 MB
+    mp3.  None when the file is not there.
+    """
+    import hashlib
+    try:
+        h = hashlib.sha1()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return "%d:%s" % (os.path.getsize(path), h.hexdigest())
+    except OSError:
+        return None
+
+
 def decode(path, rate=22050, cache_dir=None):
-    """mp3/m4a/whatever -> a mono wav we can read with the stdlib."""
+    """mp3/m4a/whatever -> a mono wav we can read with the stdlib.
+
+    The wav is kept, with the source's track_stamp beside it, and reused
+    only while that still matches.  It used to be reused whenever it was
+    newer than the source, so a track replaced by a copy that kept its
+    old time decoded as the track it replaced, and mau5show re-analysing
+    a changed track would have analysed the old audio again.  A wav from
+    before the stamp keeps the old rule.
+    """
     if path.lower().endswith(".wav"):
         return path
     cache_dir = cache_dir or os.path.join(os.path.dirname(os.path.abspath(path)),
                                           ".mau5cache")
     os.makedirs(cache_dir, exist_ok=True)
     out = os.path.join(cache_dir, os.path.splitext(os.path.basename(path))[0] + ".wav")
-    if os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(path):
-        return out
+    stamp = track_stamp(path)
+    if os.path.exists(out):
+        try:
+            with open(out + ".src") as f:
+                have = f.read().strip()
+        except OSError:
+            have = None
+        if (have == stamp if have is not None
+                else os.path.getmtime(out) >= os.path.getmtime(path)):
+            return out
     if shutil.which("afconvert"):
         cmd = ["afconvert", "-f", "WAVE", "-d", "LEI16@%d" % rate, "-c", "1",
                path, out]
@@ -69,6 +105,9 @@ def decode(path, rate=22050, cache_dir=None):
             "need afconvert (macOS) or ffmpeg to decode %s.\n"
             "  Convert it to a .wav yourself and pass that instead." % path)
     subprocess.run(cmd, check=True)
+    if stamp:
+        with open(out + ".src", "w") as f:
+            f.write(stamp + "\n")
     return out
 
 

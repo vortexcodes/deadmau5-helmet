@@ -8,6 +8,7 @@
  "fade": 0.45,
  "accent": true,
  "pulse": 0.4,
+ "lock": false,
  "cues": [
   {
    "start": 1.856,

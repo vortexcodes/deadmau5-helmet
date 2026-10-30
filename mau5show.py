@@ -64,14 +64,39 @@ PALETTES = [
 ]
 
 
+def _cache_fits(z, cache, path):
+    """Whether a cached analysis is of the track at `path`, and its stamp.
+
+    It used to be trusted whenever the frame rate and version matched,
+    so a track replaced under the same name -- a radio edit, a copy with
+    different leading silence -- kept the old beat grid through every
+    rebuild, and mau5drive shipped that grid on to the phone.
+
+    With no track here the cache is all there is, and that is the
+    designed case: the music is not distributed with the source.  A
+    cache that carries a stamp of its audio is checked against it.  One
+    written before stamps falls back to mau5song.decode's rule, a track
+    newer than the cache, so the two caches at least agree.
+    """
+    if not path or not os.path.isfile(path):
+        return True, None
+    stamp = mau5song.track_stamp(path)
+    have = str(z["src"]) if "src" in z else ""
+    if have:
+        return have == stamp, stamp
+    return os.path.getmtime(path) <= os.path.getmtime(cache), stamp
+
+
 class Music:
     """Per-frame curves the presets can ask about."""
 
     def __init__(self, path, fps=40, verbose=False, cache=None):
         self.path, self.fps = path, fps
+        stamp = None
         if cache and os.path.exists(cache):
             z = np.load(cache)
-            if int(z["fps"]) == fps and int(z.get("v", 1)) >= CACHE_V:
+            fits, stamp = _cache_fits(z, cache, path)
+            if int(z["fps"]) == fps and int(z.get("v", 1)) >= CACHE_V and fits:
                 self.duration = float(z["duration"]); self.bpm = float(z["bpm"])
                 self.beats = z["beats"]; self.bars = z["bars"]
                 self.levels = z["levels"]; self.energy = z["energy"]
@@ -81,9 +106,17 @@ class Music:
                 self.band = {k: (z["b_%s_e" % k], z["b_%s_p" % k])
                              for k, _, _ in mau5song.BANDS}
                 self.chroma = z["chroma"]
-                self.shape = [str(x) for x in z["shape"]]
+                # Not the cached labels: those came from one 25 ms sample
+                # per bar (see _bar_levels).  The energy curve and the
+                # bars are cached, so the labels are made again from
+                # them, and a machine without the audio gets the same.
+                self.shape = mau5song.shape_of(self._bar_levels())
                 self.bands = True
                 return
+            if not fits:
+                print("  %s has changed since it was analysed: analysing it "
+                      "again, and its show wants rebuilding"
+                      % os.path.basename(path))
         an = mau5song.analyse(path, verbose=verbose)
         self.duration = an["duration"]
         self.bpm = an["bpm"]
@@ -102,10 +135,12 @@ class Music:
         self.lock_conf = float(an.get("lock", float("nan")))
         self.band = mau5song.band_curves(an["audio"], an["sr"], fps, self.duration)
         self.chroma = mau5song.chroma(an["audio"], an["sr"], self.bars)
-        bar_e = np.array([self.level_at(float(t)) for t in self.bars])
-        self.shape = mau5song.shape_of(bar_e)
+        self.shape = mau5song.shape_of(self._bar_levels())
         self.bands = True                      # Equaliser may ask for bands
         if cache:
+            # `src` says which audio this is an analysis of, so a track
+            # replaced under the same name is analysed again instead of
+            # being handed somebody else's beat grid.
             np.savez_compressed(
                 cache, fps=fps, duration=self.duration, bpm=self.bpm,
                 beats=self.beats, bars=self.bars, levels=self.levels,
@@ -113,9 +148,33 @@ class Music:
                 sections=np.array(self.sections, int),
                 lock=self.lock_conf, v=CACHE_V, chroma=self.chroma,
                 shape=np.array(self.shape, dtype="U6"),
+                src=np.array(stamp or mau5song.track_stamp(path) or ""),
                 **{("b_%s_%s" % (k, w)): self.band[k][i]
                    for k, _, _ in mau5song.BANDS
                    for i, w in ((0, "e"), (1, "p"))})
+
+    def _bar_levels(self):
+        """How loud each bar is on average, which is what shape_of reads.
+
+        This was level_at at each downbeat: one 25 ms frame standing in
+        for a whole bar, so a missing kick or a fill on the one read as
+        a jump or a collapse.  Measured over the shipped analyses that
+        found 11 drops in Fred again where the bar means find 1, and 4
+        in Strobe (bars 13, 61, 93, 218) where the bar means find 217 --
+        and bar 13 put an 8 Hz white strobe over Strobe's soft intro.
+        """
+        e = np.clip(np.asarray(self.energy, float), 0, 1)
+        n, nb = len(e), len(self.bars)
+        if not n or not nb:
+            return np.zeros(nb)
+        edges = [int(float(t) * self.fps) for t in self.bars]
+        edges.append(int(self.duration * self.fps))
+        out = np.zeros(nb)
+        for i in range(nb):
+            a = min(max(edges[i], 0), n - 1)
+            b = min(max(edges[i + 1], a + 1), n)
+            out[i] = float(e[a:b].mean())
+        return out
 
     def band_at(self, t, name="bass", punch=False):
         """0..1 for one band at one instant: loudness, or its punch."""
@@ -466,10 +525,17 @@ def build(track, fps=40, out=None, seed=None, verbose=False):
                                lvl, shape, period=4 * 60.0 / max(m.bpm, 1e-6))
         cues.append(cue)
 
+    # Whether to pin effects to the beat grid, decided here as Player
+    # decides it and written down for the phone.  Player reads the
+    # confidence off the analysis; the phone gets only the cue list and
+    # a drive file with the grid in it, so without this every show ran
+    # free there while four of the five lock on the laptop.
+    conf = float(getattr(m, "lock_conf", float("nan")))
     show = {"track": os.path.basename(track), "fps": fps,
             "duration": round(m.duration, 2), "bpm": round(m.bpm, 2),
             "beats": len(m.beats), "analysis": base + ".analysis.npz",
-            "fade": 0.45, "accent": True, "pulse": 0.40, "cues": cues}
+            "fade": 0.45, "accent": True, "pulse": 0.40,
+            "lock": bool(conf == conf and conf >= LOCK_MIN), "cues": cues}
     out = out or os.path.join(SHOWS, base + ".json")
     json.dump(show, open(out, "w"), indent=1)
     if verbose:
@@ -496,6 +562,67 @@ LOCK_MIN = 0.18
 # Bump when the analysis gains a field, so old caches are rebuilt
 # rather than loaded with half the curves missing.
 CACHE_V = 2
+
+# How long the beat pulse holds its peak before it decays, in seconds.
+#
+# The pulse used to be (1 - 3 * phase)^2: a third of a beat, 115 ms at
+# 174 bpm.  The laptop samples that three or four times at 40 fps; the
+# phone, paced by the controller, sends a frame every 36-70 ms at
+# irregular times, so whether a frame landed near the beat was luck.
+# Simulated on Strobe (Dimension Remix) with frames at 55 +- 15 ms, the
+# per-beat peak spread 0.80-0.92 against 0.90-0.98 on the laptop, and
+# the pulse was most of the frame-to-frame change on the whole helmet
+# -- 7.9 % per frame through the plasma cue, 0.6 % with no pulse.  Held
+# for longer than the slowest frame gap, every beat has a frame at its
+# full height on either device, and the same curve as before decays
+# after it.
+PULSE_HOLD_S = 0.07
+
+# The downbeat accent: how much white it adds at most, and how long
+# is_downbeat says yes after a bar -- the accent's whole life.
+ACCENT_PEAK = 0.45
+ACCENT_WINDOW_S = 0.08
+
+
+def beat_gain(ph, bpm, amp):
+    """The beat pulse at beat phase `ph`: at most 1, applied after the guard.
+
+    The peak is held for PULSE_HOLD_S and then decays as the old curve
+    did, over a third of a beat.  A longer flash alone would spend more
+    current -- a beat would average brighter than it did -- so the floor
+    between beats is set to keep the mean over a beat exactly what the
+    old curve gave, (1 + amp/9) / (1 + amp).  Same current over a song,
+    same peak, which is the guarded frame itself; only the gaps between
+    beats are a little darker, and that is the contrast the pulse is
+    for.  If a show ever asks for a pulse so deep that no floor can keep
+    that mean, the whole curve is scaled down instead, never up.
+    """
+    spb = 60.0 / max(float(bpm or 0.0), 1e-6)
+    hold = min(PULSE_HOLD_S / spb, 0.25)            # in beats
+    x = max(0.0, ph - hold)
+    k = max(0.0, 1.0 - x * 3.0) ** 2
+    mean0 = (1.0 + amp / 9.0) / (1.0 + amp)         # the old curve's mean
+    area = hold + 1.0 / 9.0                         # this one's, of k
+    floor = (mean0 - area) / (1.0 - area)
+    if floor >= 0.0:
+        return floor + (1.0 - floor) * k
+    return k * mean0 / area
+
+
+def accent_level(bpm):
+    """How much white the downbeat accent adds, flat across its window.
+
+    It was 0.45 * (1 - 6 * phase): a sixth of a beat, 57-80 ms, which
+    the phone caught at a random strength or skipped.  Flat across the
+    80 ms that is_downbeat allows, any frame gap shorter than that sees
+    it, always at the same strength -- and that strength is chosen so
+    the accent adds the same light in total as the old ramp did, which
+    makes it about half as tall (0.22 at 128 bpm, 0.16 at 174).
+    """
+    spb = 60.0 / max(float(bpm or 0.0), 1e-6)
+    win = ACCENT_WINDOW_S / spb                     # in beats
+    m = min(win, 1.0 / 6.0)                         # where the old ramp ran
+    return ACCENT_PEAK * (m - 3.0 * m * m) / win
 
 
 class Player:
@@ -540,12 +667,15 @@ class Player:
         # lowering the floor buys contrast and spends less power.
         self.dyn = float(show.get("dynamics", 0.72))
         self.dyn_gamma = float(show.get("dynamics_gamma", 0.7))
-        # Lock unless the show says otherwise, or the analysis never
-        # found the beat in the first place.
+        # Lock when the analysis found the beat, unless the show says
+        # not to.  build() writes the same verdict into the show as
+        # `lock`, for the phone, which has the grid but not the
+        # confidence -- so here `lock: true` is a record, not an order:
+        # it cannot make a grid confident that is not.  It used to be
+        # an order, back when no show carried it.
         want = show.get("lock")
         conf = getattr(music, "lock_conf", float("nan")) if music is not None else 0.0
-        self.lock = bool(want) if want is not None else (
-            conf == conf and conf >= LOCK_MIN)
+        self.lock = (conf == conf and conf >= LOCK_MIN) and want is not False
         self._cache = {}
         self._cues = sorted(show["cues"], key=lambda c: c["start"])
 
@@ -645,13 +775,18 @@ class Player:
             # handed over as `gain`, at most 1, for whoever sends the
             # frame to apply after the guard: the beat is the frame at
             # its limit and the gaps between are dimmer.
+            #
+            # Its shape is beat_gain's: held long enough that the phone,
+            # sending a frame every 36-70 ms, still sees every beat.
             self.gain = 1.0
+            bpm = getattr(self.music, "bpm", 0.0)
             if self.pulse > 0 and lvl >= 1:
-                k = max(0.0, 1.0 - ph * 3.0) ** 2
-                amp = self.pulse * (0.4 + 0.3 * lvl)
-                self.gain = (1.0 + amp * k) / (1.0 + amp)
-            if self.accent and lvl >= 2 and self.music.is_downbeat(t):
-                k = max(0.0, 1.0 - ph * 6.0) * 0.45
+                self.gain = beat_gain(ph, bpm, self.pulse * (0.4 + 0.3 * lvl))
+            # ph < 0.5: is_downbeat is true either side of the bar, and
+            # the flash belongs after it
+            if (self.accent and lvl >= 2 and ph < 0.5
+                    and self.music.is_downbeat(t)):
+                k = accent_level(bpm)
                 if k > 0:
                     out = out + k * 255.0
         return np.clip(out, 0, 255)
@@ -710,12 +845,22 @@ def preview(show_path, seconds=None, fps=24, out=None, with_audio=True,
     return out, n
 
 
-def play(show_path, host=None, seconds=None, fps=40, audio=True, verbose=True):
+def play(show_path, host=None, seconds=None, fps=40, audio=True, verbose=True,
+         av_offset=0.0):
     """Stream the show to the helmet, with the track playing locally.
 
     Audio is started first and the frame clock is slaved to wall time
     rather than to a frame counter, so a slow frame costs a dropped
     frame instead of silently sliding the whole show late.
+
+    The clock starts when the player is spawned, and the player still
+    has to start up, open and decode the mp3 and open the audio device
+    before anything is heard -- a tenth to a third of a second, a
+    quarter to a half of a beat at these tempos, with the lights ahead
+    of the music by all of it.  Nothing reports when the sound actually
+    starts, so `av_offset` is that delay, measured once (raise it until
+    the downbeat flash lands on the kick) and held back from the light
+    clock.  0 is the old behaviour.
     """
     import subprocess
     import mau5wled
@@ -742,10 +887,13 @@ def play(show_path, host=None, seconds=None, fps=40, audio=True, verbose=True):
         proc = subprocess.Popen(cmd)
 
     t0 = time.monotonic()
+    # only when there is sound to wait for; before it, t < 0 has no cue
+    # and renders black
+    lag = float(av_offset) if proc else 0.0
     nframes = dropped = 0
     try:
         while True:
-            t = time.monotonic() - t0
+            t = time.monotonic() - t0 - lag
             if t >= dur:
                 break
             f = pl.frame(t)
@@ -783,6 +931,10 @@ def main(argv=None):
     y = sub.add_parser("play"); y.add_argument("show")
     y.add_argument("--host"); y.add_argument("--seconds", type=float)
     y.add_argument("--fps", type=int, default=40); y.add_argument("--no-audio", action="store_true")
+    y.add_argument("--av-offset", type=float, default=0.0, metavar="SECONDS",
+                   help="how long the audio player takes to start sounding; "
+                        "the lights wait that long (measure once: raise it "
+                        "until the downbeat flash lands on the kick)")
     sub.add_parser("list")
     a = ap.parse_args(argv)
 
@@ -799,7 +951,8 @@ def main(argv=None):
         out, n = preview(a.show, a.seconds, a.fps, a.out, not a.no_audio, a.start)
         print("wrote %s (%d frames)" % (out, n))
     elif a.cmd == "play":
-        play(a.show, a.host, a.seconds, a.fps, not a.no_audio)
+        play(a.show, a.host, a.seconds, a.fps, not a.no_audio,
+             av_offset=a.av_offset)
     elif a.cmd == "list":
         for f in sorted(os.listdir(SHOWS)):
             if f.endswith(".json"):
