@@ -1,0 +1,202 @@
+{
+ "v": 1,
+ "show": "beneath (with raxaj)",
+ "about": "Bars of the analysis grid: bar b starts at 1.856 + 1.898 b seconds (126.4 BPM), 144 bars. The light lives beneath: a pool of magma in the jaw that throbs on every kick, while the ears surge up from their base on the off-beat bass, the way the sidechain pumps. The pool rises through each build until the whole face is molten, drains in the breakdown and is gone in the four silent bars, and wells back up with the sub at bar 67. The grooves are a tide: the left half and ear 1 fill while the right half and ear 2 drain, then they answer. Both builds send a seam of light up the face from the chin, faster each phrase. The song goes silent for three beats at bar 48 and drops on 49; the riser drains everything back down before drop 2 lands on 123. Warm only: ember, magma, obsidian for the cooled breakdown, and white once, on drop 2. The shell tops out on its own 300 mA budget, so the grooves are kept well under it and only the ends of the builds and the drops reach it; the ears in the drops stay inside what the shell leaves, so the governor only grazes the downbeat hits. Nothing on the shell turns on and off faster than once a beat (the pool's throb never goes below 40%); the only sixteenths are the ears' roll in the last bar before drop 2.",
+ "lead": 0,
+ "marks": {
+  "ash": 8, "pads": 16, "tide": 32, "build": 40, "faster": 44, "fastest": 46,
+  "gap": 48, "pickup": 48.75, "drop1": 49, "drop1B": 53, "cool": 57, "title": 60,
+  "void": 64, "upwell": 67, "mids": 74, "groove2": 80, "groove2B": 88,
+  "press": 96, "press2": 104, "press3": 112, "push": 116, "sink": 120,
+  "drop2": 123, "drop2B": 127, "drain": 131, "silence": 132, "outro": 133,
+  "lift": 141, "last": 142, "end": 143
+ },
+ "palettes": {
+  "ember": [[0, 0, 0], [50, 3, 0], [170, 22, 0], [255, 80, 5]],
+  "magma": [[60, 0, 0], [210, 8, 0], [255, 45, 0], [255, 105, 12]],
+  "obsidian": [[0, 0, 0], [18, 0, 12], [70, 4, 36], [170, 24, 8]],
+  "core": [[255, 40, 0], [255, 150, 30], [255, 255, 255]]
+ },
+ "motifs": {
+  "pool": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "fill",
+           "soft": 0.2, "from": 0.22, "to": 0.22, "pal": "ember", "c": 0.8, "cgrad": -0.75,
+           "gate": {"pat": "x...", "step": 0.25, "decay": 0.75, "floor": 0.4}},
+  "vents": {"fx": "sweep", "on": "ears", "axis": "al", "shape": "saw", "mode": "fill",
+            "speed": 1, "from": -0.5, "to": 1.2, "soft": 0.2, "pal": "ember", "c": 0.6,
+            "cgrad": 0.35},
+  "tide": [{"fx": "sweep", "on": "left", "axis": "y", "shape": "tri", "mode": "fill",
+            "speed": 0.125, "from": 0.05, "to": 1.05, "soft": 0.2, "pal": "magma",
+            "c": 0.85, "cgrad": -0.7},
+           {"fx": "sweep", "on": "right", "axis": "y", "shape": "tri", "mode": "fill",
+            "speed": 0.125, "from": 1.05, "to": 0.05, "soft": 0.2, "pal": "magma",
+            "c": 0.85, "cgrad": -0.7}],
+  "tidears": [{"fx": "sweep", "on": "ear1", "axis": "al", "shape": "tri", "mode": "fill",
+               "speed": 0.125, "from": -0.15, "to": 1.15, "soft": 0.2, "pal": "magma",
+               "c": 0.45, "cgrad": 0.45},
+              {"fx": "sweep", "on": "ear2", "axis": "al", "shape": "tri", "mode": "fill",
+               "speed": 0.125, "from": 1.15, "to": -0.15, "soft": 0.2, "pal": "magma",
+               "c": 0.45, "cgrad": 0.45}],
+  "seam": {"fx": "sweep", "on": "all", "axis": "y", "shape": "saw", "mode": "band",
+           "speed": 0.25, "from": -0.1, "to": 1.1, "width": 0.07, "pal": "core", "c": 0.25},
+  "embers": {"fx": "sparks", "on": "shell", "rate": 1, "life": 3, "spread": 0.35,
+             "nbr": 0.3, "seed": 5, "pal": "ember", "c": 0.55, "gain": 0.6},
+  "convect": {"fx": "grad", "on": "shell", "axis": "y", "scale": 1, "speed": -0.0625,
+              "warp": 0.2, "axis2": "x", "wscale": 1.5, "wspeed": 0.03125,
+              "pal": "ember", "lo": 0, "hi": 0.55},
+  "molten": {"fx": "grad", "on": "shell", "axis": "y", "scale": 1.2, "speed": -0.25,
+             "wave": "saw", "warp": 0.12, "axis2": "x", "wscale": 1.5, "wspeed": 0.125,
+             "pal": "magma", "lo": 0.1, "hi": 1},
+  "geyser": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "band",
+             "from": -0.15, "to": 1.25, "width": 0.3, "pal": "core", "c": 0.5}
+ },
+ "scenes": [
+  {"name": "under", "from": -1, "to": "ash", "pal": "ember",
+   "layers": [{"use": "pool", "gain": 0.45, "env": {"in": 4}},
+              {"use": "vents", "gain": 0.25, "env": {"in": 8}}]},
+
+  {"name": "ash", "from": "ash", "to": "pads", "pal": "ember",
+   "layers": [{"use": "pool", "to": 0.3, "gain": 0.5},
+              {"use": "vents", "gain": 0.28},
+              {"use": "embers", "on": "face", "gain": {"band": "high", "lo": 0, "hi": 0.6}}]},
+
+  {"name": "convect", "from": "pads", "to": "tide", "pal": "ember",
+   "layers": [{"use": "convect", "gain": [0.06, 0.16]},
+              {"use": "pool", "from": 0.3, "to": 0.45, "gain": 0.5},
+              {"use": "vents", "gain": [0.28, 0.38]},
+              {"use": "embers", "on": "face", "gain": {"band": "high", "lo": 0, "hi": 0.5}}]},
+
+  {"name": "tide", "from": "tide", "to": "build", "pal": "magma",
+   "layers": [{"use": "tide", "gain": 0.11},
+              {"use": "tidears", "gain": 0.22},
+              {"use": "convect", "gain": 0.06},
+              {"use": "pool", "from": 0.3, "to": 0.3, "gain": 0.25}]},
+
+  {"name": "pressure", "from": "build", "to": "gap", "pal": "ember",
+   "layers": [{"use": "pool", "from": 0.3, "to": 1.0, "gain": [0.25, 0.8]},
+              {"use": "seam", "speed": {"build": 0.25, "faster": 0.5, "fastest": 1},
+               "gain": [0.4, 0.9]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"],
+               "step": {"build": 2, "faster": 1, "fastest": 0.5}, "rise": 0.3, "keep": 0.1,
+               "c": 0.5, "ctip": 0.95, "gain": [0.3, 0.9]},
+              {"use": "embers", "on": "face", "rate": {"build": 1, "faster": 2, "fastest": 4},
+               "life": 0.75, "c": 0.8, "gain": {"band": "high", "lo": 0.1, "hi": 0.8}}]},
+
+  {"name": "erupt", "from": "drop1", "to": "drop1B", "pal": "magma",
+   "pump": {"pat": "x...", "step": 0.25, "depth": 0.2, "decay": 0.5},
+   "layers": [{"use": "molten", "gain": 0.38},
+              {"use": "vents", "pal": "magma", "c": 0.5, "cgrad": 0.4, "gain": 0.38, "env": {"in": 2}},
+              {"use": "embers", "on": "face", "rate": 3, "life": 0.6, "pal": "core", "c": 0.15,
+               "spread": 0.25, "gain": {"band": "high", "lo": 0.2, "hi": 0.8}}]},
+
+  {"name": "erupt tide", "from": "drop1B", "to": "cool", "pal": "magma",
+   "pump": {"pat": "x...", "step": 0.25, "depth": 0.2, "decay": 0.5},
+   "layers": [{"use": "molten", "gain": 0.3},
+              {"use": "tide", "speed": 0.25, "gain": 0.3},
+              {"use": "tidears", "speed": 0.25, "gain": 0.4},
+              {"use": "embers", "on": "face", "rate": 3, "life": 0.6, "pal": "core", "c": 0.15,
+               "spread": 0.25, "gain": {"band": "high", "lo": 0.2, "hi": 0.8}}],
+   "each": {"env": {"out": 3}}},
+
+  {"name": "cool", "from": "cool", "to": "void", "pal": "obsidian",
+   "layers": [{"use": "pool", "pal": "obsidian", "c": 0.95, "from": 0.5, "to": 0.08, "gate": null,
+               "gain": 0.35},
+              {"use": "embers", "rate": 0.75, "life": 4, "gain": 0.4},
+              {"fx": "blades", "seq": ["012"], "step": 8, "rise": 0.7, "keep": 0.35,
+               "c": 0.6, "ctip": 0.95, "gain": 0.3}]},
+
+  {"name": "void", "from": "void", "to": "upwell", "pal": "obsidian",
+   "layers": [{"use": "pool", "pal": "obsidian", "c": 0.95, "from": 0.06, "to": 0.06, "gate": null,
+               "gain": 0.2, "env": {"in": 2}}]},
+
+  {"name": "upwell", "from": "upwell", "to": "mids", "pal": "ember",
+   "layers": [{"use": "pool", "from": 0.08, "to": 0.45, "gate": null,
+               "gain": {"band": "bass", "lo": 0.05, "hi": 0.6}},
+              {"fx": "fill", "on": "ears", "c": 0.55,
+               "gain": {"band": "bass", "lo": 0, "hi": 0.3}}]},
+
+  {"name": "return", "from": "mids", "to": "groove2", "pal": "ember",
+   "layers": [{"use": "convect", "gain": [0.06, 0.16]},
+              {"use": "pool", "from": 0.45, "to": 0.45, "gain": 0.5},
+              {"use": "vents", "gain": [0.28, 0.38]}]},
+
+  {"name": "tide 2", "from": "groove2", "to": "groove2B", "pal": "magma",
+   "layers": [{"use": "tide", "gain": 0.12},
+              {"use": "tidears", "gain": 0.25},
+              {"use": "convect", "gain": 0.06},
+              {"use": "pool", "from": 0.3, "to": 0.3, "gain": 0.25}]},
+
+  {"name": "tide 2+", "from": "groove2B", "to": "press", "like": "tide 2",
+   "patch": {"2": {"use": "embers", "on": "face", "gain": {"band": "high", "lo": 0, "hi": 0.5}}}},
+
+  {"name": "pressure 2", "from": "press", "to": "press2", "pal": "ember",
+   "layers": [{"use": "pool", "from": 0.3, "to": 0.5, "gain": 0.45},
+              {"use": "seam", "gain": 0.35},
+              {"use": "vents", "gain": 0.3},
+              {"use": "convect", "gain": 0.08}]},
+
+  {"name": "pressure 3", "from": "press2", "to": "press3", "pal": "ember",
+   "layers": [{"use": "pool", "from": 0.5, "to": 0.7, "gain": 0.32},
+              {"use": "seam", "speed": 0.5, "gain": 0.4},
+              {"fx": "blades", "seq": ["0", "1", "2"], "step": 2, "rise": 0.3, "keep": 0.1,
+               "c": 0.5, "ctip": 0.95, "gain": 0.45},
+              {"use": "convect", "speed": -0.125, "gain": 0.08},
+              {"use": "embers", "on": "face", "gain": {"band": "high", "lo": 0, "hi": 0.6}}]},
+
+  {"name": "pressure 4", "from": "press3", "to": "sink", "pal": "ember",
+   "layers": [{"use": "pool", "from": 0.7, "to": 1.0, "gain": [0.45, 0.9]},
+              {"use": "seam", "speed": {"press3": 0.5, "push": 1}, "gain": [0.6, 0.9]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"], "step": {"press3": 1, "push": 0.5},
+               "rise": 0.3, "keep": 0.1, "c": 0.5, "ctip": 0.95, "gain": [0.5, 0.9]},
+              {"use": "embers", "on": "face", "rate": {"press3": 2, "push": 4}, "life": 0.75,
+               "c": 0.8, "gain": {"band": "high", "lo": 0.1, "hi": 0.8}}]},
+
+  {"name": "sink", "from": "sink", "to": "drop2", "pal": "magma", "out": 1,
+   "layers": [{"use": "pool", "pal": "magma", "from": 1.05, "to": -0.1, "gate": null,
+               "gain": 0.9},
+              {"fx": "blades", "seq": ["012"], "step": {"sink": 1, "121": 0.5, "122": 0.25},
+               "rise": 0.25, "keep": 0.2, "c": 0.4, "ctip": 1, "rim": 0.5, "gain": [0.35, 0.5]}]},
+
+  {"name": "erupt 2", "from": "drop2", "to": "drop2B", "like": "erupt",
+   "add": [{"fx": "sparks", "on": "all", "rate": 4, "life": 0.5, "pal": "core", "c": 0.2,
+            "spread": 0.2, "gain": {"band": "high", "lo": 0.2, "hi": 0.8}}]},
+
+  {"name": "erupt 2 tide", "from": "drop2B", "to": "drain", "like": "erupt tide",
+   "patch": {"3": {"on": "all", "rate": 4, "life": 0.5, "c": 0.2}}},
+
+  {"name": "drain", "from": "drain", "to": "silence", "pal": "magma",
+   "layers": [{"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "fill",
+               "soft": 0.2, "from": 1.05, "to": -0.15, "c": 0.85, "cgrad": -0.7, "gain": 0.8},
+              {"fx": "fill", "on": "ears", "c": 0.5, "gain": [0.3, 0]}]},
+
+  {"name": "outro", "from": "outro", "to": "end", "pal": "ember",
+   "layers": [{"use": "pool", "gain": [0.45, 0.2], "env": {"in": 1}},
+              {"use": "vents", "gain": [0.25, 0.08]},
+              {"use": "embers", "on": "face", "gain": {"keys": [["outro", 0.2], ["lift", 0.45]]}}],
+   "each": {"env": {"out": 6}}}
+ ],
+ "hits": [
+  {"name": "surface", "at": "pads", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "ember", "c": 0.9, "gain": [0.3, 0]},
+    {"use": "geyser", "pal": "ember", "c": 0.9, "gain": 0.7}]},
+  {"name": "pickup", "at": "pickup", "beats": 1, "layers": [
+    {"fx": "sweep", "on": "ears", "axis": "al", "shape": "p", "mode": "fill",
+     "from": -0.2, "to": 1.2, "soft": 0.2, "pal": "core", "c": 0.3, "gain": 0.25},
+    {"use": "seam", "on": "shell", "shape": "p", "c": 0.3, "gain": 0.8}]},
+  {"name": "ERUPT", "at": "drop1", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "core", "c": 0.5, "gain": [0.35, 0]},
+    {"use": "geyser"}]},
+  {"name": "BENEATH", "at": "title", "beats": 32, "layers": [
+    {"fx": "preset", "name": "text", "on": "face", "fit": true, "mix": "over",
+     "gain": 0.5, "env": {"in": 2, "out": 4},
+     "params": {"text": "BENEATH", "color": "ember@1"}}]},
+  {"name": "surface", "at": "groove2", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "ember", "c": 0.9, "gain": [0.3, 0]},
+    {"use": "geyser", "pal": "ember", "c": 0.9, "gain": 0.7}]},
+  {"name": "WHITE", "at": "drop2", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "core", "c": 0.5, "gain": [0.3, 0]},
+    {"use": "geyser", "c": 1, "width": 0.35}]},
+  {"name": "last", "at": "last", "beats": 4, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "ember", "c": 0.7, "gain": [0.4, 0]},
+    {"use": "pool", "from": 0.22, "to": -0.1, "gate": null, "gain": [0.5, 0]}]}
+ ]
+}
