@@ -137,6 +137,15 @@ const COLOURS = [[255,40,0],[255,160,0],[255,255,255],[0,220,255],
                  [0,255,140],[120,0,255],[255,0,120],[255,230,180]];
 
 const rgb = c => 'rgb('+c[0]+','+c[1]+','+c[2]+')';
+// Everything the server says goes through this before it goes into
+// innerHTML.  A favourite's label is whatever somebody typed, and
+// dropped in raw a label of <img onerror=...> ran script in this page;
+// one with a double quote in it cut its own data-f short, so it could
+// never be recalled or deleted.  dataset reads the unescaped text back.
+const esc = v => String(v).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+// The last thing the controller refused, shown for a few seconds.
+let refused = null, refusedAt = 0;
 function syncNote(){
   if(!S) return '';
   if(!S.bpm) return 'no track loaded';
@@ -152,7 +161,17 @@ async function post(path, body){
   try{
     const r = await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},
                                body:JSON.stringify(body||{})});
-    S = await r.json(); draw();
+    const j = await r.json();
+    if(!r.ok){
+      // A refusal is {error}, not the state.  Taking it as the state
+      // blanked S and the next draw threw, so the page froze on the
+      // very message that should have been on screen.  Keep S, say
+      // why, and redraw from the real state so a slider springs back.
+      refused = j.error || ('refused (' + r.status + ')'); refusedAt = Date.now();
+      const s = await fetch('/api/state'); S = await s.json(); draw(true);
+      return;
+    }
+    S = j; draw();
   }catch(e){ document.getElementById('dot').className='dot err'; }
 }
 
@@ -188,8 +207,12 @@ function draw(force){
       + ' \u00b7 heat ' + Math.round(th.full_pct) + '%';
     if(th.full_pct > 80) p.className = 'cap';
   }
-  document.getElementById('cue').textContent =
-    S.mode==='show' ? (S.show||'')+(S.cue?'  —  '+S.cue:'') : (S.preset||'');
+  const cueText = S.mode==='show' ? (S.show||'')+(S.cue?'  —  '+S.cue:'') : (S.preset||'');
+  const why = (refused && Date.now() - refusedAt < 6000) ? refused
+            : (S.error ? 'render error, helmet held dark: ' + S.error : '');
+  const cueEl = document.getElementById('cue');
+  cueEl.textContent = why ? (cueText ? cueText + '  —  ' : '') + why : cueText;
+  cueEl.style.color = why ? 'var(--hot)' : '';
   document.getElementById('fill').style.width =
     (S.duration ? 100*Math.min(1,S.t/S.duration) : 0)+'%';
   document.getElementById('playbtn').textContent =
@@ -206,28 +229,28 @@ function draw(force){
   if(tab==='presets'){
     const spec = (S.mode==='preset' && S.spec) ? S.spec : [];
     m.innerHTML = '<div class="grid">' + S.presets.map(n=>
-      `<div class="tile${S.mode==='preset'&&S.preset===n?' sel':''}" data-p="${n}">${n}</div>`
+      `<div class="tile${S.mode==='preset'&&S.preset===n?' sel':''}" data-p="${esc(n)}">${esc(n)}</div>`
     ).join('') + '</div>' +
     '<div class="lbl">colour</div><div class="swatches">' + COLOURS.map((c,i)=>
       `<div class="sw${rgb(c)===rgb(colour)?' sel':''}" data-c="${i}" style="background:${rgb(c)}"></div>`
     ).join('') + '</div>' +
     ((S.favourites && S.favourites.length) ?
       '<div class="lbl">saved</div><div class="favs">' + S.favourites.map(f=>
-        `<div class="fav" data-f="${f.label}"><b>${f.label}</b>
-         <i data-x="${f.label}">&times;</i></div>`).join('') + '</div>' : '') +
-    (spec.length ? '<div class="lbl">'+S.preset+' settings</div>' + spec.map(d=>{
-      const cur = S.params[d.name];
+        `<div class="fav" data-f="${esc(f.label)}"><b>${esc(f.label)}</b>
+         <i data-x="${esc(f.label)}">&times;</i></div>`).join('') + '</div>' : '') +
+    (spec.length ? '<div class="lbl">'+esc(S.preset)+' settings</div>' + spec.map(d=>{
+      const cur = S.params[d.name], nm = esc(d.name);
       if(d.kind==='number')
-        return `<div class="prow"><label>${d.name}</label>
-          <input type="range" data-n="${d.name}" min="${d.min}" max="${d.max}"
-                 step="${d.step}" value="${cur}">
-          <output id="o_${d.name}">${(+cur).toFixed(2)}</output></div>`;
+        return `<div class="prow"><label>${nm}</label>
+          <input type="range" data-n="${nm}" min="${esc(d.min)}" max="${esc(d.max)}"
+                 step="${esc(d.step)}" value="${esc(cur)}">
+          <output id="o_${nm}">${(+cur).toFixed(2)}</output></div>`;
       if(d.kind==='bool')
-        return `<div class="prow"><label>${d.name}</label>
-          <button class="toggle${cur?' on':''}" data-b="${d.name}">${cur?'ON':'OFF'}</button></div>`;
+        return `<div class="prow"><label>${nm}</label>
+          <button class="toggle${cur?' on':''}" data-b="${nm}">${cur?'ON':'OFF'}</button></div>`;
       if(d.kind==='text')
-        return `<div class="prow"><label>${d.name}</label>
-          <input class="txt" type="text" data-t="${d.name}" value="${String(cur).replace(/"/g,'&quot;')}"></div>`;
+        return `<div class="prow"><label>${nm}</label>
+          <input class="txt" type="text" data-t="${nm}" value="${esc(cur)}"></div>`;
       return '';
     }).join('') +
       `<div class="prow"><label>save as</label>
@@ -239,7 +262,7 @@ function draw(force){
     '<div class="lbl">sync to music</div>' +
     `<div class="prow"><label>beat lock</label>
       <button class="toggle${S.sync?' on':''}" id="synctog">${S.sync?'ON':'OFF'}</button>
-      <output style="width:auto">${syncNote()}</output></div>
+      <output style="width:auto">${esc(syncNote())}</output></div>
      <div class="prow"><label>beat pulse</label>
       <input type="range" id="pulse" min="0" max="0.8" step="0.02" value="${S.pulse}">
       <output id="o_pulse">${(+S.pulse).toFixed(2)}</output></div>`;
@@ -301,7 +324,7 @@ function draw(force){
     };
   } else if(tab==='shows'){
     m.innerHTML = S.shows.map(n=>
-      `<div class="showrow${S.show===n?' sel':''}" data-s="${n}"><b>${n.replace(/\.json$/,'')}</b>
+      `<div class="showrow${S.show===n?' sel':''}" data-s="${esc(n)}"><b>${esc(n.replace(/\.json$/,''))}</b>
        <span>${S.show===n?mmss(S.t)+' / '+mmss(S.duration):''}</span></div>`
     ).join('') || '<div class="note">No shows built yet.</div>';
     m.querySelectorAll('[data-s]').forEach(el=>el.onclick=()=>loadShow(el.dataset.s));
@@ -317,14 +340,14 @@ function draw(force){
       'it follows automatically. The helmet follows the audio, not the other way round.</div>'+
       '<div class="lbl">heat</div>'+
       (S.thermal ? `<div class="note">The helmet is allowed
-        ${S.thermal.sustained_w} W indefinitely and bursts above it on
-        ${S.thermal.burst_j} J of thermal mass. Bucket
+        ${esc(S.thermal.sustained_w)} W indefinitely and bursts above it on
+        ${esc(S.thermal.burst_j)} J of thermal mass. Bucket
         <b>${Math.round(S.thermal.full_pct)}% full</b>, currently allowing
-        <b>${S.thermal.allowance_w} W</b> of LED. Quiet passages refill it.
-        ${S.thermal.standby_w} W of that is standby, which no setting here
+        <b>${esc(S.thermal.allowance_w)} W</b> of LED. Quiet passages refill it.
+        ${esc(S.thermal.standby_w)} W of that is standby, which no setting here
         can reduce.</div>` : '<div class="note">No thermal budget loaded.</div>')+
       '<div class="lbl">status</div>'+
-      `<div class="note">mode ${S.mode} · ${S.presets.length} presets ·
+      `<div class="note">mode ${esc(S.mode)} · ${S.presets.length} presets ·
        ${S.shows.length} shows${S.governor?' · GOVERNOR ACTIVE':''}</div>`;
     const b = document.getElementById('bri');
     b.oninput = ()=>{ if(!busy){ busy=true;
@@ -358,10 +381,22 @@ document.getElementById('playbtn').onclick = ()=>{
 document.getElementById('back').onclick = ()=>{ au.currentTime = Math.max(0, au.currentTime-15); };
 document.getElementById('blackout').onclick = ()=>{ au.pause(); post('/api/off'); };
 
-au.onplay  = ()=>post('/api/clock',{t:au.currentTime, playing:true});
-au.onpause = ()=>post('/api/clock',{t:au.currentTime, playing:false});
-au.onseeked= ()=>post('/api/clock',{t:au.currentTime, playing:!au.paused});
-setInterval(()=>{ if(!au.paused) post('/api/clock',{t:au.currentTime, playing:true}); }, 400);
+// Every report carries this page's id, a sequence number and the
+// moment the position was read, by this phone's own clock.  The
+// controller drops one that arrives after a later one, measures how
+// late each is against the quickest recent one, and eases the rest in
+// -- it used to jump to every report, late by its own trip across the
+// network, and the show hitched two or three times a second.
+const CLOCK_SID = Math.random().toString(36).slice(2, 10);
+let clockSeq = 0;
+function report(playing){
+  post('/api/clock', {t: au.currentTime, playing: playing, seq: ++clockSeq,
+                      sid: CLOCK_SID, pt: performance.now()});
+}
+au.onplay  = ()=>report(true);
+au.onpause = ()=>report(false);
+au.onseeked= ()=>report(!au.paused);
+setInterval(()=>{ if(!au.paused) report(true); }, 400);
 setInterval(async ()=>{
   try{ const r = await fetch('/api/state'); S = await r.json(); draw(); }
   catch(e){ document.getElementById('dot').className='dot err'; }

@@ -337,14 +337,17 @@ Now it hands back instead:
 python3 mau5offline.py standby --host X --fx pacifica --bri 96 --apply
 ```
 
-That saves a WLED preset and makes it the boot preset. Let go of the
-page — close it, lock the phone, walk off — and the controller picks
-up one of its own effects and keeps running with no phone, no laptop
-and no network. Plug the helmet in with nothing else around and it
-comes up in the same thing. The brightness limiter *does* cover that
-path; it is blind only to pixels painted into a frozen segment, which
-is the player's route, not this one. The page has a **keep glowing**
-switch if you want the old behaviour back.
+That saves a WLED preset, with its brightness, and makes it the boot
+preset. Let go of the page — close it, lock the phone, walk off — and
+the controller picks up one of its own effects and keeps running with
+no phone, no laptop and no network. A screen that times out counts as
+letting go, which is why the phone's timeout matters at a show (see
+*Keep the phone's screen on* below). Plug the helmet in with nothing
+else around and it comes up in the same thing. The brightness limiter
+*does* cover that path, at what the helmet can sustain; it is blind
+only to pixels painted into a frozen segment, which is the player's
+route, not this one. The page has a **keep glowing** switch if you want
+the old behaviour back.
 
 The page only hands back to a preset the controller actually has. WLED
 ignores a request for a missing one, and the helmet then stayed lit in
@@ -363,13 +366,35 @@ involved.
 ```bash
 python3 mau5offline.py build              # make the page, no hardware needed
 python3 mau5offline.py serve              # drive it against a fake controller
-python3 mau5offline.py config --host X --ap-psk '…' --apply
+python3 mau5offline.py config --host X --ap-ssid mau5head-AP --ap-psk '…' --apply
 python3 mau5offline.py deploy --host X    # upload it, then read it back
 python3 mau5offline.py check  --host X    # is it actually ready
 python3 mau5offline.py songs  --host X    # hand the shows' songs to phones, once
 ```
 
-Then: join **mau5head-AP**, open **http://4.3.2.1/mau5.htm**.
+Then: join **mau5head-AP**, open **http://4.3.2.1/mau5.htm**. That name
+only exists once `config` has been run with `--ap-ssid` as above; until
+then the controller is still broadcasting WLED's own **WLED-AP**. `check`
+prints the name it is really using. The password has to be 8 to 63
+characters: `config` now refuses anything else before sending it, because
+the controller would store a shorter one and then bring up no access point
+at all.
+
+**Keep the phone's screen on.** The page cannot do it for you the normal
+way. Browsers only grant the screen wake lock to `https://` pages, and the
+controller serves plain `http://`, so on `4.3.2.1` that call does not exist.
+The page falls back to playing a tiny muted, looping video, which keeps most
+phones awake. It is a workaround, though, not a guarantee, and it has not
+been tried on the show phone. When the screen goes off the page is hidden,
+and a hidden page stops. The helmet hands back to the standby preset (or
+switches off if there is none), and the song can carry on playing from the
+phone with the lights no longer following it. So, before a show:
+
+* set **Settings → Display → Screen timeout** to the longest it offers
+  (Developer options → *Stay awake* also works, but only while charging)
+* try it once: start something, put the phone down untouched, and wait past
+  the old timeout
+* do not press the power button mid-set, because that is a stop
 
 **The songs.** The controller has under a megabyte free and the five songs are
 61 MB, and they are commercial tracks, so they cannot go anywhere public either.
@@ -478,15 +503,26 @@ browser tab, so there are three:
    `heat` climb on the page and the current ration itself down from 1622 mA to
    about 1040 mA after a couple of minutes of something bright — that is the
    bucket filling, exactly as it does on the laptop.
-2. **WLED's own brightness limiter**, set by `mau5offline.py config` to
-   `budget + standby` mA at 19 mA per LED — on the *bus*, which is the one
-   0.15 enforces; the global `hw.led.maxpwr` is accepted and ignored.
+2. **WLED's own brightness limiter**, set by `mau5offline.py config` on the
+   *bus*, which is the one 0.15 enforces (the global `hw.led.maxpwr` is
+   accepted and ignored). It gets what the helmet can **sustain**, not the
+   per-frame budget. That is 11.0 W less 7.45 W of standby, or 296 mA of LED
+   current, plus standby and WLED's 100 mA board reserve: **1016 mA**, at 19 mA
+   per LED. WLED's limiter has no memory. It cannot let a chorus through and
+   then ration the next ten minutes the way the bucket does, so whatever it
+   allows, it allows indefinitely. It used to be set to `budget + standby`
+   (1621 mA), which let standby, the boot preset and every hand-back sit at
+   three times the sustained current for as long as the helmet was on.
+   A controller set before this change shows up as not ready in `check` and
+   as a failure in `mau5doctor` until `config --apply` is run again.
 
    It does **not** cover the phone. WLED's current estimator does not count
    pixels painted into a frozen segment — `/json/info` reports a flat idle
    120 mA while the page paints a full rainbow — so the limiter it drives
-   does not clamp them either. It still covers everything the controller
-   renders itself, which is what a stray tap in WLED's own UI produces.
+   does not clamp them either. It covers everything the controller renders
+   itself: standby, boot, the hand-back, and a stray tap in WLED's own UI.
+   Whether it also clamps DDP from the laptop has not been measured. If it
+   does, laptop shows will peak lower than the guard alone would allow.
 
    What actually holds the phone is the guard above it, and this: the region
    ceilings sum to 1950 mA of LED current, against a supply the ramp test
@@ -568,7 +604,7 @@ absent rather than blocked. A track picked off the phone needs none of that
 and is the thing that works at a show; the page explains the two ways round
 it for the microphone.
 
-### The thing most likely to go wrong at a show
+### The things most likely to go wrong at a show
 
 Android does not like a WiFi network with no internet on it, and will quietly
 keep mobile data as the default route or offer to switch away from the AP
@@ -576,3 +612,8 @@ altogether. Requests to `4.3.2.1` normally still go over WiFi because that
 subnet is directly connected, but if the page will not load, that is the first
 thing to check: tell Android to stay connected, and turn off "switch to mobile
 data automatically".
+
+The other is the screen going off. Over plain http the page has no wake lock,
+only the video fallback, and a page whose screen goes dark stops driving the
+helmet while the song plays on. Set the phone's screen timeout to its longest
+before the show (see *Keep the phone's screen on* above).

@@ -69,10 +69,16 @@ def _map():
 
 def _power():
     import mau5power as P
+    # Asked of the file, not of load(): load() now answers a missing
+    # profile with a deliberately timid guard rather than None, so the
+    # old `g is None` test could never fire and a lost power.json
+    # passed here as "ok budget 300 mA" -- a dull helmet with nothing
+    # saying why.
+    if not os.path.exists(P.DEFAULT):
+        return say(BAD, "power", "no profile at data/cal/power.json -- every "
+                   "tool is on the timid fallback (ceiling 32/255, 300 mA)",
+                   "git checkout -- data/cal/power.json")
     g = P.load()
-    if g is None:
-        return say(BAD, "power", "no profile at data/cal/power.json",
-                   "the helmet overheats without one; every tool refuses to run")
     worst = g.budget_ma + g.standby_ma() + 100
     say(OK if worst < 5000 else BAD, "power",
         "budget %.0f mA + %.0f standby -> %.2f A worst case (board takes 5 A)"
@@ -98,13 +104,14 @@ def _power():
 
 
 def _colour():
-    import mau5wled, numpy as np
-    p = mau5wled.Pixels("127.0.0.1", 623)
+    import mau5map, mau5wled, numpy as np
+    n = mau5map.TOTAL_N
+    p = mau5wled.Pixels("127.0.0.1", n)
     sw = np.flatnonzero(p.perm[:, 0] == 1)
     if not len(sw):
         return say(WARN, "colour", "no correction loaded")
     say(OK, "colour", "R/G swap on %d..%d (%d LEDs)" % (sw.min(), sw.max(), len(sw)))
-    buf = np.zeros((623, 3), np.uint8); buf[sw[0]] = (200, 0, 0)
+    buf = np.zeros((n, 3), np.uint8); buf[sw[0]] = (200, 0, 0)
     got = tuple(int(v) for v in p.apply_order(buf)[sw[0]])
     say(OK if got == (0, 200, 0) else BAD, "colour",
         "red into a rim leaves as %s" % (got,))
@@ -185,19 +192,80 @@ def _network(timeout):
     say(OK, "helmet", "%s at %s, WLED %s, uptime %ds"
         % (info.get("name"), info.get("ip"), info.get("ver"),
            info.get("uptime", 0)))
+    _helmet(w, info)
+
+
+def _helmet(w, info):
+    """The controller's own settings: LED count, buses, limiter."""
+    import mau5map, mau5offline
+    ip = info.get("ip")
+    # The map has 621 and the controller is left driving 622 on
+    # purpose (mau5map.TOTAL_N).  This used to want 623 and offer
+    # `mau5wled.py --one-bus 623 --allow 0.3`, which also rewrote the
+    # bus limiter to 4274 mA -- the only clamp on WLED's own effects,
+    # at four times what the helmet can sustain.  So the fix offered
+    # here only lays out the bus, and the limiter always comes from
+    # mau5offline, which takes it from data/cal/power.json.
     n = w.count
-    say(OK if n == 623 else WARN, "helmet", "%d LEDs configured" % n,
-        None if n == 623 else
-        "python3 mau5wled.py %s --one-bus 623 --pin 16 --allow 0.3 --ma-per-led 19"
-        % info.get("ip"))
+    say(OK if mau5offline.count_agrees(n, mau5map.TOTAL_N) else WARN, "helmet",
+        "%d LEDs configured (map has %d)" % (n, mau5map.TOTAL_N),
+        None if mau5offline.count_agrees(n, mau5map.TOTAL_N) else
+        "python3 mau5wled.py %s --one-bus %d --pin 16, then "
+        "python3 mau5offline.py config --host %s --apply"
+        % (ip, mau5map.TOTAL_N, ip))
     buses = w.buses()
     say(OK if len(buses) == 1 else WARN, "helmet",
         "%d output bus%s" % (len(buses), "" if len(buses) == 1 else "es"),
         None if len(buses) == 1 else "collapse to one, or addresses go to empty pins")
-    for r in w.headroom():
-        lvl = OK if (r["fraction"] or 0) < 0.6 and r["usable_ma"] > 0 else WARN
-        say(lvl, "helmet", "limiter: %d mA at %d mA/LED -> %d%% of full white"
-            % (r["max_ma"], r["ma_per_led"], (r["fraction"] or 0) * 100))
+    _limiter(w, ip)
+
+
+def _limiter(w, ip):
+    """Is WLED's own limiter where data/cal/power.json puts it?
+
+    Compared against exactly what `mau5offline.py config` would write,
+    and never with a fix of its own: the only thing this ever suggests
+    is that command, so it cannot recommend a higher limiter than the
+    profile allows.  Above is a failure -- it is the one clamp on
+    standby, boot and the hand-back, and WLED cannot ration over time.
+    """
+    import mau5offline
+    path = os.path.join(HERE, "data", "cal", "power.json")
+    if not os.path.exists(path):
+        return say(WARN, "helmet", "limiter not checked: no power profile")
+    power = json.load(open(path))
+    ins = ((w.cfg().get("hw") or {}).get("led") or {}).get("ins") or []
+    want = mau5offline.wanted_cfg(power, buses=ins)["hw"]["led"].get("ins") or []
+    fix = "python3 mau5offline.py config --host %s --apply" % ip
+    if not ins:
+        return say(WARN, "helmet", "no output buses reported, so the limiter "
+                   "could not be checked", fix)
+    for r, b, wb in zip(w.headroom(), ins, want):
+        cap, per = int(b.get("maxpwr") or 0), int(b.get("ledma") or 0)
+        if per == 255:
+            per = 12        # WLED's "WS2815 mode": it assumes 12 mA a LED
+        what = ("limiter: %d mA at %d mA/LED -> %d%% of full white (profile "
+                "wants %d mA at %d)" % (r["max_ma"], r["ma_per_led"],
+                                         (r["fraction"] or 0) * 100,
+                                         wb["maxpwr"], wb["ledma"]))
+        # WLED skips the limiter entirely below its board reserve or at
+        # 0 mA per LED -- that reads as a number and limits nothing.
+        if cap < w.MA_FOR_ESP // max(1, len(ins)) or per <= 0:
+            say(BAD, "helmet", what + " -- the limiter is OFF", fix)
+        elif cap > wb["maxpwr"]:
+            say(BAD, "helmet", what + " -- above what the helmet can sustain",
+                fix)
+        elif per < wb["ledma"]:
+            # A smaller per-LED figure makes WLED underestimate the
+            # current, which lets more through than the cap says.
+            say(BAD, "helmet", what + " -- per-LED current set too low", fix)
+        elif cap < wb["maxpwr"] or per != wb["ledma"]:
+            # Safe, so no command: whether to loosen it is a decision,
+            # not a fix.
+            say(WARN, "helmet", what + " -- tighter than the profile; WLED's "
+                "own effects will be dimmer than intended")
+        else:
+            say(OK, "helmet", what)
 
 
 def main():
