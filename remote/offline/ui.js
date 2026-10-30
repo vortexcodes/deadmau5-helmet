@@ -42,11 +42,14 @@ const link = new M.Link({
   count: helmet.n, strips: D.strips, standby: D.standby || null,
   origin: Q.get('api') || '', token: Q.get('t') || '',
 });
+// For a console, or a bench driving the page from outside: what the
+// link has sent, skipped, and had refused.
+globalThis.MAU5_LINK = link;
 
 const $ = (id) => document.getElementById(id);
 const state = {
   preset: null, inst: null, params: {}, running: false,
-  t0: 0, bri: 255, fps: 0, cycle: 0, lastCycle: 0, interval: 40,
+  t0: 0, bri: 255, fps: 0, cycle: 0, lastCycle: 0,
   music: null, show: null, showT0: null, drive: null, follow: false,
   handover: true,
 };
@@ -106,28 +109,40 @@ function draw() {
 // Not requestAnimationFrame.  rAF is a drawing clock: the browser
 // throttles it when the page is not composited -- a backgrounded tab
 // gets 1 Hz, and some embedded views give about 5 Hz even in front --
-// and what is being paced here is a network send, not a repaint.  A
-// timer whose interval moves with what the controller will actually
-// take is both honest about the bottleneck and immune to that.
+// and what is being paced here is a network send, not a repaint.
 //
-// The interval is found rather than declared, because the limit is an
-// ESP32 parsing JSON and it depends on the preset: a frame of `solid`
-// is 88 characters and a frame of `fire` is nearly four thousand.
-// Backing off on refusal and creeping back up on success finds the
-// edge for whatever is playing, in a second or two, with no number
-// anybody has to guess.
-// alignbar and stripid exist to find a misplaced LED, and countdown
-// counts down; none of them is something to walk into at a party.
+// The pace is the controller's.  A frame is drawn only once it has
+// finished the last one (link.busy), which it says by answering the
+// player's ping, so a frame always shows the moment it was drawn for
+// rather than queueing behind others -- and never more often than 30
+// times a second.  A frame of `solid` is a few dozen characters and a
+// frame of `fire` several kilobytes, and this finds the rate for each
+// without anybody having to guess it.
 const NOT_IN_CYCLE = { alignbar: 1, stripid: 1, countdown: 1 };
 const CYCLE_THROUGH = Object.keys(D.presets).filter(n => !NOT_IN_CYCLE[n]);
 
 const FLOOR_MS = 1000 / 30;     // never ask for more than 30 fps
-const ROOF_MS = 250;            // never give up entirely
-let frames = 0, lastReport = 0, lastDraw = 0, timer = null;
+let frames = 0, lastReport = 0, lastDraw = 0, lastFrame = 0, timer = null;
+let parked = false;             // waiting on the controller, not on a timer
+link.onready = () => {
+  if (state.running && parked) { parked = false; clearTimeout(timer); tick(); }
+};
 
 function tick() {
   if (!state.running) return;
   const now = performance.now();
+  if (link.busy(now)) {
+    // woken by the pong; the timer only covers one that never comes
+    parked = true;
+    timer = setTimeout(tick, 50);
+    return;
+  }
+  parked = false;
+  if (now - lastFrame < FLOOR_MS) {
+    timer = setTimeout(tick, FLOOR_MS - (now - lastFrame));
+    return;
+  }
+  lastFrame = now;
   const t = (now - state.t0) / 1000;
 
   if (state.cycle && t - state.lastCycle > state.cycle) {
@@ -160,9 +175,8 @@ function tick() {
   const rep = guard.apply(frame, frame, now / 1000, gain);
   const sent = link.send(frame);
 
-  if (sent < 0) state.interval = Math.min(ROOF_MS, state.interval * 1.15);
-  else state.interval = Math.max(FLOOR_MS, state.interval * 0.97);
-  if (sent > 0) frames++;
+  // 0 is a frame the helmet was already showing: delivered, for free
+  if (sent >= 0) frames++;
 
   // The preview is for the person holding the phone, not for the
   // helmet, so it does not need the frame rate the helmet gets.
@@ -175,12 +189,12 @@ function tick() {
     $('ma').textContent = rep.total_ma.toFixed(0);
     $('w').textContent = rep.watts.toFixed(1);
     $('therm').textContent = rep.thermal ? rep.thermal.full_pct.toFixed(0) + '%' : '-';
-    $('drop').textContent = link.failed;
+    $('drop').textContent = link.failed + link.refused;
     $('bar').style.width = Math.min(100, rep.total_ma / 16.0) + '%';
   }
 
-  const spent = performance.now() - now;
-  timer = setTimeout(tick, Math.max(2, state.interval - spent));
+  // measured from when this frame started, so drawing it is not added on
+  timer = setTimeout(tick, Math.max(0, FLOOR_MS - (performance.now() - now)));
 }
 
 // ----------------------------------------------------------------------
@@ -297,14 +311,17 @@ async function connect() {
                 hi.count + ' LEDs', hi.ws ? 'websocket' : 'http'];
   say(bits.join(' · '), 'good');
   const warn = [];
-  if (hi.count !== helmet.n)
-    warn.push('controller says ' + hi.count + ' LEDs, the map has ' + helmet.n);
-  if (!hi.covers)
-    warn.push('segment 0 covers ' + hi.segStart + '..' + hi.segStop +
-              ', not the whole chain');
+  // More LEDs on the controller than in the map is a dark one at the
+  // end (the helmet has 621 and WLED still drives 622).  Fewer is not:
+  // the end of the map would never light.
+  if (hi.count < helmet.n)
+    warn.push('controller drives ' + hi.count + ' LEDs, the map has ' + helmet.n);
   if (!hi.maxpwr)
     warn.push('no brightness limiter set on the controller -- ' +
               'run mau5offline.py config --apply');
+  if (D.standby && state.handover && !link.presets.has(String(D.standby)))
+    warn.push('no standby preset ' + D.standby + ' on the controller, so ' +
+              'stopping switches the helmet off -- mau5offline.py standby --apply');
   $('warn').textContent = warn.join('. ');
   $('warn').style.display = warn.length ? 'block' : 'none';
   return true;
@@ -339,15 +356,15 @@ async function start() {
   if (!frozen) {
     const w = $('warn');
     w.textContent = (w.textContent ? w.textContent + '. ' : '') +
-      'this build did not freeze the segment, so its own effect will ' +
-      'paint over the animation every third of a second';
+      'the controller did not take the frozen segments the player asked ' +
+      'for, so frames may land in the wrong place or be painted over';
     w.style.display = 'block';
   }
   state.running = true;
   holdScreen();
   state.t0 = performance.now();
   state.lastCycle = 0;
-  state.interval = 40;
+  lastFrame = 0;
   lastReport = performance.now();
   $('go').textContent = 'stop';
   $('go').classList.add('stop');

@@ -1,7 +1,7 @@
 # mau5head
 
-Software for my deadmau5 helmet: 622 WS2815 LEDs on one chain into a
-WLED controller -- 398 in the slots of a printed PETG shell and 224 in
+Software for my deadmau5 helmet: 621 addressable pixels on one chain into a
+WLED controller -- 398 in the slots of a printed PETG shell and 223 in
 the two ears -- driven from a phone with no laptop and no network.
 
 The write-up, with a film of how the LEDs were located, is on
@@ -77,8 +77,8 @@ converges to 398 shell LEDs in 398 distinct slots with one empty, and
 each camera on its own reaches the same answer.
 
 ```bash
-python3 mau5locate.py --from 0 --to 622                     # one view
-python3 mau5locate.py --from 0 --to 622 --out data/cal/led_positions_pose4.csv
+python3 mau5locate.py --from 0 --to 620                     # one view
+python3 mau5locate.py --from 0 --to 620 --out data/cal/led_positions_pose4.csv
 python3 mau5slots.py                                         # the map
 ```
 
@@ -346,6 +346,13 @@ path; it is blind only to pixels painted into a frozen segment, which
 is the player's route, not this one. The page has a **keep glowing**
 switch if you want the old behaviour back.
 
+The page only hands back to a preset the controller actually has. WLED
+ignores a request for a missing one, and the helmet then stayed lit in
+whatever its segment last held: on 2026-10-29 the controller had no
+presets saved at all, and every stop left it solid orange at full
+brightness. With no standby preset the page now switches off, and says
+so on screen.
+
 ## Offline mode: the helmet with no network and no laptop
 
 At a show there is no house WiFi worth trusting and no reason to be carrying
@@ -416,35 +423,45 @@ tested.
 ### The wire, as measured
 
 WLED's individual-LED syntax, `{"seg":{"i":[…]}}`, with runs of one colour
-collapsed to a range. **One message per frame, always the whole helmet.**
+collapsed to a range and black left out. **The chain is cut into ten frozen
+segments, and a frame is as many WebSocket messages as its changed segments
+need, each padded to exactly one TCP segment, then a `p` — and nothing more
+until the controller answers `pong`.**
 
-That shape is forced, and it was arrived at the hard way: the first version
-sent deltas, split frames across messages and paced itself on
-acknowledgements, and every one of those was wrong about this firmware
-without once failing visibly. `mau5peek.py` is what found it, by reading the
-strip back instead of trusting the send. On WLED 0.15.4:
+Every part of that is there because the simpler version was measured failing
+on WLED 0.15.4, most of them without failing visibly. `mau5peek.py` found the
+first few by reading the strip back instead of trusting the send:
 
-* **An `i` write blanks the rest of the segment.** Write LEDs 0–99 and then
-  100–199 and only the second hundred is lit. A delta is therefore not an
-  optimisation, it is a frame with the rest of the helmet switched off.
-* **A WebSocket message that does not fit one TCP segment is dropped in
-  silence.** 1428 bytes lands, 1448 does not, and the MSS is 1436. The send
-  succeeds and the pixels never change.
-* **An HTTP POST has no such limit.** A whole 622-LED frame goes in one 6.2 kB
-  request and arrives exactly — at the cost of a round trip.
-* **WLED does not echo an `i` write.** 665 pixel messages drew about six bytes
-  each back, so a credit window built on those replies stalls at two
-  outstanding messages and pins the player at 4 fps.
+* **An `i` write blanks the rest of its segment — and only its segment.**
+  Write LEDs 0–99 and then 100–199 into one segment and only the second
+  hundred is lit; write segment 0 and segment 1 keeps what it had. So a
+  whole-strip delta is a frame with the rest of the helmet switched off, but a
+  segment that has not changed can simply not be sent.
+* **A WebSocket message that does not arrive in one TCP packet is refused**
+  (`{"error":9}`). 1428 bytes lands, 1448 never does; the MSS is 1436. Worse,
+  back-to-back messages get split too: the ESP32 opens its window only after
+  parsing, the backlog is repacked into full segments, and a fifth of all
+  messages straddled a boundary. Spacing them out did not help. **Padding
+  every message to exactly 1428 bytes did — 0 refused in 740**, because a
+  repacked stream can then only break between messages.
+* **A socket hides a controller that has fallen behind.** It digests about
+  120 kB of pixel JSON a second; the operating system buffers a hundred
+  kilobytes more before `bufferedAmount` moves. Sending whole frames at 30 fps
+  left the helmet **3.4 seconds behind** the music without dropping a frame.
+  WLED does not answer an `i` write, but it does answer `p` with `pong`, and it
+  handles messages in order — so the pong means the frame is on the strip.
+* **An HTTP POST has no size limit** and is self-pacing, but costs a request,
+  headers and the whole state JSON back, every frame: 7–10 frames a second,
+  and two requests the controller never answered once froze the player for
+  good. It is the fallback now, with a timeout.
 
-So the transport is chosen by how big the frame came out. Fifteen of the 37
-presets encode under 1400 bytes and go by WebSocket, where frames apply
-correctly at **60 fps**; the rest go by POST at about **10**. Quantising
-colour to force more of them under the limit was measured too — it buys four
-presets for a visible cost, and was not taken.
-
-Because every frame is whole, a dropped message costs one frame and the next
-one is right again. There is no resync, and no belief about the controller's
-state left to go stale.
+Measured on the helmet, preset by preset: before, a median of 6 fps, 25 of
+35 presets under 20, and a frozen helmet after ninety seconds of switching
+between them. Now a median of **24.5 fps**, the heaviest three at 17–20, every
+frame on the strip **17–62 ms** after it was drawn, and no stall. The rest of
+the gap is the JSON itself — the controller takes 190 messages a second it can
+discard but only 80 it has to parse. WLED 16 accepts binary DDP over the same
+socket, which would remove the parsing altogether.
 
 Sending `i` puts the segment in WLED's freeze state, which is what stops the
 running effect painting over the frames — and means **the last frame stays

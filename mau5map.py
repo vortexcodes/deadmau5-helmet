@@ -34,10 +34,12 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "data", "cal", "pixel_map.csv")
 
-# 622, not 623.  Index 622 stays dark at full brightness and so does
-# everything past it, measured by probing the tail with the bus widened
-# to 640 -- the walk's last tap went one LED beyond the end of the chain.
-TOTAL_N = 622
+# 621.  It was 622 -- index 622 stayed dark at full brightness and so
+# did everything past it, measured by probing the tail with the bus
+# widened to 640 -- until 2026-10-29, when one segment was cut off the
+# start of the near ear's rim and 621 went dark too (mau5slots.CUT).
+# The controller still drives 622; the last one has nothing behind it.
+TOTAL_N = 621
 # 398, not the CAD's 399: strip B04 is one LED short of its slots.  The
 # first walk said so, and both cameras agree (mau5slots.py).
 SHELL_N = 398

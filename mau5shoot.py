@@ -44,7 +44,7 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__)
     ap.add_argument("--host", default=None)
-    ap.add_argument("--count", type=int, default=622)
+    ap.add_argument("--count", type=int, default=621)
     ap.add_argument("--eye-port", type=int, default=8752)
     ap.add_argument("--out", default=os.path.join(HERE, "data", "cal", "shots"))
     ap.add_argument("--session", default=os.path.join(HERE, "data", "cal",

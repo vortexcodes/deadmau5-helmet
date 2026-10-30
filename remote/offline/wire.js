@@ -7,8 +7,9 @@
 // the code.
 //
 //   It is text.  A frame is a list of "RRGGBB" strings, so the wire
-//   cost depends on how much of the frame changed; only what changed
-//   is sent, and runs of one colour collapse to a range.
+//   cost depends on what the frame looks like: runs of one colour
+//   collapse to a range, black is not sent at all, and a stretch of
+//   the chain that has not changed is not sent either.
 //
 //   It latches.  Sending `i` puts the segment in WLED's freeze state,
 //   where the running effect stops overwriting the pixels -- which is
@@ -84,17 +85,82 @@ function makePerm(count, strips) {
 //   and the controller manages about 7 a second on one connection,
 //   10 with three.
 //
-// So: one message per frame, always whole, and the transport is
-// chosen by how big the frame turned out.  Fifteen of the 37 presets
-// encode small enough for the WebSocket, where frames apply
-// correctly at 60 fps; the rest go by POST at about ten.  Quantising
-// colour to force the rest under the limit was measured too -- it
-// buys four presets at a visible cost, and was not taken.
+// So a frame cannot be one message.  Three more measurements on this
+// controller decide what it is instead.
+//
+//   The blanking is per *segment*, not per strip.  With the chain cut
+//   into segments, a write to segment 0 left segment 1 exactly as it
+//   was, read back through the live preview.  So the chain is cut into
+//   ten segments of about 62 LEDs -- short enough that two of them,
+//   every LED a different colour, still fit one message -- and a frame
+//   is as many messages as its segments need, several segments to a
+//   message where they fit.  A segment that has not changed is not
+//   sent at all: it keeps what it has, the one kind of delta this
+//   firmware allows.
+//
+//   A message split across two TCP packets is refused ({"error":9}),
+//   and back-to-back messages do get split: the ESP32 only opens its
+//   window once it has parsed what it has, the backlog is repacked
+//   into full segments, and a fifth of all messages straddled a
+//   boundary.  Spacing them out did not help.  Padding every message
+//   to exactly one segment did -- 1428 bytes and the 8-byte frame
+//   header are the 1436-byte MSS, so however the stream is repacked
+//   the boundaries fall between messages.  0 refused in 740.
+//
+//   And a socket hides a controller that has fallen behind.  It
+//   digests about 120 kB of pixel JSON a second; the operating system
+//   takes a hundred kilobytes more before bufferedAmount moves, so a
+//   player sending 30 fps of whole frames had the helmet 3.4 seconds
+//   behind the music without dropping a frame.  What paces it instead
+//   is the firmware's own heartbeat: 'p' after the last message of a
+//   frame, and nothing more until 'pong'.  Messages are handled in
+//   order, so the pong means the frame is on the strip -- and sent
+//   last, the short 'p' cannot break the padding.
+//
+// Measured on the helmet, against 8-13 fps by POST for 20 of the 35
+// presets: frames that change the whole helmet run at about 15 fps,
+// each on the strip about 60 ms after it was drawn, and frames that
+// change two segments of five at 28, with nothing queueing behind
+// them.  What is left is the JSON itself -- the controller takes 190
+// messages a second it can discard but only 80 it must parse -- and
+// binary frames would close that: WLED 16 takes DDP over this socket.
 const RUN_MIN = 3;            // below this a range costs more than it saves
 
-// Measured boundary is 1428; the margin is for the index digits at
-// the end of a long chain and for a firmware with a smaller MSS.
-const WS_LIMIT = 1400;
+// Two worst-case segments must fit one padded message: nine
+// characters an LED (six hex, two quotes, a comma) and about thirty
+// for each segment's wrapper.  64 is 1180 at most for the pair.
+const SEG_MAX = 64;
+
+// Every websocket message is padded to this, so that with its frame
+// header it is exactly one 1436-byte TCP segment.  It is also the
+// largest message measured to land: 1428 bytes arrives, 1448 never does.
+const PAD = 1428;
+
+// How often every segment is sent whether it changed or not.
+const KEYFRAME_MS = 1000;
+
+// A frame whose pong has not come back by now is given up on: the
+// next frame goes whole, and the player carries on.  About three times
+// the slowest frame measured, because a lost pong freezes the helmet
+// for exactly this long -- one in a two-minute sweep, at 1000 ms, was
+// a visible stall.
+const PONG_TIMEOUT_MS = 300;
+
+// A POST that has not come back by now is not coming back.  Without a
+// limit, two requests the controller never answered pinned the player
+// at its in-flight ceiling and the helmet froze for good -- seen after
+// about ninety seconds of a preset sweep, when the controller had also
+// closed the websocket.
+const POST_TIMEOUT_MS = 2500;
+const REOPEN_MS = 3000;
+
+// The chain cut into equal segments of at most SEG_MAX.
+function layout(count, segMax) {
+  const n = Math.max(1, Math.ceil(count / (segMax || SEG_MAX)));
+  const out = [];
+  for (let s = 0; s < n; s++) out.push([Math.round(s * count / n), Math.round((s + 1) * count / n)]);
+  return out;
+}
 
 function hexAt(buf, i) {
   return HEX[buf[i * 3]] + HEX[buf[i * 3 + 1]] + HEX[buf[i * 3 + 2]];
@@ -102,13 +168,8 @@ function hexAt(buf, i) {
 
 // Black is never sent.  The write blanks the segment first, so an
 // LED nobody mentions is already off -- the firmware behaviour that
-// made deltas impossible pays for itself here.  Worth 0 to 49% of a
-// frame depending on how much of the helmet is dark, and it moves
-// alignbar, eyes, pinwheel and text onto the websocket, where they
-// run at 60 fps instead of ten.
-// Black need not be sent: the write blanks the segment, so an LED
-// nobody mentions is already off.  Worth up to half a frame, and it
-// moves four more presets onto the websocket.
+// made whole-strip deltas impossible pays for itself here.  Worth 0
+// to 49% of a frame depending on how much of the helmet is dark.
 //
 // Verified rather than assumed: four real show frames, from 24 to
 // 565 entries, read back off the strip at 622 of 622 exact both
@@ -158,8 +219,36 @@ function flatten(entries) {
   return arr;
 }
 
-function bodyFor(entries) {
-  return JSON.stringify({ seg: { id: 0, i: flatten(entries) } });
+// One segment's write: `{"id":s,"i":[...]}`.  A segment with nothing
+// lit still has to be written, or it would keep its last frame, and a
+// range of black says so in one entry.
+function fragFor(id, entries, len) {
+  return JSON.stringify({ id: id, i: entries.length ? flatten(entries) : [0, len, '000000'] });
+}
+
+// Segment writes into websocket messages: as many to a message as fit,
+// every message padded to exactly `pad` bytes.
+function pack(frags, pad) {
+  const out = [];
+  let cur = [];
+  const close = () => {
+    const m = '{"seg":[' + cur.join(',') + ']}';
+    out.push(m + ' '.repeat(Math.max(0, pad - m.length)));
+    cur = [];
+  };
+  let size = 0;
+  for (const f of frags) {
+    // the wrapper is 10 characters, and a comma between fragments
+    if (cur.length && 10 + size + cur.length + f.length > pad) { close(); size = 0; }
+    cur.push(f);
+    size += f.length;
+  }
+  if (cur.length) close();
+  return out;
+}
+
+function bodyFor(entries, id) {
+  return JSON.stringify({ seg: { id: id | 0, i: flatten(entries) } });
 }
 
 // ----------------------------------------------------------------------
@@ -178,51 +267,47 @@ class Link {
     this.headers = this.token ? { 'X-Mau5-Token': this.token } : {};
     this.count = opts.count | 0;
     this.perm = makePerm(this.count, opts.strips);
-    // WLED parses a message into one fixed buffer and ignores
-    // anything that will not fit.  24 kB is the ESP32 figure and 10 kB
-    // the ESP8266 one; 3 kB leaves room for both and for whatever a
-    // future build decides, at the cost of an extra message on the
-    // handful of frames that are bigger than that.
-    this.wsLimit = opts.wsLimit || WS_LIMIT;
+    this.pad = opts.pad || PAD;
+    this.segs = layout(this.count, opts.segMax || SEG_MAX);
+    // The last write sent for each segment, to skip the ones that
+    // have not changed.  null means "unknown, send it".
+    this.last = this.segs.map(() => null);
+    this._keyAt = 0;
     this.ws = null;
     this.inflight = 0;
     // Measured on the helmet: 7.3 whole frames a second over one
     // connection, 9.7 over two, 10.3 over three and worse after that.
-    // Two is most of the gain, and since every frame is whole the
-    // worst a reordering can do is leave one 100 ms stale.
+    // Two is most of the gain, and since every POST is a whole frame
+    // the worst a reordering can do is leave one 100 ms stale.
     this.maxInflight = opts.maxInflight || 2;
     this.path = '-';
     // Which WLED preset to hand back to when the page lets go.  0 or
     // null means switch off instead.
     this.standby = opts.standby === undefined ? null : opts.standby;
-    // A WebSocket gives no backpressure worth the name: bufferedAmount
-    // only rises once the far end's TCP window closes, which is long
-    // after an ESP32 has stopped keeping up.  Where a build answers
-    // every message, those arrivals are an acknowledgement in
-    // everything but name and counting them paces the sender
-    // properly.
-    //
-    // Whether this build is one of those is decided by counting, not
-    // by seeing one arrive.  WLED answers a plain state post with the
-    // whole new state, which is where the idea came from, and answers
-    // an `i` write with nothing: measured on the helmet's own
-    // controller, 665 pixel messages drew 4 kB back, about six bytes
-    // each.  Treating that trickle as a credit window left two
-    // messages permanently outstanding and pinned the player at 4 fps
-    // against a controller that swallows 165 messages a second.  So
-    // the ratio has to hold up before the window is believed.
-    this.pending = 0;
-    this.acks = 0;
-    this.sent = 0; this.bytes = 0; this.failed = 0;
+    // How many LEDs the controller drives, which can be more than the
+    // map has: one with nothing behind it is harmless.  Learnt in hello().
+    this.ledCount = this.count;
+    // The presets the controller has, learnt in hello().  Asking WLED to
+    // load one that is not there does nothing at all.
+    this.presets = new Set();
+    this.streaming = false;
+    this._reopenAt = 0;
+    this._opening = false;
+    // When the last frame's 'p' went, or 0 when its pong is back.
+    this.awaiting = 0;
+    this.sent = 0; this.bytes = 0; this.failed = 0; this.refused = 0;
+    this.lost = 0; this.messages = 0;
+    // How long a frame takes to reach the strip: send to pong, or a
+    // POST's round trip.
     this.rtt = 0;
     this.frozen = false;
-    // No resync timer any more, and nothing to resync.  Every frame
-    // carries the whole helmet, so a message the firmware drops costs
-    // one frame and the next one is correct again -- there is no
-    // belief about the controller's state left to go stale.
     this.deadmanMins = opts.deadmanMins === undefined ? 1 : opts.deadmanMins;
     this._lastDeadman = 0;
     this.onstatus = opts.onstatus || function () {};
+    // Called when the controller has finished a frame, so a player
+    // waiting on busy() can draw the next one at once, not at its next
+    // timer tick.
+    this.onready = opts.onready || function () {};
     this._opened = 0;
     this._tmp = new Uint8Array(this.count * 3);
   }
@@ -259,6 +344,13 @@ class Link {
     return r.text();
   }
 
+  // Forget what the controller is showing, so the next frame is sent
+  // whole.  After a reconnect, a refusal, or a new layout.
+  dirty() {
+    this.last.fill(null);
+    this._keyAt = 0;
+  }
+
   // Open the WebSocket if the firmware has one.  It is worth the
   // trouble: an HTTP POST costs a request line, headers and a reply
   // the player throws away, every frame, and the ESP32 pays for all
@@ -279,47 +371,88 @@ class Link {
         clearTimeout(giveUp);
         this.ws = ws;
         this._opened = performance.now();
-        ws.onmessage = () => {
-          this.acks++;
-          if (this.pending > 0) this.pending--;
+        this.dirty();
+        // A pixel write draws no answer.  What does arrive is the
+        // state, now and then, and an error object when the firmware
+        // could not take a message -- after which nobody knows what
+        // that segment shows, so everything goes again.
+        ws.onmessage = (e) => {
+          this.messages++;
+          if (e.data === 'pong') {
+            if (this.awaiting) {
+              this.rtt = this.rtt * 0.8 + (performance.now() - this.awaiting) * 0.2;
+              this.awaiting = 0;
+              this.onready();
+            }
+          } else if (typeof e.data === 'string' && e.data.length < 64
+                     && e.data.indexOf('"error"') >= 0) {
+            this.refused++;
+            this.dirty();
+          }
         };
-        ws.onclose = () => { if (this.ws === ws) this.ws = null; };
-        ws.onerror = () => { if (this.ws === ws) this.ws = null; };
+        const gone = () => {
+          if (this.ws === ws) { this.ws = null; this.awaiting = 0; this.dirty(); }
+        };
+        ws.onclose = gone;
+        ws.onerror = gone;
         resolve(true);
       };
       ws.onerror = () => { clearTimeout(giveUp); resolve(false); };
     });
   }
 
+  // The controller closes the socket now and then -- seen during a
+  // long preset sweep -- and a player that never reopens it is a
+  // player on HTTP at a third of the frame rate until it is reloaded.
+  reopen(now) {
+    if (!this.streaming || this._opening || now < this._reopenAt) return;
+    this._reopenAt = now + REOPEN_MS;
+    this._opening = true;
+    this.openSocket(1500).then(() => { this._opening = false; },
+                               () => { this._opening = false; });
+  }
+
   async hello() {
     const info = await this.getJSON('/json/info');
     const state = await this.getJSON('/json/state');
     const leds = (info.leds || {});
-    const seg = (state.seg || []).find(s => s.id === 0) || (state.seg || [])[0];
-    const covered = seg ? (seg.stop - seg.start) : 0;
+    this.ledCount = Math.max(leds.count | 0, this.count);
+    const segs = (state.seg || []).slice().sort((x, y) => x.start - y.start);
+    // Do the segments between them reach every LED?  Whatever layout a
+    // preset, or the last session, left behind, begin() replaces it --
+    // this only reports what is there now.
+    let reach = 0;
+    for (const s of segs) if (s.start <= reach) reach = Math.max(reach, s.stop);
+    try {
+      const ps = await this.getJSON('/presets.json');
+      this.presets = new Set(Object.keys(ps || {}).filter(k => k !== '0'
+                                                          && Object.keys(ps[k] || {}).length));
+    } catch (e) { this.presets = new Set(); }
     return {
       name: info.name, ver: info.ver, arch: info.arch,
       count: leds.count | 0, maxpwr: leds.maxpwr,
-      segStart: seg ? seg.start : null, segStop: seg ? seg.stop : null,
-      covers: covered >= (leds.count | 0) && (seg ? seg.start === 0 : false),
+      segments: segs.length, reach: reach,
+      covers: reach >= Math.min(leds.count | 0, this.count),
+      presets: Array.from(this.presets),
       ws: await this.openSocket(),
     };
   }
 
-  // Take the segment: solid effect, no transition, frozen so nothing
-  // the controller runs on its own overwrites what we send.
-  // Is this build answering often enough for its answers to be a
-  // credit window?  Below half a reply per message it is not, and
-  // `pending` is cleared so a trickle of late replies cannot leave
-  // the sender permanently blocked.
-  paceByAcks() {
-    if (this.sent < 12) return false;
-    if (this.acks > this.sent * 0.5) return true;
-    this.pending = 0;
-    return false;
+  // Take the chain: one frozen segment per stretch of SEG_MAX, solid
+  // effect, no transition, no grouping or mirroring left over from a
+  // preset -- any of those would put every pixel somewhere else.
+  segLayout(extraIds) {
+    const seg = this.segs.map(([a, b], id) => ({
+      id: id, start: a, stop: b, grp: 1, spc: 0, of: 0, rev: false, mi: false,
+      fx: 0, sx: 0, ix: 0, frz: true, on: true, bri: 255,
+    }));
+    for (const id of extraIds || []) if (id >= this.segs.length) seg.push({ id: id, stop: 0 });
+    return seg;
   }
 
   async begin(bri) {
+    let ids = [];
+    try { ids = ((await this.getJSON('/json/state')).seg || []).map(s => s.id); } catch (e) {}
     await this.postJSON({
       // live:false releases a realtime lock.  Posting live:true to
       // WLED locks realtime for 65 s, and the laptop's streamer does
@@ -330,21 +463,24 @@ class Link {
       on: true, live: false,
       bri: bri === undefined ? 255 : bri,
       transition: 0, tt: 0,
-      seg: [{ id: 0, fx: 0, sx: 0, ix: 0, frz: true }],
+      seg: this.segLayout(ids),
     });
     await this.armDeadman(true);
     // Freeze is what stops the running effect painting over the
     // frames, and it arrived in WLED 0.13.  An older build takes the
     // pixels and then overwrites them a third of a second later,
-    // which looks like a flicker nobody can explain, so the state is
-    // read back and the answer reported rather than assumed.
+    // which looks like a flicker nobody can explain -- and a build
+    // that refused the layout would show each frame in the wrong
+    // place.  So the state is read back and both are checked.
     try {
-      const st = await this.getJSON('/json/state');
-      const seg = (st.seg || []).find(s => s.id === 0) || (st.seg || [])[0];
-      this.frozen = !!(seg && seg.frz);
+      const got = (await this.getJSON('/json/state')).seg || [];
+      this.frozen = this.segs.every(([a, b], id) =>
+        got.some(s => s.id === id && s.start === a && s.stop === b && s.frz));
     } catch (e) {
       this.frozen = false;
     }
+    this.streaming = true;
+    this.dirty();
     return this.frozen;
   }
 
@@ -366,12 +502,20 @@ class Link {
     } catch (e) { /* older firmware: the pagehide handler still covers it */ }
   }
 
-  // Hand the segment back and leave the helmet dark.  Called on stop,
-  // on pagehide and on the way out of an error -- cheap, idempotent,
-  // and the difference between "it went off" and "it stayed on all
-  // night at a show".
+  // Hand the chain back as one unfrozen segment and leave the helmet
+  // dark.  Called on stop, on pagehide and on the way out of an error
+  // -- cheap, idempotent, and the difference between "it went off"
+  // and "it stayed on all night at a show".
+  // Is there a preset to hand back to?
+  canHandBack() {
+    return !!this.standby && this.presets.has(String(this.standby));
+  }
+
   async release() {
     this.frozen = false;
+    this.streaming = false;
+    const seg = [{ id: 0, start: 0, stop: this.ledCount, frz: false }]
+      .concat(this.segs.slice(1).map((_, k) => ({ id: k + 1, stop: 0 })));
     // Two ways to let go, and the default is not "off".
     //
     // Off was the original, and it is what made people think the
@@ -379,11 +523,17 @@ class Link {
     // thing goes dark.  Handing back to one of WLED's own presets
     // instead leaves it lit and animating with nothing driving it --
     // no phone, no laptop, no network -- and the brightness limiter
-    // does cover that path, unlike the player's.
+    // does cover that path, unlike the player's.  The preset brings
+    // its own segments if it saved any; if not, the one put back here.
+    //
+    // Only a preset that exists, though.  Loading a missing one is a
+    // no-op, and the helmet then stayed on in whatever its segment last
+    // held -- found on this controller, with no presets saved at all,
+    // as solid orange at full brightness for as long as nobody noticed.
     const body = JSON.stringify(
-      this.standby
-        ? { ps: this.standby, nl: { on: false }, seg: [{ id: 0, frz: false }] }
-        : { on: false, nl: { on: false }, seg: [{ id: 0, frz: false }] });
+      this.canHandBack()
+        ? { ps: this.standby, nl: { on: false }, seg: seg }
+        : { on: false, nl: { on: false }, seg: seg });
     // sendBeacon survives the page going away, which fetch does not.
     if (navigator.sendBeacon) {
       try {
@@ -402,7 +552,9 @@ class Link {
     return true;
   }
 
-  send(frame) {
+  // The writes one frame needs: [segment, fragment] for every segment
+  // that differs from what was last sent, or every segment if `whole`.
+  frags(frame, whole) {
     const n = this.count, perm = this.perm, tmp = this._tmp;
     for (let i = 0; i < n; i++) {
       const b = i * 3;
@@ -410,41 +562,73 @@ class Link {
       tmp[b + 1] = frame[b + perm[b + 1]];
       tmp[b + 2] = frame[b + perm[b + 2]];
     }
-    const items = encode(tmp, n);
-    // A frame with nothing lit encodes to nothing, and an empty `i`
-    // is a no-op that would leave the last frame burning.  One range
-    // says "all of it, off".
-    const body = items.length ? bodyFor(items)
-      : JSON.stringify({ seg: { id: 0, i: [0, n, '000000'] } });
-    const now = performance.now();
+    const out = [];
+    for (let s = 0; s < this.segs.length; s++) {
+      const [a, b] = this.segs[s];
+      const f = fragFor(s, encode(tmp.subarray(a * 3, b * 3), b - a), b - a);
+      if (whole || f !== this.last[s]) out.push([s, f]);
+    }
+    return out;
+  }
 
-    if (this.ws && this.ws.readyState === 1 && body.length <= this.wsLimit) {
-      if (this.ws.bufferedAmount > this.wsLimit * 2) { this.failed++; return -1; }
-      // Two messages outstanding is one in the controller and one on
-      // its way; a third would only add latency nobody asked for.
-      if (this.paceByAcks() && this.pending >= 2) { this.failed++; return -1; }
-      this.ws.send(body);
-      this.pending++;
+  // Is the controller still busy with the last frame?  The player
+  // draws nothing until it is not: a frame drawn now would only be
+  // shown late.
+  busy(now) {
+    if (this.ws && this.ws.readyState === 1)
+      return this.awaiting > 0 && now - this.awaiting < PONG_TIMEOUT_MS;
+    return this.inflight >= this.maxInflight;
+  }
+
+  // Bytes sent; 0 when the helmet already shows this frame; -1 when
+  // the controller was still busy and the frame was skipped.
+  send(frame) {
+    const now = performance.now();
+    const ws = this.ws && this.ws.readyState === 1 ? this.ws : null;
+    if (!ws) this.reopen(now);
+    if (this.busy(now)) { this.failed++; return -1; }
+
+    if (ws) {
+      if (this.awaiting) {          // that pong never came: start again whole
+        this.lost++;
+        this.awaiting = 0;
+        this.dirty();
+      }
+      const key = now - this._keyAt >= KEYFRAME_MS;
+      const todo = this.frags(frame, key);
+      if (key) this._keyAt = now;
+      if (!todo.length) return 0;
+      let bytes = 0;
+      for (const m of pack(todo.map(x => x[1]), this.pad)) {
+        ws.send(m);
+        bytes += m.length;
+      }
+      for (const [s, f] of todo) this.last[s] = f;
+      ws.send('p');
+      this.awaiting = now;
       this.path = 'ws';
-      this.sent++; this.bytes += body.length;
-      this.rtt = this.rtt * 0.8 + (performance.now() - now) * 0.2;
+      this.sent++; this.bytes += bytes;
       this.armDeadman(false);
-      return body.length;
+      return bytes;
     }
 
-    // Too big for a WebSocket message, or there is no socket.  One
-    // POST, the whole frame, one at a time: a second request in
-    // flight could land out of order, and since every frame is whole
-    // that would show an older one.
+    // No socket.  One POST with every segment in it: two requests in
+    // flight can land out of order, and a delta that overtook the
+    // frame it was a delta of would leave its segment stale until it
+    // next changed.  A whole frame overtaken costs one old frame.
     if (this.inflight >= this.maxInflight) { this.failed++; return -1; }
+    const body = '{"seg":[' + this.frags(frame, true).map(x => x[1]).join(',') + ']}';
     this.inflight++;
     this.path = 'http';
+    this.dirty();                 // the socket, when it is back, starts whole
     (async () => {
+      const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = ctl ? setTimeout(() => ctl.abort(), POST_TIMEOUT_MS) : null;
       try {
         await fetch(this.url('/json/state'), {
           method: 'POST', cache: 'no-store',
           headers: this.hdrs({ 'Content-Type': 'application/json' }),
-          body: body,
+          body: body, signal: ctl ? ctl.signal : undefined,
         });
         this.sent++; this.bytes += body.length;
         this.rtt = this.rtt * 0.8 + (performance.now() - now) * 0.2;
@@ -453,14 +637,17 @@ class Link {
         this.failed++;
         this.onstatus({ error: String(e.message || e) });
       } finally {
+        if (timer) clearTimeout(timer);
         this.inflight--;
+        this.onready();
       }
     })();
     return body.length;
   }
 }
 
-const api = { Link, encode, flatten, bodyFor, makePerm, ORDERS, WS_LIMIT };
+const api = { Link, encode, flatten, bodyFor, fragFor, pack, layout, makePerm, ORDERS,
+              PAD, SEG_MAX, KEYFRAME_MS };
 root.MAU5 = Object.assign(root.MAU5 || {}, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 

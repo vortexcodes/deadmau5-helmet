@@ -1,7 +1,11 @@
-// wiretest.js -- encode frames under node so test_mau5.py can decode
-// them with the controller's own parser and compare.  Reads
-// {count, strips, frames:[base64 uint8 rgb]} and writes, for each
-// frame, the single JSON body the player would send.
+// wiretest.js -- send frames under node so test_mau5.py can decode them
+// with the controller's own parser and compare.  Reads
+// {count, strips, frames:[base64 uint8 rgb]} and writes the segment
+// layout the player asks for, then for each frame the websocket
+// messages the player actually sent -- in order, deltas and all, the
+// way one controller receives them, with each frame's pong answered
+// before the next -- and the whole-frame POST body it would send
+// instead if there were no socket.
 'use strict';
 const W = require('./wire.js');
 
@@ -10,19 +14,32 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', c => { raw += c; });
 process.stdin.on('end', () => {
   const job = JSON.parse(raw);
-  const n = job.count;
-  const link = new W.Link({ count: n, strips: job.strips || [] });
-  const out = [];
+  const link = new W.Link({ count: job.count, strips: job.strips || [], deadmanMins: 0 });
+  const sent = [];
+  link.ws = { readyState: 1, bufferedAmount: 0, send: (m) => sent.push(m) };
+  link.dirty();
+  const frames = [];
   for (const b64 of job.frames) {
     const cur = new Uint8Array(Buffer.from(b64, 'base64'));
-    const permed = new Uint8Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      const b = i * 3;
-      permed[b] = cur[b + link.perm[b]];
-      permed[b + 1] = cur[b + link.perm[b + 1]];
-      permed[b + 2] = cur[b + link.perm[b + 2]];
-    }
-    out.push(W.bodyFor(W.encode(permed, n)));
+    sent.length = 0;
+    const busyBefore = link.busy(performance.now());
+    const r = link.send(cur);
+    const busyAfter = link.busy(performance.now());
+    link.awaiting = 0;                        // the controller's pong
+    const http = '{"seg":[' + link.frags(cur, true).map(x => x[1]).join(',') + ']}';
+    frames.push({ ws: sent.slice(), ret: r, http: http, busyBefore: busyBefore, busyAfter: busyAfter });
   }
-  process.stdout.write(JSON.stringify({ bodies: out, wsLimit: W.WS_LIMIT }));
+  // Hand back only to a preset the controller has: loading a missing
+  // one is a no-op that leaves the helmet lit.
+  const hand = {};
+  link.standby = 1;
+  link.presets = new Set();
+  hand.missing = link.canHandBack();
+  link.presets = new Set(['1']);
+  hand.present = link.canHandBack();
+  link.standby = null;
+  hand.notWanted = link.canHandBack();
+  process.stdout.write(JSON.stringify({
+    layout: link.segLayout(), frames: frames, pad: W.PAD, handBack: hand,
+  }));
 });

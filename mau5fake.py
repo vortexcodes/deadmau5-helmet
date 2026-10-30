@@ -66,13 +66,44 @@ class Fake:
         self.px = np.zeros((count, 3), np.uint8)
         self.on = False
         self.bri = 128
-        self.frozen = False
+        # Segments as the firmware keeps them: an id is a position in
+        # this list, and a pixel write is relative to its segment.
+        self.segs = [{"start": 0, "stop": count, "frz": False}]
         self.nl = {"on": False, "dur": 60, "mode": 1, "tbri": 0}
         self.nl_armed_at = None
         self.stats = {"messages": 0, "pixels": 0, "dropped": 0,
                       "fragmented": 0, "refused": 0, "biggest": 0}
         self.rejects = []
         self.started = time.time()
+
+    # Segment 0's freeze, which was the whole story while the player used
+    # one segment; setting it freezes every segment.
+    @property
+    def frozen(self):
+        return bool(self.segs and self.segs[0]["frz"])
+
+    @frozen.setter
+    def frozen(self, v):
+        for g in self.segs:
+            g["frz"] = bool(v)
+
+    def _seg(self, s):
+        """The segment a message addresses, created or resized as asked.
+
+        WLED appends a segment for the next unused id, deletes one whose
+        stop is 0, and purges deleted ones only after the whole message,
+        so ids inside one message keep meaning what they meant.
+        """
+        sid = int(s.get("id", 0))
+        while len(self.segs) <= sid:
+            end = self.segs[-1]["stop"] if self.segs else 0
+            self.segs.append({"start": end, "stop": end, "frz": False})
+        g = self.segs[sid]
+        if "start" in s:
+            g["start"] = max(0, min(self.count, int(s["start"])))
+        if "stop" in s:
+            g["stop"] = max(g["start"], min(self.count, int(s["stop"])))
+        return g
 
     # -- the bit that matters --------------------------------------------
     def apply_state(self, d):
@@ -91,23 +122,27 @@ class Fake:
             if segs is None:
                 return
             for s in (segs if isinstance(segs, list) else [segs]):
+                g = self._seg(s)
+                if g["stop"] <= g["start"]:
+                    continue
                 if "frz" in s and self.can_freeze:
-                    self.frozen = bool(s["frz"])
-                    if self.frozen:
+                    g["frz"] = bool(s["frz"])
+                    if g["frz"]:
                         # WLED blanks the segment as it freezes it
-                        self.px[:] = 0
+                        self.px[g["start"]:g["stop"]] = 0
                 arr = s.get("i")
                 if arr is None:
                     continue
-                if not self.frozen and self.can_freeze:
+                if not g["frz"] and self.can_freeze:
                     # The firmware freezes on the first `i`; so does this,
                     # and it blanks at the same moment, which is why a
                     # player that assumes otherwise sees a black frame.
-                    self.frozen = True
-                    self.px[:] = 0
-                self._set_i(arr)
+                    g["frz"] = True
+                    self.px[g["start"]:g["stop"]] = 0
+                self._set_i(arr, g)
+            self.segs = [g for g in self.segs if g["stop"] > g["start"]]
 
-    def _set_i(self, arr):
+    def _set_i(self, arr, g=None):
         """Apply one `i` write the way the real firmware does.
 
         Including the part that was wrong here for a week: WLED 0.15.4
@@ -117,8 +152,16 @@ class Fake:
         class accumulated instead, a player that split a frame across
         messages, or sent deltas, passed every test here and showed
         roughly a fifth of each frame on the helmet.
+
+        Only the rest of *that segment*, though, and indices count from
+        its start: measured with five segments, a write to segment 0
+        left segment 1 as it was.  That is what the player now relies
+        on, so it is modelled exactly.
         """
-        self.px[:] = 0
+        g = g or self.segs[0]
+        px = self.px[g["start"]:g["stop"]]
+        n = len(px)
+        px[:] = 0
         i = 0
         at = 0
         while i < len(arr):
@@ -130,8 +173,8 @@ class Fake:
                     if col is None:
                         return
                     a, b = int(v), int(nxt)
-                    a = max(0, min(self.count, a)); b = max(a, min(self.count, b))
-                    self.px[a:b] = col
+                    a = max(0, min(n, a)); b = max(a, min(n, b))
+                    px[a:b] = col
                     self.stats["pixels"] += b - a
                     at = b
                     i += 3
@@ -140,8 +183,8 @@ class Fake:
                 i += 1
                 continue
             col = self._col(v)
-            if col is not None and 0 <= at < self.count:
-                self.px[at] = col
+            if col is not None and 0 <= at < n:
+                px[at] = col
                 self.stats["pixels"] += 1
             at += 1
             i += 1
@@ -195,8 +238,9 @@ class Fake:
     def state(self):
         return {"on": self.on, "bri": self.bri, "transition": 0,
                 "nl": dict(self.nl),
-                "seg": [{"id": 0, "start": 0, "stop": self.count, "len": self.count,
-                         "fx": 0, "frz": self.frozen, "on": True, "bri": 255}]}
+                "seg": [{"id": k, "start": g["start"], "stop": g["stop"],
+                         "len": g["stop"] - g["start"], "fx": 0, "frz": g["frz"],
+                         "on": True, "bri": 255} for k, g in enumerate(self.segs)]}
 
     def cfg(self):
         return {"ap": {"ssid": "mau5head-AP", "pskl": 10, "behav": 2, "chan": 1},
@@ -406,6 +450,12 @@ def make_handler(fake, geo, proxy=None):
                         continue
                     buf = b"".join(parts)
                     parts = []
+                    # WLED's heartbeat, answered before any JSON is looked
+                    # at -- and, since messages are handled in order, the
+                    # player's proof that everything before it is applied.
+                    if 0 < len(buf) < 10 and buf[:1] == b"p":
+                        sock.sendall(b"\x81\x04pong")
+                        continue
                     # The firmware drops a message that did not fit in
                     # one TCP segment, and says nothing.  Measured:
                     # 1428 bytes of payload lands, 1448 does not.

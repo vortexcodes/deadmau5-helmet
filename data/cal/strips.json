@@ -1,10 +1,10 @@
 {
- "_comment": "Physical colour order per span, relative to the WLED bus (GRB).  Re-measured 2026-10-27 with mau5hue, which asks each LED for red and then for green and compares how much red came back -- a single red frame is not enough, because the camera's white balance drifts between shots and turns the answer over.  The swapped span is 492-529, two LEDs longer than the 492-527 measured earlier; those two were the green corner on the ear outline.",
- "count": 622,
+ "_comment": "Physical colour order per span, relative to the WLED bus (GRB).  Re-measured 2026-10-27 with mau5hue, which asks each LED for red and then for green and compares how much red came back -- a single red frame is not enough, because the camera's white balance drifts between shots and turns the answer over.  The swapped span is 492-529, two LEDs longer than the 492-527 measured earlier; those two were the green corner on the ear outline.  Since 2026-10-29 the span is 492-528: one segment was cut off the start of the near rim, so both rims are one index earlier at their far end.",
+ "count": 621,
  "strips": [
   {
    "start": 492,
-   "count": 38,
+   "count": 37,
    "order": "GRB",
    "name": "ear rims (both)"
   }

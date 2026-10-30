@@ -52,7 +52,7 @@ def _map():
     n = len(rows)
     import collections
     src = collections.Counter(r["source"] for r in rows)
-    say(OK if n == 622 else BAD, "map",
+    say(OK if n == mau5map.TOTAL_N else BAD, "map",
         "%d LEDs: %s" % (n, ", ".join("%d %s" % (v, k) for k, v in sorted(src.items()))))
     other = {k: v for k, v in src.items() if k not in ("cad-slot", "cad-ear")}
     if other:

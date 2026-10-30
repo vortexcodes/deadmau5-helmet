@@ -1,12 +1,12 @@
 {
- "count": 622,
+ "count": 621,
  "budget_ma": 1000.0,
  "default_ceiling": 32,
  "thermal": {
   "sustained_w": 11.0,
   "burst_j": 3000.0,
   "max_w": 25.5,
-  "standby_w": 7.464,
+  "standby_w": 7.452,
   "ramp": 0.3
  },
  "regions": [
@@ -31,7 +31,7 @@
   {
    "name": "ear1_rim",
    "lo": 492,
-   "hi": 510,
+   "hi": 509,
    "ceiling": 160,
    "budget_ma": 200,
    "shed": 3.0,
@@ -39,8 +39,8 @@
   },
   {
    "name": "ear2_rim",
-   "lo": 511,
-   "hi": 529,
+   "lo": 510,
+   "hi": 528,
    "ceiling": 160,
    "budget_ma": 190,
    "shed": 3.0,
@@ -48,8 +48,8 @@
   },
   {
    "name": "ear2_tubes",
-   "lo": 530,
-   "hi": 621,
+   "lo": 529,
+   "hi": 620,
    "ceiling": 255,
    "budget_ma": 640,
    "shed": 1.0,

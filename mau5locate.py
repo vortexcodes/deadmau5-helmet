@@ -14,7 +14,7 @@ seven.
 Slow and dull -- about three seconds an LED -- but it only has to be
 right once, and it writes as it goes so an interrupted run resumes.
 
-    python3 mau5locate.py --from 398 --to 622
+    python3 mau5locate.py --from 398 --to 620
     python3 mau5locate.py --resume
 """
 
@@ -123,9 +123,9 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__)
     ap.add_argument("--host", default=None)
-    ap.add_argument("--count", type=int, default=622)
+    ap.add_argument("--count", type=int, default=621)
     ap.add_argument("--from", dest="lo", type=int, default=398)
-    ap.add_argument("--to", dest="hi", type=int, default=622)
+    ap.add_argument("--to", dest="hi", type=int, default=620)
     ap.add_argument("--level", type=int, default=45,
                     help="per-channel drive; low keeps the bloom small")
     ap.add_argument("--settle", type=float, default=0.75)

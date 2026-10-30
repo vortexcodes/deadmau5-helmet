@@ -87,8 +87,32 @@ REPORT = os.path.join(HERE, "data", "cal", "slots.json")
 
 STRIPS = os.path.join(HERE, "data", "cal", "strips.json")
 
-TOTAL_N = 622
+TOTAL_N = 621
 ROT = 38                 # the chain starts at CAD strip B39
+
+# Chain indices the pose files were measured on, but which no longer
+# exist.  On 2026-10-29 the near ear's rim strip (ear1, the wearer's
+# right) was a little long, and its first segment was cut off and the
+# feed re-soldered to the next one.  A segment is one pixel -- one
+# driver chip under ten COB LEDs -- so the chain lost exactly one index,
+# and every LED from there on moved down by one.  Measured afterwards
+# from the side camera: the near ear's tubes still end at 491, its rim
+# from 495 on lands where the old 496 onwards did, the far ear's tube
+# turns and junctions all arrive one index early, and 621 lights
+# nothing.  Old 492 was the segment: the one that sat on the inner side
+# of the rim's bottom, and the new 492 is at the bottom centre where the
+# old 493 was.
+CUT = (492,)
+
+
+def after_cut(meas):
+    """Pose centroids keyed by the chain as it is now, not as it was."""
+    out = {}
+    for i, uv in meas.items():
+        if i in CUT:
+            continue
+        out[i - sum(1 for c in CUT if c < i)] = uv
+    return out
 
 # Where the wiring is not the CAD's list: the channels interrupted by
 # the ear mounts, each split into a strip above the mount and one below.
@@ -712,7 +736,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     cad_rows, xyz, strips, order = load_cad()
-    meas = {k: load_centroids(p) for k, p in POSES.items()}
+    meas = {k: after_cut(load_centroids(p)) for k, p in POSES.items()}
     missing = [k for k, v in meas.items() if not v]
     if missing:
         raise SystemExit("no centroids for %s -- run mau5locate first" % missing)
@@ -756,17 +780,18 @@ def main(argv=None):
     # Chain layout of the ears, from the walk and confirmed by watching
     # which ear lit: each ear's three tubes, each run out and back, then
     # the rims, which are one RGB-ordered run over the top of the head.
+    # The near rim is one shorter than it was: see CUT.
     first = n_shell
     ear1_tubes = [(first, 425), (426, 461), (462, 491)]
-    ear2_tubes = [(530, 557), (558, 593), (594, 621)]
+    ear2_tubes = [(529, 556), (557, 592), (593, 620)]
     ears, ear_meta = {}, {}
-    for e, lo, hi, spans, rim in (("ear1", first, 510, ear1_tubes, (492, 510)),
-                                  ("ear2", 511, 621, ear2_tubes, (511, 529))):
+    for e, lo, hi, spans, rim in (("ear1", first, 509, ear1_tubes, (492, 509)),
+                                  ("ear2", 510, 620, ear2_tubes, (510, 528))):
         pos, meta = place_ears(geo[e], cams, meas, lo, hi, spans, rim)
         ears.update(pos)
         ear_meta.update(meta)
-    regions = [("ear1_tubes", first, 491), ("ear1_rim", 492, 510),
-               ("ear2_rim", 511, 529), ("ear2_tubes", 530, 621)]
+    regions = [("ear1_tubes", first, 491), ("ear1_rim", 492, 509),
+               ("ear2_rim", 510, 528), ("ear2_tubes", 529, 620)]
     rows, _ = build_rows(cad_rows, xyz, shell, path, ears, regions, ear_meta)
 
     rep = residual_report(rows, cams, meas)

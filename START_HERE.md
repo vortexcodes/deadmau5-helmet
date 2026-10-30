@@ -45,7 +45,7 @@ about 280 MB, all of it regenerable in a few minutes with `mau5locate.py`
 and `mau5review.py`. The calibration *results* are committed, and those
 are the part that took the night:
 
-    data/cal/pixel_map.csv            the 622-LED map (built by mau5slots.py)
+    data/cal/pixel_map.csv            the 621-LED map (built by mau5slots.py)
     data/cal/led_positions.csv        what the front camera measured
     data/cal/led_positions_pose4.csv  what the high camera measured
     data/cal/walk_session.json        the hand walk from the first night

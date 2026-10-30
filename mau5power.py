@@ -363,7 +363,7 @@ def load(path=DEFAULT, count=None):
         import sys
         print("mau5power: no profile at %s -- using a deliberately timid one"
               % path, file=sys.stderr)
-        return timid(count or 622)
+        return timid(count or 621)
     try:
         d = json.load(open(path))
         regions = [Region(r["name"], r["lo"], r["hi"], r["ceiling"],

@@ -65,8 +65,9 @@ def note(msg):
 def t_map():
     import mau5map
     rows = mau5map.load()
-    eq(len(rows), 622, "led count")
-    eq([r["index"] for r in rows], list(range(622)), "indices contiguous")
+    # 621 since a rim segment was cut off on 2026-10-29 (mau5slots.CUT)
+    eq(len(rows), 621, "led count")
+    eq([r["index"] for r in rows], list(range(621)), "indices contiguous")
     for r in rows:
         for k in ("x", "y", "z"):
             ok(math.isfinite(r[k]), "non-finite %s at %d" % (k, r["index"]))
@@ -572,7 +573,7 @@ def t_show_player():
     pl = mau5show.Player(show)
     for t in (0.0, show["duration"] * 0.5, show["duration"] - 0.1):
         out = pl.frame(t)
-        eq(out.shape, (622, 3), "player frame shape")
+        eq(out.shape, (621, 3), "player frame shape")
         ok(np.isfinite(out).all(), "player produced non-finite at t=%.1f" % t)
     ok(np.abs(pl.frame(show["duration"] + 50)).max() == 0, "past the end must be dark")
 
@@ -1085,7 +1086,7 @@ def t_offline_guard_matches_python():
 
 
 def t_offline_encoder_roundtrip():
-    """What the phone encodes is what the controller will show.
+    """What the phone sends is what the controller will show.
 
     Decoded here by mau5fake's parser, which is written against WLED's
     `i` syntax rather than against the encoder -- so this is two
@@ -1093,6 +1094,11 @@ def t_offline_encoder_roundtrip():
     inverse.  Includes the colour-order permutation, because an
     encoder that quietly dropped it would light the ear rims green and
     every other test would still pass.
+
+    The frames go to one controller, one after another, exactly as the
+    player sent them: a segment that did not change is not sent, so
+    the only way to check that is to keep the controller's state
+    between frames, the way the helmet does.
     """
     import mau5engine as E
     import mau5fake
@@ -1104,42 +1110,67 @@ def t_offline_encoder_roundtrip():
     frames = []
     for nm, t in (("solid", 0.0), ("rainbow", 0.1), ("rainbow", 0.15),
                   ("fire", 1.0), ("scanner", 1.2), ("strobe", 2.0),
-                  ("solid", 2.5)):
+                  ("solid", 2.5), ("solid", 2.5)):
         f, _ = g.apply(np.asarray(E.make(nm).render(h, t), float), now=t)
         frames.append(f.astype(np.uint8))
+    # one LED changed: one segment's message, and only that one
+    one = frames[-1].copy()
+    one[450] = (9, 99, 199)
+    frames.append(one)
     pix = mau5wled.Pixels("0.0.0.0", count=h.n, strips=strips, guard=False)
     job = {"count": h.n, "strips": strips,
            "frames": [base64.b64encode(f.tobytes()).decode() for f in frames]}
     res = _node("wiretest.js", job)
     if res is None:
         return note("offline: node not installed, the encoder went unchecked")
-    bodies, ws_limit = res["bodies"], res["wsLimit"]
-    eq(len(bodies), len(frames), "one body per frame")
+    sent, pad = res["frames"], res["pad"]
+    eq(len(sent), len(frames), "one result per frame")
 
-    # Every frame is whole, and every frame is decoded by the same
-    # parser the controller uses, starting from a blanked segment --
-    # because that is what the firmware does to anything an `i` write
-    # does not mention.  A player that sent deltas passed the old
-    # version of this test and showed a fifth of each frame.
-    small = 0
-    for f, b in zip(frames, bodies):
-        fake = mau5fake.Fake(count=h.n)
-        fake.frozen = True
-        fake.px[:] = 255                      # prove the write blanks first
-        fake.apply_state(json.loads(b))
+    fake = mau5fake.Fake(count=h.n)
+    fake.apply_state({"seg": res["layout"]})
+    eq(len(fake.segs), len(res["layout"]), "the controller took the layout")
+    ok(all(g["frz"] for g in fake.segs), "every segment frozen")
+    fake.px[:] = 255                          # prove the writes blank first
+    msgs = []
+    for f, out in zip(frames, sent):
         want = pix.apply_order(f)
+        ws = out["ws"]
+        if ws:
+            # every frame that sends anything ends with the ping that
+            # paces the player, and nothing follows it
+            eq(ws[-1], "p", "a frame must end with its ping")
+            ok(out["busyAfter"] and not out["busyBefore"],
+               "the link must be busy from the ping until the pong")
+            ws = ws[:-1]
+        for m in ws:
+            # exactly one TCP segment each, or a repacked stream splits
+            # them and the firmware refuses half
+            eq(len(m), pad, "padded message length")
+            ok(m.encode() == m.encode("ascii", "strict"), "padding must be plain bytes")
+            fake.apply_state(json.loads(m))
         ok(np.array_equal(fake.px, want),
            "the controller would show %d LEDs wrong"
            % int((fake.px != want).any(1).sum()))
-        ok(len(b) <= fake.WS_SEGMENT - 6 or len(b) > ws_limit,
-           "a %d byte body is over the player's websocket limit of %d but "
-           "under the segment size, so it would be sent and dropped"
-           % (len(b), ws_limit))
-        if len(b) <= ws_limit:
-            small += 1
-    note("offline: %d frames, %.0f bytes each, decoded exactly; %d of them "
-         "fit one websocket message"
-         % (len(frames), sum(len(b) for b in bodies) / float(len(bodies)), small))
+        msgs.append(len(ws))
+        # and the POST the player falls back on, alone, onto a scrambled strip
+        other = mau5fake.Fake(count=h.n)
+        other.apply_state({"seg": res["layout"]})
+        other.px[:] = 255
+        other.apply_state(json.loads(out["http"]))
+        ok(np.array_equal(other.px, want), "a whole-frame POST shows %d LEDs wrong"
+           % int((other.px != want).any(1).sum()))
+    first = {g["id"] for m in sent[0]["ws"][:-1] for g in json.loads(m)["seg"]}
+    eq(first, set(range(len(res["layout"]))), "the first frame goes whole")
+    eq(msgs[-2], 0, "a repeated frame should send nothing")
+    eq(sent[-2]["ret"], 0, "and say so, so it still counts as shown")
+    eq(msgs[-1], 1, "one changed LED should send one segment")
+    hb = res["handBack"]
+    ok(not hb["missing"], "handing back to a preset that is not there leaves the helmet lit")
+    ok(hb["present"], "a standby preset that exists should be handed back to")
+    ok(not hb["notWanted"], "no standby wanted means switching off")
+    note("offline: %d frames through one controller, decoded exactly: %d "
+         "segments, %s padded messages a frame"
+         % (len(frames), len(res["layout"]), "/".join(str(m) for m in msgs)))
 
 
 def t_offline_oversize_is_caught():
@@ -1156,6 +1187,15 @@ def t_offline_oversize_is_caught():
     eq(int((f.px.max(1) > 0).sum()), 100,
        "a second write blanks the first, as WLED 0.15.4 does")
     ok(f.px[0].max() == 0, "LED 0 should have gone dark")
+    # ...but only within its own segment, which is what the player's
+    # five segments rely on.  Measured on the helmet, read back through
+    # the live preview: a write to segment 0 left segment 1 as it was.
+    f.apply_state({"seg": [{"id": 0, "start": 0, "stop": 300, "frz": True},
+                           {"id": 1, "start": 300, "stop": 622, "frz": True}]})
+    f.apply_state({"seg": {"id": 1, "i": [0, 10, "0000FF"]}})
+    f.apply_state({"seg": {"id": 0, "i": [0, 5, "FF0000"]}})
+    eq(int((f.px[300:310, 2] == 255).sum()), 10, "segment 1 survives a write to 0")
+    eq(int((f.px[:300].max(1) > 0).sum()), 5, "segment 0 shows only its own write")
 
 
 def t_map_adjustments():
