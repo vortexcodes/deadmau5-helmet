@@ -25,13 +25,30 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-PASS, FAIL = [], []
+PASS, FAIL, SKIP = [], [], []
+
+
+class Skip(Exception):
+    """Raised by a check that could not run on this machine."""
+
+
+def skip(msg):
+    """Give up on a check, and have the summary count it as skipped.
+
+    A check that returned a note when node was missing used to count as
+    a pass, so a clone without node reported every JS cross-check as
+    green -- the phone's power guard among them -- and only a note
+    further up the page said none of them had run.
+    """
+    raise Skip(msg)
 
 
 def check(group, name, fn):
     try:
         fn()
         PASS.append((group, name))
+    except Skip as e:
+        SKIP.append((group, name, str(e)))
     except BaseException as e:      # SystemExit included: a failing test
                                     # must not take the whole run with it
         FAIL.append((group, name, "%s: %s" % (type(e).__name__, e),
@@ -435,6 +452,9 @@ def t_floor_holds_the_shape():
            "%s fell to %.1f, below its floor of %.1f"
            % (r.name, float(seg[want].min()), r.floor))
 
+    # 11 W written out, not th.sustained_w: nothing may stay raised for
+    # ten minutes or more, and this is the one check that notices
+    # sustained_w being moved up.  Moving it down passes.
     ok(rep["watts"] <= 11.0 + 0.4,
        "sustained draw %.1f W is over the 11 W ceiling" % rep["watts"])
 
@@ -477,6 +497,10 @@ def t_connector_limit():
     import mau5power, mau5engine as E
     h = E.Helmet()
     g = mau5power.load(count=h.n)
+    # Forced to 0 rather than read from power.json, where link_ma is
+    # waiting on a real connector rating: recording one is a safety
+    # improvement, and must not turn this red.
+    g.link_ma = 0.0
     eq(g.link_limit_ma(), None, "no limit configured should mean no limit")
 
     buf = np.full((h.n, 3), 255.0)
@@ -669,11 +693,15 @@ def t_lan_ip():
     import mau5wled
     nets = mau5wled.local_nets()
     ip = mau5wled.lan_ip()
+    if not nets:
+        # Wi-Fi off, or a tunnel alone: no LAN to prefer, and lan_ip
+        # falls back to loopback when there is no route at all.  That is
+        # right for the machine and nothing this check can judge.
+        skip("no LAN is up, so lan_ip had nothing to choose (it said %s)" % ip)
     ok(ip and not ip.startswith("127."), "lan_ip returned loopback")
-    if nets:
-        eq(ip, nets[0]["ip"], "lan_ip disagrees with local_nets")
-        for n in nets:
-            ok(n["bits"] <= 32 and n["ip"].count(".") == 3, "malformed net")
+    eq(ip, nets[0]["ip"], "lan_ip disagrees with local_nets")
+    for n in nets:
+        ok(n["bits"] <= 32 and n["ip"].count(".") == 3, "malformed net")
 
 
 
@@ -1003,7 +1031,10 @@ OFFLINE_TIMES = (0.0, 0.37, 1.234, 2.5, 3.9, 7.77, 11.1)
 
 
 def _node(script, job):
-    """Run one of remote/offline's node helpers, or say why not."""
+    """Run one of remote/offline's node helpers, or None without node.
+
+    None is for the caller to skip() on, with what went unchecked.
+    """
     if not shutil.which("node"):
         return None
     p = subprocess.run(["node", os.path.join(HERE, "remote", "offline", script)],
@@ -1033,7 +1064,7 @@ def t_offline_engine_matches_python():
             for nm in names for t in OFFLINE_TIMES]
     res = _node("crosscheck.js", {"data": data, "jobs": jobs})
     if res is None:
-        return note("offline: node not installed, the JS port went unchecked")
+        skip("node not installed, the JS port went unchecked")
     h = E.Helmet()
     worst, where = 0.0, ""
     k = 0
@@ -1072,7 +1103,7 @@ def t_offline_guard_matches_python():
              "reset": (i == 0)} for i, (nm, t) in enumerate(seq)]
     res = _node("crosscheck.js", {"data": data, "jobs": jobs})
     if res is None:
-        return note("offline: node not installed, the JS guard went unchecked")
+        skip("node not installed, the JS guard went unchecked")
     h = E.Helmet()
     g = mau5power.load(count=h.n)
     worst_ma, worst_led = 0.0, 0.0
@@ -1124,7 +1155,7 @@ def t_offline_encoder_roundtrip():
            "frames": [base64.b64encode(f.tobytes()).decode() for f in frames]}
     res = _node("wiretest.js", job)
     if res is None:
-        return note("offline: node not installed, the encoder went unchecked")
+        skip("node not installed, the encoder went unchecked")
     sent, pad = res["frames"], res["pad"]
     eq(len(sent), len(frames), "one result per frame")
 
@@ -1315,7 +1346,7 @@ def t_offline_shows_match_python():
     names = sorted(data["shows"])
     res = _node("showtest.js", {"data": data, "shows": names, "times": times})
     if res is None:
-        return note("offline: node not installed, the shows went unchecked")
+        skip("node not installed, the shows went unchecked")
     worst, where = 0.0, ""
     for name in names:
         show = dict(data["shows"][name])
@@ -1367,7 +1398,7 @@ def t_offline_drive_matches_the_analysis():
                  if t < music.duration - 1]
         res = _node("drivetest.js", {"file": path, "times": times})
         if res is None:
-            return note("offline: node not installed, the drive went unchecked")
+            skip("node not installed, the drive went unchecked")
         eq(res["beats"], len(music.beats), "%s lost beats in packing" % name)
         eq(res["bars"], len(music.bars), "%s lost bars in packing" % name)
         for row in res["rows"]:
@@ -1493,11 +1524,16 @@ if __name__ == "__main__":
             check(g, fn.__name__[2:], fn)      # strip the "t_" prefix only
     for g, n in PASS:
         print("  ok    %-9s %s" % (g, n))
+    for g, n, msg in SKIP:
+        print("  skip  %-9s %s\n          %s" % (g, n, msg))
     for g, n, msg, tb in FAIL:
         print("  FAIL  %-9s %s\n          %s" % (g, n, msg))
     for m in NOTES:
         print("  note: %s" % m)
-    print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
+    # Skipped is not passed, so it is counted on the same line; it goes
+    # before "failed" so the line still ends with the failures.
+    print("\n%d passed, %s%d failed"
+          % (len(PASS), "%d skipped, " % len(SKIP) if SKIP else "", len(FAIL)))
     if FAIL:
         print("\n--- first traceback ---\n%s" % FAIL[0][3])
     sys.exit(1 if FAIL else 0)

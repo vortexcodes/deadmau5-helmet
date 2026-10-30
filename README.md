@@ -13,13 +13,15 @@ whole effect engine runs in a browser in the
 
 ```bash
 python3 -m pip install numpy pillow matplotlib
-python3 test_mau5.py                    # 41 checks, all offline
+python3 test_mau5.py                    # about a hundred checks, all offline
 python3 mau5web.py --serve              # the simulator, on this machine
 python3 mau5offline.py serve            # the phone player, against a fake helmet
 python3 mau5doctor.py --offline         # what is set up and what is not
 ```
 
-Python 3.9 or later.  `ffmpeg` is only needed for the films.
+Python 3.9 or later.  `ffmpeg` is only needed for the films.  `node` runs the
+checks of the phone player's JavaScript, its power guard among them; without
+it they cannot run, and the test summary says so.
 
 ## What is where
 
@@ -35,7 +37,7 @@ the map
   mau5film.py       the localisation film; mau5lapse.py, the timelapses
 
 effects and shows
-  mau5engine.py     37 presets written against geometry, not a grid
+  mau5engine.py     38 presets written against geometry, not a grid
   mau5song.py       analyses a track; mau5show.py builds and plays a show
   mau5scene.py      compiles a song's own choreography into its show
   mau5tune.py       scores how well a show follows its music
@@ -122,7 +124,7 @@ correctly. `mau5hue.py` finds which LEDs need it by asking each one for red
 and then for green and comparing how much red comes back -- a single red
 photograph is not enough, because the camera's white balance drifts between
 shots by more than the effect. The answer lives in `data/cal/strips.json`:
-LEDs 492-529, both ear rims.
+LEDs 492-528, both ear rims.
 
 ## Calibrating: walking the chain by hand
 
@@ -373,8 +375,9 @@ letting go, which is why the phone's timeout matters at a show (see
 else around and it comes up in the same thing. The brightness limiter
 *does* cover that path, at what the helmet can sustain; it is blind
 only to pixels painted into a frozen segment, which is the player's
-route, not this one. The page has a **keep glowing** switch if you want
-the old behaviour back.
+route, not this one. The hand-back is the page's **keep glowing** switch,
+on by default; turn it off for the old behaviour, where the helmet goes
+dark instead.
 
 The page only hands back to a preset the controller actually has. WLED
 ignores a request for a missing one, and the helmet then stayed lit in
@@ -447,7 +450,7 @@ because each of them looks reasonable until you try it.
   be there.
 
 Exactly one HTTP server is on that network with nothing else to do, so the
-player is uploaded to WLED's own filesystem: 76 kB gzipped, same origin as the
+player is uploaded to WLED's own filesystem: 114 kB gzipped, same origin as the
 API it drives, nothing to install on the phone, and it works from anybody's
 phone for as long as the helmet boots.
 
@@ -527,9 +530,10 @@ browser tab, so there are three:
 
 1. **The same guard, in JavaScript**, reading the same `data/cal/power.json`:
    regions, ceilings, shed weights, floors and the thermal bucket. Watch
-   `heat` climb on the page and the current ration itself down from 1622 mA to
-   about 1040 mA after a couple of minutes of something bright — that is the
-   bucket filling, exactly as it does on the laptop.
+   `heat` climb on the page: something bright holds 1621 mA for about five
+   minutes, then the current rations itself down, past 1150 mA a minute
+   later and on towards 917 mA, the sustained 11 W — that is the bucket
+   filling, exactly as it does on the laptop.
 2. **WLED's own brightness limiter**, set by `mau5offline.py config` on the
    *bus*, which is the one 0.15 enforces (the global `hw.led.maxpwr` is
    accepted and ignored). It gets what the helmet can **sustain**, not the
