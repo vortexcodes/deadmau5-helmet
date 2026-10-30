@@ -300,8 +300,12 @@ class Pixels:
         return np.take_along_axis(np.asarray(buf, np.uint8), self.perm, axis=1)
 
     # -- sending ----------------------------------------------------------
-    def send(self, buf, correct=True):
-        """buf: (count, 3) uint8 in true RGB.  Sent as one DDP frame."""
+    def send(self, buf, correct=True, gain=1.0):
+        """buf: (count, 3) uint8 in true RGB.  Sent as one DDP frame.
+
+        `gain` (at most 1) dims the frame after the guard -- a show's beat
+        pulse, which the guard would otherwise flatten.
+        """
         a = np.asarray(buf, np.uint8)
         if a.ndim == 1:
             a = a.reshape(-1, 3)
@@ -309,7 +313,9 @@ class Pixels:
             a = np.vstack([a, np.zeros((self.count - len(a), 3), np.uint8)])
         a = a[:self.count]
         if self.guard is not None:
-            a, self.last_power = self.guard.apply(a)
+            a, self.last_power = self.guard.apply(a, gain=gain)
+        elif gain < 1.0:
+            a = (a * max(float(gain), 0.0)).astype(np.uint8)
         # What the helmet is actually showing, in true RGB -- after the
         # guard has had its say but before the per-strip colour-order
         # permutation, which is a property of the wiring and not of the

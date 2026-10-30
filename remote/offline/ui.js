@@ -155,7 +155,9 @@ function tick() {
     frame.fill(0);
     state.inst.render(helmet, t, state.music, frame);
   }
-  const rep = guard.apply(frame, frame, now / 1000);
+  // a show's beat pulse is applied after the guard, which would flatten it
+  const gain = state.show && state.show.gain !== undefined ? state.show.gain : 1;
+  const rep = guard.apply(frame, frame, now / 1000, gain);
   const sent = link.send(frame);
 
   if (sent < 0) state.interval = Math.min(ROOF_MS, state.interval * 1.15);
@@ -527,6 +529,24 @@ function showRunning() {
   $('showgo').classList.add('on');
 }
 
+// Which shows can start with no further questions.  Marked in the
+// list, and counted, because "fully offline" is exactly this number
+// reaching five -- and the copies are per address, so the helmet's own
+// network (4.3.2.1) and the home network keep separate sets.
+async function refreshSongs() {
+  const have = new Set(await tracks.keys());
+  const names = Object.keys(D.shows || {});
+  for (const o of $('showpick').options) {
+    if (!o.value) continue;
+    o.textContent = (have.has(o.value) ? '✓ ' : '') + o.value.replace(/^deadmau5 - /, '');
+  }
+  const missing = names.filter(n => !have.has(n));
+  $('songsat').textContent = (names.length - missing.length) + ' of ' + names.length
+    + ' songs on this phone for ' + location.host
+    + (missing.length ? ' · missing: ' + missing.map(n => n.replace(/^deadmau5 - /, '')).join(', ')
+                      : ' · every show will start with its song, no network needed');
+}
+
 async function showReadyText(name) {
   const f = name ? await tracks.get(name) : null;
   if ($('showpick').value !== name) return;          // changed meanwhile
@@ -618,7 +638,7 @@ async function startShow() {
 // choosing the mp3 is the whole interaction either way.
 async function playTrack(file, forShow) {
   try {
-    const name = forShow || (M.bestShow(file.name, [], D.shows) || {}).name || '';
+    const name = forShow || M.showForFile(file.name, D.shows);
     if (name && $('showpick').value !== name) {
       $('showpick').value = name;
       await pickShow(name);
@@ -637,6 +657,7 @@ async function playTrack(file, forShow) {
         const kept = await tracks.put(name, file);
         $('showat').textContent = 'playing ' + file.name
           + (kept ? ' — kept on this phone for next time' : '');
+        refreshSongs();
       }
     }
     if (!state.running) start();
@@ -653,6 +674,26 @@ function showPP() {
   $('showpp').disabled = !on;
   $('showpp').textContent = (on && an.el.paused) ? 'play' : 'pause';
 }
+
+// All five at once: pick the mp3s together and each goes to the show
+// its name matches, by the same word rule Spotify following uses.
+$('songload').onclick = () => $('songpick').click();
+$('songpick').onchange = async (e) => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (!files.length) return;
+  const kept = [], unmatched = [];
+  for (const f of files) {
+    const name = M.showForFile(f.name, D.shows);
+    if (name && await tracks.put(name, f)) kept.push(name.replace(/^deadmau5 - /, ''));
+    else unmatched.push(f.name);
+  }
+  await refreshSongs();
+  $('showat').textContent = (kept.length ? 'kept ' + kept.join(', ') : 'nothing kept')
+    + (unmatched.length ? ' · no show matches ' + unmatched.join(', ')
+       + ' -- pick the show and use "choose the song" for it' : '');
+  if ($('showpick').value) showReadyText($('showpick').value);
+};
 
 $('showtrack').onclick = () => {
   $('apick').dataset.forShow = $('showpick').value || '';
@@ -804,6 +845,7 @@ addEventListener('visibilitychange', () => {
 addEventListener('resize', () => { dots = null; draw(); });
 
 choose(restore() || 'rainbow', true);
+refreshSongs();
 $('bri').value = state.bri;
 $('brival').textContent = state.bri;
 $('cycle').value = state.cycle;

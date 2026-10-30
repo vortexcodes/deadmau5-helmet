@@ -203,11 +203,17 @@ class PowerGuard:
             return None
         return max(0.0, self.link_ma - self.standby_ma())
 
-    def apply(self, buf, now=None):
+    def apply(self, buf, now=None, gain=1.0):
         """Return (clamped frame, report).  Never raises on a bad frame.
 
         `now` overrides the clock, so the thermal behaviour can be driven
         deterministically in a test instead of in real time.
+
+        `gain`, at most 1, is applied after every limit.  It is how a show
+        pulses on the beat: anything brighter on the beat than off it,
+        applied before the guard, is exactly what the ceilings and the
+        governor exist to take away again, so on loud material the pulse
+        vanished.  Dimming the result can only stay inside the limits.
         """
         out = np.asarray(buf, np.float32).reshape(-1, 3)[:self.count].copy()
         np.clip(out, 0, 255, out)
@@ -278,6 +284,9 @@ class PowerGuard:
             governed = True
             floored = bool((fs > lo_s ** self._shed).any())
 
+        g = min(max(float(gain), 0.0), 1.0)
+        if g < 1.0:
+            out *= g
         final = self.frame_ma(out)
         if self.thermal is not None:
             self.thermal.update(final * 12.0 / 1000.0, now=now)

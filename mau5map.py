@@ -134,6 +134,11 @@ def load(path=OUT, adjust=True):
             r[k] = float(r[k])
         for k in ("index", "group", "pos_in_strip", "swap_rg"):
             r[k] = int(r[k])
+        # Which ear tube, and how far up it (0 low end, 1 high end) --
+        # or for a rim LED, how far round from the bottom.  -1 on the
+        # shell, and on a map written before mau5slots knew the tubes.
+        r["tube"] = int(r.get("tube") or -1)
+        r["along"] = float(r.get("along") or -1.0)
     if adjust:
         rows, _ = apply_adjustments(rows)
     return rows

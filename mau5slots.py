@@ -536,14 +536,28 @@ def place_ears(geo, cams, meas, lo, hi, tube_spans, rim_span):
         if wsum:
             seen[i] = acc / wsum
 
-    out = {}
+    out, meta = {}, {}
+    # Tubes numbered by height, 0 the lowest, judged at each tube's own
+    # midpoint -- the tubes are diagonal, so "nearest the head" ranks the
+    # middle one first.  Height is the same on both ears whichever way
+    # each ear's own axes happen to point, so tube 1 is tube 1 on both.
+    def mid_z(k):
+        t = geo["tubes"][k]
+        return (c + t["lat"] * b + 0.5 * (t["lo"] + t["hi"]) * a)[2]
+    by_height = sorted(range(len(geo["tubes"])), key=mid_z)
+    number = {k: by_height.index(k) for k in by_height}
+    # Along a tube, 0 is the low end and 1 the high one -- up is up on
+    # both ears, which is what an effect that "rises" means by it.
+    up = 1.0 if a[2] >= 0 else -1.0
     # tube LEDs: hold each pass to a straight run inside its tube
     for t0, t1 in tube_spans:
         idx = [i for i in range(t0, t1 + 1) if i in seen]
         if not idx:
             continue
         lat = np.array([seen[i][1] for i in idx])
-        tube = min(geo["tubes"], key=lambda t: abs(np.median(lat) - t["lat"]))
+        k_tube = min(range(len(geo["tubes"])),
+                     key=lambda k: abs(np.median(lat) - geo["tubes"][k]["lat"]))
+        tube = geo["tubes"][k_tube]
         room = max(tube["radius"] - 5.0, 2.0)
         for i in range(t0, t1 + 1):
             if i in seen:
@@ -556,6 +570,8 @@ def place_ears(geo, cams, meas, lo, hi, tube_spans, rim_span):
             al = min(max(al, tube["lo"]), tube["hi"])
             la = tube["lat"] + min(max(la - tube["lat"], -room), room)
             out[i] = c + al * a + la * b + tube["depth"] * n
+            f = (al - tube["lo"]) / max(tube["hi"] - tube["lo"], 1e-6)
+            meta[i] = (number[k_tube], round(f if up > 0 else 1.0 - f, 4))
     # Rim LEDs: on the rim, at the angle the camera saw.  Both cameras
     # agree they sit 172 mm out at mid-depth, which is the outer skin of
     # the rim band (166-173 mm on the mesh), so just inside that.
@@ -572,7 +588,15 @@ def place_ears(geo, cams, meas, lo, hi, tube_spans, rim_span):
         # the rim circle's centre is the disc centre, in the plate frame
         ang = math.atan2(la, al)
         out[i] = c + ring * (math.cos(ang) * a + math.sin(ang) * b)
-    return out
+        # Round the rim from its lowest point, as a fraction of a turn,
+        # measured in the disc's own plane.  The two ears are mirror
+        # images, so the same fraction is the same place on each.
+        zi = np.array([0.0, 0.0, 1.0]) - n * n[2]
+        zi /= np.linalg.norm(zi)
+        hz = np.cross(n, zi)
+        X = out[i] - c
+        meta[i] = (-1, round((math.atan2(X @ hz, -(X @ zi)) / (2 * math.pi)) % 1.0, 4))
+    return out, meta
 
 
 # ----------------------------------------------------------------- map
@@ -601,7 +625,7 @@ def swapped(path=STRIPS):
     return out
 
 
-def build_rows(cad_rows, xyz, shell, path, ears, regions):
+def build_rows(cad_rows, xyz, shell, path, ears, regions, ear_meta=None):
     swap = swapped()
     rows = []
     groups = []
@@ -625,7 +649,7 @@ def build_rows(cad_rows, xyz, shell, path, ears, regions):
             "u": round(k / max(runs[g] - 1, 1), 4),
             "x": round(x, 2), "y": round(y, 2), "z": round(z, 2),
             "az_deg": az, "elev_deg": el, "source": "cad-slot",
-            "swap_rg": 0,
+            "swap_rg": 0, "tube": -1, "along": -1.0,
         })
     for name, lo, hi in regions:
         span = [i for i in range(lo, hi + 1)]
@@ -640,6 +664,8 @@ def build_rows(cad_rows, xyz, shell, path, ears, regions):
                 "x": round(x, 2), "y": round(y, 2), "z": round(z, 2),
                 "az_deg": az, "elev_deg": el, "source": "cad-ear",
                 "swap_rg": 1 if i in swap else 0,
+                "tube": (ear_meta or {}).get(i, (-1, -1.0))[0],
+                "along": (ear_meta or {}).get(i, (-1, -1.0))[1],
             })
     rows.sort(key=lambda r: r["index"])
     if [r["index"] for r in rows] != list(range(TOTAL_N)):
@@ -733,12 +759,15 @@ def main(argv=None):
     first = n_shell
     ear1_tubes = [(first, 425), (426, 461), (462, 491)]
     ear2_tubes = [(530, 557), (558, 593), (594, 621)]
-    ears = {}
-    ears.update(place_ears(geo["ear1"], cams, meas, first, 510, ear1_tubes, (492, 510)))
-    ears.update(place_ears(geo["ear2"], cams, meas, 511, 621, ear2_tubes, (511, 529)))
+    ears, ear_meta = {}, {}
+    for e, lo, hi, spans, rim in (("ear1", first, 510, ear1_tubes, (492, 510)),
+                                  ("ear2", 511, 621, ear2_tubes, (511, 529))):
+        pos, meta = place_ears(geo[e], cams, meas, lo, hi, spans, rim)
+        ears.update(pos)
+        ear_meta.update(meta)
     regions = [("ear1_tubes", first, 491), ("ear1_rim", 492, 510),
                ("ear2_rim", 511, 529), ("ear2_tubes", 530, 621)]
-    rows, _ = build_rows(cad_rows, xyz, shell, path, ears, regions)
+    rows, _ = build_rows(cad_rows, xyz, shell, path, ears, regions, ear_meta)
 
     rep = residual_report(rows, cams, meas)
     for name, r in rep.items():

@@ -32,8 +32,10 @@ const NOW = 'https://api.spotify.com/v1/me/player/currently-playing';
 // "Strobe - Dimension Remix" with the artist somewhere else.  So
 // compare the words, not the string.
 function words(s) {
-  return new Set(String(s).toLowerCase()
-    .replace(/\.(mp3|m4a|wav|flac)$/, '')
+  // trimmed before the extension comes off: bestShow joins title and
+  // artists with a space, and a trailing space kept ".mp3" as a word
+  return new Set(String(s).trim().toLowerCase()
+    .replace(/\.(mp3|m4a|aac|ogg|opus|wav|flac)$/, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .split(' ')
     .filter(w => w && w !== 'the' && w !== 'a' && w !== 'with'));
@@ -163,7 +165,24 @@ class Spotify {
   }
 }
 
-const api = { Spotify, bestShow, overlap };
+// A file name is shorter than a title: "leavemealone.mp3" shares one
+// word of five with "Fred again.. & Baby Keem - leavemealone", which
+// Jaccard rightly refuses.  So for files, if that fails, take the one
+// show whose title contains every word of the name -- and only when
+// exactly one does, and the name has a word long enough to mean it.
+function showForFile(filename, shows) {
+  const hit = bestShow(filename, [], shows);
+  if (hit) return hit.name;
+  const F = words(filename);
+  if (![...F].some(w => w.length >= 5)) return '';
+  const all = Object.keys(shows || {}).filter(n => {
+    const T = words(n);
+    return [...F].every(w => T.has(w));
+  });
+  return all.length === 1 ? all[0] : '';
+}
+
+const api = { Spotify, bestShow, overlap, showForFile };
 root.MAU5 = Object.assign(root.MAU5 || {}, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 

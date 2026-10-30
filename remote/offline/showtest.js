@@ -47,12 +47,13 @@ process.stdin.on('end', () => {
   const buf = new Float32Array(h.n * 3);
   for (const name of job.shows) {
     const p = new S.ShowPlayer(D.shows[name], h, D);
-    const frames = [];
+    const frames = [], gains = [];
     for (const t of job.times) {
       p.frame(t, music, buf);
       frames.push(Array.from(buf, v => Math.round(v * 1000) / 1000));
+      gains.push(p.gain);
     }
-    out[name] = frames;
+    out[name] = { frames, gains };
   }
   process.stdout.write(JSON.stringify(out));
 });

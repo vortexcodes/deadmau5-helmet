@@ -108,6 +108,11 @@ button.reactive::after{content:"\00a0♪";opacity:.75}
     <button id="showsilent" style="flex:1">lights only</button>
   </div>
   <div class="row">
+    <button id="songload" style="flex:1">load all the songs</button>
+  </div>
+  <input id="songpick" type="file" accept="audio/*" multiple hidden>
+  <div id="songsat" class="dimline"></div>
+  <div class="row">
     <span class="dim" style="font-size:12px">volume</span>
     <input id="vol" type="range" min="0" max="100" step="1" value="100">
     <b id="volval" style="font-size:12px;min-width:34px;text-align:right">100</b>

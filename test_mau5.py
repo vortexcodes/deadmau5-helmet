@@ -1274,8 +1274,11 @@ def t_offline_shows_match_python():
         ok(not py.lock, "with no confident grid the laptop should not lock")
         for k, t in enumerate(times):
             a = np.asarray(py.frame(t), float)
-            b = np.asarray(res[name][k], float).reshape(-1, 3)
+            b = np.asarray(res[name]["frames"][k], float).reshape(-1, 3)
             d = float(np.abs(a - b).max())
+            # the beat pulse travels beside the frame now, so it has to
+            # agree too -- scaled to counts so one bar covers both
+            d = max(d, abs(py.gain - res[name]["gains"][k]) * 255.0)
             if d > worst:
                 worst, where = d, "%s at t=%.1f" % (name, t)
     ok(worst < 0.01, "the ported show player differs by %.3f counts (%s)"

@@ -78,7 +78,8 @@ class Controller:
         # show cue does.  Without this the two halves of the controller
         # behave differently for no reason the user can see.
         self.sync = True
-        self.pulse = 0.22
+        self.pulse = 0.40
+        self.gain = 1.0          # the beat, applied after the guard
 
         self.show = None
         self.show_name = None
@@ -206,6 +207,7 @@ class Controller:
 
     # -- the frame loop -------------------------------------------------
     def _frame(self):
+        self.gain = 1.0
         if self.mode == "preset" and self.preset is not None:
             free = time.monotonic() - self.preset_t0
             m = self.music if (self.sync and self.playing) else None
@@ -214,12 +216,17 @@ class Controller:
             t = self.now()
             te, _ = E.lock_time(m, self.preset_name, self.params, t)
             out = self.preset.render(self.h, te, m)
+            # The beat as a gain applied after the guard, not a lift
+            # multiplied in here: the guard flattens any lift on loud
+            # material, which is when a pulse matters (mau5show.Player).
             if self.pulse > 0:
                 k = max(0.0, 1.0 - m.beat_phase(t) * 3.0) ** 2
-                out = np.clip(out * (1.0 + self.pulse * k), 0, 255)
+                self.gain = (1.0 + self.pulse * k) / (1.0 + self.pulse)
             return out
         if self.mode == "show" and self.player is not None:
-            return self.player.frame(self.now())
+            out = self.player.frame(self.now())
+            self.gain = self.player.gain
+            return out
         return np.zeros((self.h.n, 3))
 
     def _set_output(self, want):
@@ -276,7 +283,7 @@ class Controller:
                     if k < 1.0:
                         buf = buf * max(0.0, k)
                 if self.pix is not None:
-                    self.pix.send(buf)
+                    self.pix.send(buf, gain=self.gain)
                     self.last_power = self.pix.last_power
                     self.last_frame = self.pix.last_sent
                 elif self.guard is not None:
@@ -289,7 +296,7 @@ class Controller:
                     # looks like a bug.  Hold it full and report what
                     # the real helmet would settle to instead.
                     shown, rep = self.guard.apply(np.clip(buf, 0, 255),
-                                                  now=self._t0_sim)
+                                                  now=self._t0_sim, gain=self.gain)
                     self.last_power = rep
                     self.last_frame = shown
                 else:

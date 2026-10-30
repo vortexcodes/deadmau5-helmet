@@ -56,6 +56,14 @@ class Helmet:
         self.ears = self.ear1 | self.ear2
         self.tubes = np.array([r.endswith("tubes") for r in self.region])
         self.rims = np.array([r.endswith("rim") for r in self.region])
+        # Each ear is three tubes, numbered 0 (lowest) to 2 on both, and
+        # `along` is how far up its tube an LED sits, 0 to 1 -- for a rim
+        # LED, how far round from the bottom.  The strip runs up each
+        # tube and back down, so both rows share a height.  -1 on the
+        # shell.  This is what lets an ear be lit as blades rather than
+        # as one blob.
+        self.tube = np.array([r.get("tube", -1) for r in rows], int)
+        self.along = np.array([r.get("along", -1.0) for r in rows], float)
 
         # normalised 0..1 helpers, computed per part so an effect that
         # sweeps "left to right" does so across the whole helmet
@@ -642,20 +650,38 @@ class Eyes(Preset):
 
 
 class Matrix(Preset):
-    """Drops falling down the face, one per azimuth column."""
+    """Rain down every shell strip, and down all six ear tubes.
+
+    A column used to be an arbitrary slice of azimuth; now it is a strip,
+    and each strip is one channel of the print, so the rain runs down
+    lines that are really there.  The bright head leads and the trail
+    follows -- it was the other way round, which read as a curtain.  And
+    the ears were simply off for all of it, in what is the shows'
+    most-used effect; each tube is a column now, falling from its high
+    end, with the rims as a faint outline.  `columns` is only used by a
+    map that has no strips.
+    """
     name = "matrix"
     params = {"color": (0, 255, 70), "columns": 24, "speed": 0.55,
               "tail": 0.30}
 
     def render(self, h, t, music=None):
-        nc = self.p["columns"]
-        col = np.clip((h.nfa * nc).astype(int), 0, nc - 1)
+        c = np.array(self.p["color"], float)
+        col = np.where(h.shell, h.group, -1)
+        if not (col[h.shell] >= 0).any():          # no strips: azimuth bins
+            nc = int(self.p["columns"])
+            col = np.where(h.shell, np.clip((h.nfa * nc).astype(int), 0, nc - 1), -1)
+        first = int(col.max()) + 1                # ear tubes after the strips
+        on_tube = h.tube >= 0
+        col = np.where(on_tube, first + h.tube + 3 * h.ear2.astype(int), col)
+        pos = np.where(on_tube, 1.0 - h.along, 1.0 - h.nel)     # 0 at the top
+        nc = int(col.max()) + 1
         seed = (np.sin(np.arange(nc) * 78.233) * 43758.5453) % 1.0
         head = (t * self.p["speed"] * (0.6 + seed) + seed) % 1.4 - 0.2
-        d = (1.0 - h.nel) - head[col]
-        k = np.where(d >= 0, np.exp(-d / self.p["tail"]), 0.0)
-        out = k[:, None] * np.array(self.p["color"])
-        out[~h.shell] = 0
+        d = head[np.maximum(col, 0)] - pos
+        k = np.where((col >= 0) & (d >= 0), np.exp(-d / self.p["tail"]), 0.0)
+        out = k[:, None] * c
+        out[h.rims] = c * 0.08
         return out
 
 
@@ -1080,13 +1106,54 @@ class Bloom(Preset):
         return hsv(np.full(h.n, hue), self.p["sat"], np.clip(v, 0, 1))
 
 
+class Blades(Preset):
+    """The ear tubes as blades: lit in turn, then all at once.
+
+    A bar of four.  On the first three beats the lowest, middle and top
+    tube of both ears ignite from the low end up, with a white-hot front,
+    and settle to a glow; on the fourth everything flashes -- tubes, rims
+    and a little of the shell -- and fades into the next bar.  Locked to
+    the beat grid like any periodic preset, so in a show the bar is the
+    music's bar.  It needs the map to know which tube an LED is in and
+    how far up it, which it only has since the ears came from the CAD.
+    """
+    name = "blades"
+    params = {"color": (0, 170, 255), "tip": (255, 255, 255),
+              "bed": (0, 8, 18), "period": 1.935, "rise": 0.35, "keep": 0.18}
+
+    def render(self, h, t, music=None):
+        c = np.array(self.p["color"], float)
+        tip = np.array(self.p["tip"], float)
+        bed = np.array(self.p["bed"], float)
+        rise, keep = self.p["rise"], self.p["keep"]
+        cyc = ((t / self.p["period"]) % 1.0) * 4.0
+        slot = int(cyc)
+        p = cyc - slot
+        out = np.tile(bed, (h.n, 1))
+        if slot < 3:
+            front = min(p / rise, 1.0)
+            level = 1.0 - (1.0 - keep) * min(max((p - rise) / (1.0 - rise), 0.0), 1.0)
+            out[(h.tube >= 0) & (h.tube < slot)] = c * keep
+            lit = (h.tube == slot) & (h.along <= front)
+            hot = (np.clip(1.0 - (front - h.along[lit]) / 0.15, 0, 1)
+                   * (1.0 if p < rise else 0.0))[:, None]
+            out[lit] = (1 - hot) * (c * level) + hot * (tip * level)
+            out[h.rims] = c * 0.10
+        else:
+            k = 1.0 - p
+            out[h.tube >= 0] = 0.5 * (c + tip) * k
+            out[h.rims] = tip * k * k
+            out[h.shell] = bed + c * 0.30 * k * k
+        return out
+
+
 REGISTRY = {}
 for _c in (Solid, Breathe, RainbowSweep, Scanner, Wipe, Strobe, Twinkle,
            Comet, Ripple, Plasma, Fire, EarSpin, TubePulse, Police,
            Equaliser, BeatPulse, TextScroll, SpriteShow, Eyes, Matrix,
            Spiral, Pinwheel, Heartbeat, Confetti, Lightning, Wave,
            Gradient, Chase, VuMeter, Sparkle, Countdown, Split,
-           AlignBar, StripId, Spectrum, PitchWheel, Bloom):
+           AlignBar, StripId, Spectrum, PitchWheel, Bloom, Blades):
     REGISTRY[_c.name] = _c
 
 
@@ -1109,6 +1176,7 @@ for _c in (Solid, Breathe, RainbowSweep, Scanner, Wipe, Strobe, Twinkle,
 # name -> (parameter, unit, cycles of the parameter per visual cycle)
 LOCKABLE = {
     "alignbar":  ("period", "s", 1.0),
+    "blades":    ("period", "s", 1.0),
     "breathe":   ("period", "s", 1.0),
     "chase":     ("period", "s", 1.0),
     "comet":     ("period", "s", 1.0),

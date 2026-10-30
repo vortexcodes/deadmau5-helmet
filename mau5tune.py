@@ -81,7 +81,7 @@ def score(show, music, helmet, guard_for, samples=500, override=None):
     draw, level, onbeat, cues = [], [], [], []
     for t in ts:
         frame = player.frame(float(t))
-        shown, rep = guard.apply(np.clip(frame, 0, 255), now=float(t))
+        shown, rep = guard.apply(np.clip(frame, 0, 255), now=float(t), gain=player.gain)
         draw.append(rep["sent_ma"])
         level.append(music.level_at(float(t)) if music else 0.0)
         onbeat.append(music.beat_phase(float(t)) < 0.25 if music else False)
@@ -102,15 +102,38 @@ def score(show, music, helmet, guard_for, samples=500, override=None):
     out["swing"] = (hi - lo) / hi if hi > 1e-6 else 0.0
     out["mean_ma"] = float(draw.mean())
     out["peak_ma"] = hi
-    if onbeat.any() and (~onbeat).any():
-        out["beat"] = float(draw[onbeat].mean() / max(draw[~onbeat].mean(), 1e-6))
-    else:
-        out["beat"] = float("nan")
+    out["beat"] = beat_contrast(sh, music, helmet, guard_for)
     seen = [c for c in cues if c]
     out["presets"] = len(set(seen))
     changes = sum(1 for a, b in zip(seen, seen[1:]) if a != b)
     out["hold_s"] = dur / max(changes, 1)
     return out
+
+
+def beat_contrast(show, music, helmet, guard_for, pairs=200):
+    """How much brighter the helmet is on a beat than half a beat later.
+
+    Paired, on purpose.  This used to compare every sample that fell
+    near a beat with every one that did not, across the whole track --
+    which mostly compared one section with another, so a drop that
+    happened to land in the on-beat bucket moved it more than the pulse
+    ever could, and it read 1.0 whatever the pulse did.  Each beat
+    against the half-beat after it, through one guard in time order,
+    leaves only what the beat itself does.
+    """
+    beats = np.asarray(getattr(music, "beats", []) if music else [], float)
+    if len(beats) < 4:
+        return float("nan")
+    spb = float(np.median(np.diff(beats)))
+    guard = guard_for()
+    player = mau5show.Player(show, helmet=helmet, music=music)
+    on, off = [], []
+    for tb in beats[::max(1, len(beats) // pairs)]:
+        for t, acc in ((tb + 0.02, on), (tb + 0.5 * spb, off)):
+            frame = player.frame(float(t))
+            _, rep = guard.apply(np.clip(frame, 0, 255), now=float(t), gain=player.gain)
+            acc.append(rep["sent_ma"])
+    return float(np.mean(on) / max(np.mean(off), 1e-6))
 
 
 def line(name, s):
@@ -140,7 +163,7 @@ def main(argv=None):
     print("follow: how the helmet's current tracks the track's loudness "
           "(-1..+1, want > +0.4)")
     print("swing:  how much of its own range the show uses (0..1)")
-    print("beat:   brightness on a beat over brightness off it\n")
+    print("beat:   current on a beat over current half a beat later, paired\n")
 
     base = {}
     for n in names:

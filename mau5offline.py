@@ -85,10 +85,10 @@ def bundle():
         "f32": {k: _b64(v, "<f4") for k, v in {
             "px": h.px, "py": h.py, "depth": h.depth, "nx": h.nx, "ny": h.ny,
             "nfa": h.nfa, "nel": h.nel, "u": h.u, "fa": h.fa,
-            "ea": h.ea, "er": h.er,
+            "ea": h.ea, "er": h.er, "along": h.along,
             "xyz": h.xyz.reshape(-1),
         }.items()},
-        "i16": {"group": _b64(h.group, "<i2")},
+        "i16": {"group": _b64(h.group, "<i2"), "tube": _b64(h.tube, "<i2")},
         "regions": runs,
         "fonts": {
             "font": {k: list(v) for k, v in FONT5x7.items()},

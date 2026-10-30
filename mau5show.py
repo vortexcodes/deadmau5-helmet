@@ -26,6 +26,7 @@ import math
 import os
 import random
 import time
+import zlib
 
 import numpy as np
 
@@ -47,11 +48,11 @@ POOLS = {
     2: [("plasma", {}), ("rainbow", {"period": 6.0}), ("fire", {}),
         ("eq", {}), ("comet", {"period": 1.6}), ("vu", {}),
         ("split", {"shell": "plasma", "ears": "chase"}),
-        ("wave", {"period": 1.6})],
+        ("wave", {"period": 1.6}), ("blades", {})],
     3: [("strobe", {"hz": 6.0}), ("eq", {}), ("fire", {"speed": 1.8}),
         ("rainbow", {"period": 2.5}), ("police", {}), ("lightning", {"every": 1.1}),
         ("pinwheel", {"period": 1.2}), ("confetti", {"rate": 26.0}),
-        ("split", {"shell": "fire", "ears": "pinwheel"})],
+        ("split", {"shell": "fire", "ears": "pinwheel"}), ("blades", {})],
 }
 
 PALETTES = [
@@ -232,7 +233,8 @@ SHAPE_POOLS = {
     "build": [("scanner", {"bounce": False}), ("wipe", {}), ("comet", {}),
               ("chase", {}), ("matrix", {})],
     "drop":  [("strobe", {"hz": 8.0}), ("lightning", {"every": 0.8}),
-              ("police", {}), ("eq", {}), ("beatpulse", {}), ("fire", {})],
+              ("police", {}), ("eq", {}), ("beatpulse", {}), ("fire", {}),
+              ("blades", {})],
     "fall":  [("breathe", {}), ("ripple", {}), ("twinkle", {}),
               ("gradient", {}), ("tubepulse", {})],
 }
@@ -341,6 +343,8 @@ def _musical_params(name, kw, m, phrase):
     bar = spb * 4.0
     cls = E.REGISTRY[name]
     lvl = phrase["level"]
+    if name == "blades" and "period" not in kw:
+        kw["period"] = round(bar, 3)         # a tube a beat, whatever the level
     if "period" in cls.params and "period" not in kw:
         bars = {0: 4.0, 1: 2.0, 2: 1.0, 3: 0.5}[lvl]
         if phrase["shape"] == "build":
@@ -415,8 +419,10 @@ def build(track, fps=40, out=None, seed=None, verbose=False):
     os.makedirs(SHOWS, exist_ok=True)
     base = os.path.splitext(os.path.basename(track))[0]
     m = Music(track, fps=fps, cache=os.path.join(SHOWS, base + ".analysis.npz"))
-    rng = random.Random(seed if seed is not None else
-                        abs(hash(base)) % (2 ** 31))
+    # A stable seed from the name.  This was hash(), which Python salts
+    # afresh in every process, so rebuilding a show gave a different show
+    # each time and no tuning could be repeated.
+    rng = random.Random(seed if seed is not None else zlib.crc32(base.encode()))
     pal_of = _palette_regions(m)
     phrases = _phrases(m)
     recent, cues = [], []
@@ -463,7 +469,7 @@ def build(track, fps=40, out=None, seed=None, verbose=False):
     show = {"track": os.path.basename(track), "fps": fps,
             "duration": round(m.duration, 2), "bpm": round(m.bpm, 2),
             "beats": len(m.beats), "analysis": base + ".analysis.npz",
-            "fade": 0.45, "accent": True, "pulse": 0.22, "cues": cues}
+            "fade": 0.45, "accent": True, "pulse": 0.40, "cues": cues}
     out = out or os.path.join(SHOWS, base + ".json")
     json.dump(show, open(out, "w"), indent=1)
     if verbose:
@@ -519,6 +525,7 @@ class Player:
         # once a bar and reads as slow; a little lift on each beat is
         # what makes it look driven by the track rather than beside it.
         self.pulse = float(show.get("pulse", 0.22))
+        self.gain = 1.0                 # the beat pulse; see frame()
         # How far the whole picture drops in the quiet parts.  Without
         # this a show runs at one level from end to end and the only
         # thing that changes is which effect is on screen, which is
@@ -603,6 +610,7 @@ class Player:
         return np.maximum(out, lay) if ov.get("mix") == "max" else out + lay
 
     def frame(self, t):
+        self.gain = 1.0
         cur = self.cue_at(t)
         if cur is None:
             return np.zeros((self.h.n, 3))
@@ -627,11 +635,21 @@ class Player:
                      + 0.4 * self.music.level_at(t))
                 k = (1.0 - self.dyn) + self.dyn * float(e) ** self.dyn_gamma
                 out = out * k
-            # A short lift on every beat, scaled by how loud the section
-            # is -- a breakdown should breathe, a drop should hit.
+            # A pulse on every beat, scaled by how loud the section is --
+            # a breakdown should breathe, a drop should hit.  It is not
+            # applied here.  Multiplied into the frame it was exactly
+            # what the power guard exists to take away again -- the
+            # per-LED ceilings and the governor flatten anything loud --
+            # and the shows measured 1.00-1.06 on-beat over half a beat
+            # later.  So the frame is left as written and the pulse is
+            # handed over as `gain`, at most 1, for whoever sends the
+            # frame to apply after the guard: the beat is the frame at
+            # its limit and the gaps between are dimmer.
+            self.gain = 1.0
             if self.pulse > 0 and lvl >= 1:
                 k = max(0.0, 1.0 - ph * 3.0) ** 2
-                out = out * (1.0 + self.pulse * (0.4 + 0.3 * lvl) * k)
+                amp = self.pulse * (0.4 + 0.3 * lvl)
+                self.gain = (1.0 + amp * k) / (1.0 + amp)
             if self.accent and lvl >= 2 and self.music.is_downbeat(t):
                 k = max(0.0, 1.0 - ph * 6.0) * 0.45
                 if k > 0:
@@ -676,7 +694,8 @@ def preview(show_path, seconds=None, fps=24, out=None, with_audio=True,
     tmp = tempfile.mkdtemp(prefix="mau5show")
     n = int(dur * fps)
     for i in range(n):
-        sc.frame(pl.frame(start + i / fps)).save(os.path.join(tmp, "f%05d.png" % i))
+        f = pl.frame(start + i / fps)
+        sc.frame(f * pl.gain).save(os.path.join(tmp, "f%05d.png" % i))
     out = out or os.path.splitext(show_path)[0] + "_preview.mp4"
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
            "-framerate", str(fps), "-i", os.path.join(tmp, "f%05d.png")]
@@ -729,7 +748,8 @@ def play(show_path, host=None, seconds=None, fps=40, audio=True, verbose=True):
             t = time.monotonic() - t0
             if t >= dur:
                 break
-            pix.send(pl.frame(t))
+            f = pl.frame(t)
+            pix.send(f, gain=pl.gain)
             nframes += 1
             nxt = t0 + (nframes / fps)
             slack = nxt - time.monotonic()
