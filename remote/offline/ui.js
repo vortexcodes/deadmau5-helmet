@@ -409,7 +409,8 @@ async function connect() {
     return false;
   }
   const bits = [hi.name || 'WLED', 'v' + (hi.ver || '?'),
-                hi.count + ' LEDs', hi.ws ? 'websocket' : 'http'];
+                hi.count + ' LEDs',
+                hi.ws ? (hi.binary ? 'binary frames' : 'websocket') : 'http'];
   say(bits.join(' · '), 'good');
   const warn = [];
   // More LEDs on the controller than in the map is a dark one at the

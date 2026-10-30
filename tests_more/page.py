@@ -654,7 +654,9 @@ def t_page_deadman():
     eq(d["revived"], 1, "the page should count the revival so it can say so")
     ok(d["wholeNext"], "the frame after a revival must go whole")
     eq(d["normalAgain"], ["nl", "nl"], "after the revival, arms are quiet again")
-    eq(d["afterRelease"][-1].split(","), ["nl", "on", "seg"],
+    # (live:false leaves realtime at once -- WLED 16's binary frames are
+    # realtime -- and is harmless on 0.15.4)
+    eq(d["afterRelease"][-1].split(","), ["live", "nl", "on", "seg"],
        "an arm on its way at release must not arm or light after it: %s"
        % d["afterRelease"])
 

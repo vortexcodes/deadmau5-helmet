@@ -202,6 +202,44 @@ const REQ_TIMEOUT_MS = 5000;
 const DEADMAN_EVERY_MS = 20000;
 const DEADMAN_RETRY_MS = 3000;
 
+// Binary frames, for firmware that takes them.  WLED 16 accepts DDP over
+// this socket -- a first byte of 2, then the same packet the laptop sends
+// by UDP -- which needs no JSON parsing and draws no reply per message
+// (read in its ws.cpp and e131.cpp, v16.0.1).  The per-message reply and
+// the parsing are what 0.15.4 could not keep up with.  Each packet is
+// padded to PAD like everything else on this socket; the firmware only
+// rejects a packet shorter than its header says, so the padding is
+// ignored.  472 LEDs a packet keeps 1 + 10 + 1416 bytes under PAD.
+const DDP_LEDS = 472;
+const DEPTH_BINARY = 3;
+
+function takesBinary(ver) {
+  const m = /^(\d+)\.(\d+)/.exec(String(ver || ''));
+  if (!m) return false;
+  const major = +m[1], minor = +m[2];
+  return major >= 16 || (major === 0 && minor >= 16);
+}
+
+// One frame as DDP packets: every one PAD bytes, the last with push set.
+function ddpMessages(rgb, count, seq, pad) {
+  const out = [];
+  const total = count * 3, per = DDP_LEDS * 3;
+  for (let off = 0; off < total; off += per) {
+    const len = Math.min(per, total - off);
+    const last = off + len >= total;
+    const m = new Uint8Array(Math.max(pad, 11 + len));
+    m[0] = 2;                                   // DDP, for WLED's socket
+    m[1] = 0x40 | (last ? 0x01 : 0);            // version 1, push on the last
+    m[2] = seq & 0x0F; m[3] = 0; m[4] = 1;      // sequence, RGB, default output
+    m[5] = (off >>> 24) & 255; m[6] = (off >>> 16) & 255;
+    m[7] = (off >>> 8) & 255; m[8] = off & 255;
+    m[9] = (len >>> 8) & 255; m[10] = len & 255;
+    m.set(rgb.subarray(off, off + len), 11);
+    out.push(m);
+  }
+  return out;
+}
+
 // The chain cut into equal segments of at most SEG_MAX.
 function layout(count, segMax) {
   const n = Math.max(1, Math.ceil(count / (segMax || SEG_MAX)));
@@ -347,9 +385,13 @@ class Link {
     // controller was last heard from about them.  See busy().
     this.owed = 0;
     this._owedAt = 0;
-    this.depth = opts.depth || DEPTH;
-    this.pongTimeout = this.depth > 1 ? PONG_TIMEOUT_MS : PONG_TIMEOUT_1_MS;
-    this.owedQuiet = this.depth > 1 ? OWED_QUIET_MS : OWED_QUIET_1_MS;
+    this._depthOpt = opts.depth || 0;
+    this._setDepth(this._depthOpt || DEPTH);
+    // Binary frames once hello() has seen a firmware that takes them.
+    this.binary = false;
+    this.allowBinary = opts.binary !== false;
+    this._seq = 0;
+    this._lastBin = null;
     // For testing a phone from a laptop: hold every pong this long.
     this.ackDelay = opts.ackDelay || 0;
     // How often the controller has been finishing frames, smoothed; the
@@ -447,6 +489,7 @@ class Link {
   // whole.  After a reconnect, a refusal, or a new layout.
   dirty() {
     this.last.fill(null);
+    this._lastBin = null;
     this._keyAt = 0;
   }
 
@@ -515,6 +558,12 @@ class Link {
     });
   }
 
+  _setDepth(d) {
+    this.depth = d;
+    this.pongTimeout = d > 1 ? PONG_TIMEOUT_MS : PONG_TIMEOUT_1_MS;
+    this.owedQuiet = d > 1 ? OWED_QUIET_MS : OWED_QUIET_1_MS;
+  }
+
   // A frame is on the strip: messages are handled in order, so the
   // pong answers the oldest frame still waiting.
   _pong() {
@@ -577,6 +626,10 @@ class Link {
     const state = await this.getJSON('/json/state');
     const leds = (info.leds || {});
     this.ledCount = Math.max(leds.count | 0, this.count);
+    this.binary = this.allowBinary && takesBinary(info.ver);
+    // Frames can overlap safely only without the JSON: on 0.15.4 a
+    // second frame in flight restarted the controller.
+    this._setDepth(this._depthOpt || (this.binary ? DEPTH_BINARY : DEPTH));
     const segs = (state.seg || []).slice().sort((x, y) => x.start - y.start);
     // Do the segments between them reach every LED?  Whatever layout a
     // preset, or the last session, left behind, begin() replaces it --
@@ -593,6 +646,7 @@ class Link {
       count: leds.count | 0, maxpwr: leds.maxpwr,
       segments: segs.length, reach: reach,
       covers: reach >= Math.min(leds.count | 0, this.count),
+      binary: this.binary,
       presets: Array.from(this.presets),
       ws: await this.openSocket(),
     };
@@ -744,8 +798,8 @@ class Link {
     // as solid orange at full brightness for as long as nobody noticed.
     const body = JSON.stringify(
       this.canHandBack()
-        ? { ps: this.standby, nl: { on: false }, seg: seg }
-        : { on: false, nl: { on: false }, seg: seg });
+        ? { ps: this.standby, live: false, nl: { on: false }, seg: seg }
+        : { on: false, live: false, nl: { on: false }, seg: seg });
     // sendBeacon survives the page going away, which fetch does not.
     if (navigator.sendBeacon) {
       try {
@@ -831,6 +885,35 @@ class Link {
     if (!ws) this.reopen(now);
     if (this.busy(now)) { this.failed++; return -1; }
 
+    if (ws && this.binary) {
+      const n = this.count, perm = this.perm, tmp = this._tmp;
+      for (let i = 0; i < n; i++) {
+        const b = i * 3;
+        tmp[b] = frame[b + perm[b]];
+        tmp[b + 1] = frame[b + perm[b + 1]];
+        tmp[b + 2] = frame[b + perm[b + 2]];
+      }
+      const key = now - this._keyAt >= KEYFRAME_MS;
+      if (!key && this._lastBin) {
+        let same = true;
+        for (let i = 0; i < tmp.length; i++) if (tmp[i] !== this._lastBin[i]) { same = false; break; }
+        if (same) return 0;
+      }
+      this._keyAt = key ? now : this._keyAt;
+      this._seq = this._seq % 15 + 1;
+      let bytes = 0;
+      for (const m of ddpMessages(tmp, n, this._seq, this.pad)) { ws.send(m); bytes += m.length; }
+      this._lastBin = (this._lastBin && this._lastBin.length === tmp.length)
+        ? (this._lastBin.set(tmp), this._lastBin) : tmp.slice();
+      ws.send('p');
+      if (this.depth > 1) ws.send(FILLER);
+      this.unacked.push(now);
+      this.path = 'ddp';
+      this.sent++; this.bytes += bytes;
+      this.armDeadman(false);
+      return bytes;
+    }
+
     if (ws) {
       const key = now - this._keyAt >= KEYFRAME_MS;
       const todo = this.frags(frame, key);
@@ -888,7 +971,8 @@ class Link {
 }
 
 const api = { Link, encode, flatten, bodyFor, fragFor, pack, layout, makePerm, ORDERS,
-              PAD, SEG_MAX, KEYFRAME_MS, DEPTH, FILLER };
+              PAD, SEG_MAX, KEYFRAME_MS, DEPTH, FILLER, takesBinary, ddpMessages,
+              DDP_LEDS, DEPTH_BINARY };
 root.MAU5 = Object.assign(root.MAU5 || {}, api);
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
