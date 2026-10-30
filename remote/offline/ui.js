@@ -1206,10 +1206,19 @@ $('hand').onchange = (e) => {
   link.standby = state.handover ? (D.standby || null) : null;
   save();
 };
+// One brightness POST at a time, the newest value sent when it is back.
+// A drag fired one per input event: dozens of requests at a controller
+// that restarts when pushed, landing in any order.
+let briBusy = false, briWant = null;
+function sendBri() {
+  if (briBusy || briWant === null || !state.running) return;
+  const v = briWant; briWant = null; briBusy = true;
+  link.setBri(v).catch(() => {}).then(() => { briBusy = false; sendBri(); });
+}
 $('bri').oninput = (e) => {
   state.bri = +e.target.value;
   $('brival').textContent = state.bri;
-  if (state.running) link.setBri(state.bri).catch(() => {});
+  if (state.running) { briWant = state.bri; sendBri(); }
   save();
 };
 $('cycle').onchange = (e) => { state.cycle = +e.target.value; save(); };

@@ -231,7 +231,15 @@ class Controller:
             self.preset_t0 = time.monotonic()
 
     def set_show(self, name):
+        # A show is a file in shows/ by its bare name, never a path: the
+        # name comes from the network, and joined as given it loaded any
+        # JSON on the disk ("../../somewhere.json").
+        name = str(name)
+        if os.path.basename(name) != name or not name.endswith(".json"):
+            raise ValueError("no show %r" % name)
         path = os.path.join(SHOWS, name)
+        if not os.path.isfile(path):
+            raise ValueError("no show %r" % name)
         show = json.load(open(path))
         track = os.path.join(HERE, show["track"])
         music = mau5show._music_for(show, track)

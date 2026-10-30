@@ -458,16 +458,34 @@ class Link {
     // connect() runs at load and again on every start, and each call
     // used to leave another socket behind.
     if (this.ws && this.ws.readyState === 1) return Promise.resolve(true);
+    // And two calls while one was still connecting -- start tapped while
+    // the page was still saying hello -- opened two, and the one not kept
+    // stayed open on the controller.  Every extra client there costs it
+    // memory; a second and third client appeared before each of tonight's
+    // restarts.  So a connect already on its way is shared.
+    if (this._connecting) return this._connecting;
+    this._connecting = this._openSocket(timeoutMs);
+    const done = () => { this._connecting = null; };
+    this._connecting.then(done, done);
+    return this._connecting;
+  }
+
+  _openSocket(timeoutMs) {
     return new Promise((resolve) => {
       let ws;
       try {
         const base = this.origin || (location.protocol + '//' + location.host);
         ws = new WebSocket(base.replace(/^http/, 'ws') + '/ws');
       } catch (e) { return resolve(false); }
-      const giveUp = setTimeout(() => { try { ws.close(); } catch (e) {} resolve(false); },
+      const giveUp = setTimeout(() => { gaveUp = true; try { ws.close(); } catch (e) {} resolve(false); },
                                 timeoutMs || 2500);
+      let gaveUp = false;
       ws.onopen = () => {
         clearTimeout(giveUp);
+        if (gaveUp || (this.ws && this.ws !== ws && this.ws.readyState === 1)) {
+          try { ws.close(); } catch (e) {}   // late, or another is live
+          return;
+        }
         this.ws = ws;
         this._opened = performance.now();
         this.dirty();
