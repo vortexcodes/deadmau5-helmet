@@ -1,0 +1,163 @@
+{
+ "v": 1,
+ "show": "deadmau5 - Ghosts n Stuff (Nero Remix)",
+ "about": "Bars of the analysis grid: bar b starts at 0.986 + 1.714 b seconds, 242 bars. Ghosts drift over the shell whenever the track empties out. The drops are half-time: the kick on the rims, the snare on beat three across the shell, and in the B sections the left half and ear 1 call on beat one while the right half and ear 2 answer on beat three. Drop 2 lands at bar 63, a bar ahead of the sixteen-bar grid, because that is where the bass lands. White once, on drop 3.",
+ "lead": 0,
+ "marks": {
+  "kick": 7, "groove": 16, "build": 24, "roll": 31, "drop1": 32, "void": 47,
+  "title": 48, "sweep55": 55, "rise": 59, "drop2": 63, "drop2B": 80, "drop2A": 96,
+  "drop2B2": 112, "mid": 128, "stabs": 135, "strip": 144, "build3": 149,
+  "suck3": 157, "drop3": 160, "drop3A": 176, "drop3all": 192, "fin": 208,
+  "outro": 224, "end": 240
+ },
+ "palettes": {
+  "ghost": [[0, 0, 0], [0, 60, 45], [40, 255, 160], [200, 255, 235]],
+  "acid": [[0, 0, 0], [40, 255, 0], [150, 0, 255], [255, 255, 255]],
+  "nero": {"stops": [[255, 0, 70], [140, 0, 255], [50, 255, 0]], "wrap": true},
+  "pure": [[0, 255, 0], [150, 0, 255], [255, 255, 255]]
+ },
+ "motifs": {
+  "ghosts": {"fx": "sparks", "on": "shell", "rate": 0.5, "life": 6, "seed": 7,
+             "pal": "ghost", "c": 0.6, "spread": 0.15},
+  "kick": {"fx": "fill", "on": "rims", "pal": "ghost", "c": 0.66,
+           "gate": {"pat": "x...", "step": 0.25, "decay": 0.6}},
+  "wobble": {"fx": "grad", "on": "shell", "axis": "y", "speed": 0.125, "warp": 0.35,
+             "wscale": 1.5, "wspeed": 0.5, "pal": "acid",
+             "gain": {"band": "bass", "punch": true, "lo": 0.25, "hi": 0.85}},
+  "pingpong": {"fx": "blades", "seq": ["012"], "step": 1, "side": "alt", "rim": 0.6, "rise": 0.12,
+               "pal": "nero", "c": 0.66, "ctip": 0.33},
+  "snare": {"fx": "fill", "on": "shell", "pal": "nero", "c": 0, "gain": 0.6,
+            "gate": {"pat": "........x.......", "step": 0.25, "decay": 0.6}},
+  "calls": [{"fx": "fill", "on": "left", "pal": "nero", "c": 0,
+             "gate": {"pat": "x...............", "step": 0.25, "decay": 1}},
+            {"fx": "fill", "on": "right", "pal": "nero", "c": 0.33,
+             "gate": {"pat": "........x.......", "step": 0.25, "decay": 1}}],
+  "answer": {"fx": "blades", "seq": ["012"], "step": 2, "side": "alt", "rise": 0.08, "pal": "nero",
+             "c": 0.66, "ctip": 0.33},
+  "callresp": [{"use": "calls"}, {"use": "answer"}],
+  "spin": {"fx": "grad", "on": "rims", "axis": "a", "scale": 4, "speed": 0.25, "gain": 0.4},
+  "ring": {"fx": "sweep", "on": "all", "axis": "r", "shape": "p", "mode": "band",
+           "from": 0, "to": 1.2, "width": 0.25, "pal": "pure", "c": 0},
+  "rise": {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "fill",
+           "soft": 0.15, "from": -0.1, "to": 1.05}
+ },
+ "scenes": [
+  {"name": "ghosts", "from": -1, "to": "kick", "pal": "ghost",
+   "layers": [{"use": "ghosts", "gain": 0.5, "env": {"in": 8}}]},
+
+  {"name": "kick", "from": "kick", "to": "groove", "pal": "ghost",
+   "layers": [{"use": "ghosts", "gain": 0.5},
+              {"use": "kick", "gain": 0.8},
+              {"fx": "blades", "seq": ["0", "1", "2", "1"], "step": 2, "c": 0.66, "gain": 0.4}]},
+
+  {"name": "groove", "from": "groove", "to": "build", "pal": "acid",
+   "layers": [{"fx": "grad", "on": "shell", "axis": "y", "speed": 0.0625, "hi": 0.5, "gain": 0.3},
+              {"fx": "blades", "step": 1, "rise": 0.15, "c": 0.25, "gain": 0.7},
+              {"use": "kick"},
+              {"fx": "sparks", "on": "face", "rate": 2, "life": 0.5, "c": 0.66,
+               "gain": {"band": "high", "lo": 0, "hi": 0.8}}]},
+
+  {"name": "build", "from": "build", "to": "drop1", "pal": "acid", "out": 0.5,
+   "layers": [{"use": "rise", "c": [0.1, 0.9], "gain": [0.4, 0.9]},
+              {"fx": "blades", "seq": ["0", "1", "2", "012"], "step": {"build": 1, "28": 0.5, "30": 0.25},
+               "c": 0.25, "gain": [0.5, 1]},
+              {"use": "kick", "gain": 0.9}]},
+
+  {"name": "drop1", "from": "drop1", "to": "void", "pal": "nero",
+   "pump": {"pat": "x.......x.......", "step": 0.25, "depth": 0.3, "decay": 0.5},
+   "layers": [{"use": "wobble"}, {"use": "pingpong"}, {"use": "snare"}]},
+
+  {"name": "void", "from": "void", "to": "rise", "pal": "ghost",
+   "layers": [{"use": "ghosts", "rate": 0.25, "life": 8, "gain": 0.25}]},
+
+  {"name": "rise", "from": "rise", "to": "drop2", "pal": "acid", "out": 0.5,
+   "layers": [{"use": "rise", "c": [0.2, 1], "gain": [0.4, 0.9]},
+              {"fx": "blades", "seq": ["0", "1", "2"], "step": {"rise": 1, "61": 0.5, "62": 0.25},
+               "c": 0.25, "gain": [0.5, 1]}]},
+
+  {"name": "drop2 A", "from": "drop2", "to": "drop2B", "like": "drop1"},
+
+  {"name": "drop2 B", "from": "drop2B", "to": "drop2A", "pal": "nero",
+   "pump": {"pat": "x.......x.......", "step": 0.25, "depth": 0.3, "decay": 0.5},
+   "layers": [{"use": "callresp"}, {"use": "spin", "pal": "nero"}]},
+
+  {"name": "drop2 A'", "from": "drop2A", "to": "drop2B2", "like": "drop1",
+   "patch": {"1": {"step": 0.5}}},
+
+  {"name": "drop2 B'", "from": "drop2B2", "to": "mid", "like": "drop2 B",
+   "add": [{"fx": "sparks", "on": "all", "rate": 4, "life": 0.5, "c": 0.66,
+            "gain": {"band": "high", "lo": 0.2, "hi": 0.8}}]},
+
+  {"name": "mid", "from": "mid", "to": "stabs", "pal": "ghost",
+   "layers": [{"use": "spin", "gain": 0.4},
+              {"fx": "grad", "on": "shell", "axis": "y", "speed": 0.03125, "gain": 0.25},
+              {"use": "ghosts", "life": 4, "gain": 0.35}]},
+
+  {"name": "stabs", "from": "stabs", "to": "strip", "pal": "acid",
+   "layers": [{"fx": "fill", "on": "all", "c": 0.66,
+               "gain": {"band": "mid", "punch": true, "lo": 0, "hi": 0.8}},
+              {"fx": "blades", "seq": ["012"], "side": "both", "c": 0.25, "ctip": 0.66,
+               "gain": {"band": "mid", "punch": true, "lo": 0, "hi": 1}}],
+   "each": {"env": {"out": 4}}},
+
+  {"name": "strip", "from": "strip", "to": "build3", "pal": "ghost",
+   "layers": [{"use": "ghosts", "gain": 0.4},
+              {"fx": "preset", "name": "sprite", "on": "face",
+               "params": {"sprite": "x_eyes", "color": "ghost@1"}, "gain": 0.5,
+               "env": {"in": 4}},
+              {"fx": "fill", "on": "ears", "c": 0.33,
+               "gain": {"band": "bass", "lo": 0.05, "hi": 0.4}}]},
+
+  {"name": "build3", "from": "build3", "to": "suck3", "pal": "acid",
+   "layers": [{"use": "rise", "c": [0.1, 0.9], "gain": [0.4, 0.9]},
+              {"fx": "blades", "step": {"build3": 1, "153": 0.5, "155": 0.25}, "c": 0.25,
+               "gain": [0.5, 1]},
+              {"fx": "sparks", "on": "all", "rate": {"build3": 1, "153": 2, "155": 4},
+               "life": 0.5, "c": 0.66, "gain": {"band": "high", "lo": 0.2, "hi": 1}}]},
+
+  {"name": "suck3", "from": "suck3", "to": "drop3", "pal": "ghost", "out": 1,
+   "layers": [{"use": "spin", "gain": 0.35},
+              {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "band",
+               "width": 0.12, "from": 0, "to": 1.1, "c": 0.9, "gain": [0.2, 0.7]}]},
+
+  {"name": "drop3 B", "from": "drop3", "to": "drop3A", "like": "drop2 B"},
+
+  {"name": "drop3 A", "from": "drop3A", "to": "drop3all", "like": "drop1"},
+
+  {"name": "drop3 all", "from": "drop3all", "to": "fin", "pal": "nero",
+   "pump": {"pat": "x.......x.......", "step": 0.25, "depth": 0.3, "decay": 0.5},
+   "layers": [{"use": "wobble"}, {"use": "pingpong"}, {"use": "calls"},
+              {"fx": "sparks", "on": "all", "rate": 4, "life": 0.5, "c": 0.66,
+               "gain": {"band": "high", "lo": 0.2, "hi": 0.8}}]},
+
+  {"name": "fin", "from": "fin", "to": "outro", "like": "drop3 all",
+   "patch": {"1": {"step": {"fin": 1, "216": 0.5}}},
+   "each": {"env": {"out": 8}}},
+
+  {"name": "outro", "from": "outro", "to": "end", "pal": "ghost",
+   "layers": [{"use": "ghosts", "gain": [0.5, 0]},
+              {"use": "kick", "gain": [0.6, 0]},
+              {"fx": "blades", "seq": ["012"], "step": 4, "c": 0.66, "gain": [0.4, 0]}]}
+ ],
+ "hits": [
+  {"name": "roll", "at": "roll", "beats": 3.5, "layers": [
+    {"fx": "fill", "on": "shell", "pal": "acid", "c": 0.25, "gain": 0.5,
+     "gate": {"pat": "x", "step": 0.5, "decay": 0.4}}]},
+  {"name": "DROP 1", "at": "drop1", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0, "gain": [1, 0]},
+    {"use": "ring", "pal": "acid", "c": 0.66}]},
+  {"name": "GHOSTS N STUFF", "at": "title", "beats": 40, "layers": [
+    {"fx": "preset", "name": "text", "on": "face", "fit": true, "mix": "over",
+     "env": {"in": 2, "out": 4}, "params": {"text": "GHOSTS N STUFF", "color": "ghost@0.66"}}]},
+  {"name": "sweep", "at": "sweep55", "beats": 4, "layers": [
+    {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "band", "width": 0.2,
+     "from": 0, "to": 1.1, "pal": "ghost", "c": 0.9, "gain": 0.7},
+    {"fx": "fill", "on": "ears", "pal": "ghost", "c": 0.5, "gain": [0.5, 0]}]},
+  {"name": "DROP 2", "at": "drop2", "beats": 2, "layers": [
+    {"fx": "fill", "on": "ears", "pal": "pure", "c": 0.5, "gain": [1, 0]},
+    {"use": "ring", "c": 0.5}]},
+  {"name": "DROP 3", "at": "drop3", "beats": 2, "layers": [
+    {"fx": "fill", "on": "all", "pal": "pure", "c": 1, "gain": [1, 0]},
+    {"use": "ring", "c": 1}]}
+ ]
+}

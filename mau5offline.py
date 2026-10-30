@@ -222,6 +222,12 @@ def _shows():
             "lock": sh.get("lock"),
             "cues": cues,
         }
+        # The choreography, when the song has one.  Compiled on the
+        # laptop with every default filled in, so the page evaluates it
+        # as it stands; the cues above stay, for ?cues and as the
+        # fallback if it throws.
+        if sh.get("scenes"):
+            out[fn[:-5]]["scenes"] = sh["scenes"]
     return out
 
 

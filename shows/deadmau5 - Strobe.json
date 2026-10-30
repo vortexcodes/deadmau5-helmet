@@ -876,5 +876,2826 @@
    "shape": "build",
    "gain": 0.502
   }
- ]
+ ],
+ "scenes": {
+  "v": 1,
+  "src": "",
+  "treatment": "2c27e9d68869",
+  "grid": {
+   "t0": 1.7564377054921643,
+   "spb": 0.4687381270555204,
+   "lead": 0.0
+  },
+  "bars": 339,
+  "pal": {
+   "ice": {
+    "stops": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      20,
+      90
+     ],
+     [
+      0,
+      140,
+      255
+     ],
+     [
+      200,
+      240,
+      255
+     ]
+    ],
+    "wrap": false
+   },
+   "dawn": {
+    "stops": [
+     [
+      8,
+      0,
+      24
+     ],
+     [
+      110,
+      0,
+      170
+     ],
+     [
+      255,
+      40,
+      110
+     ],
+     [
+      255,
+      170,
+      60
+     ]
+    ],
+    "wrap": false
+   },
+   "strobe": {
+    "stops": [
+     [
+      0,
+      60,
+      255
+     ],
+     [
+      0,
+      230,
+      255
+     ],
+     [
+      255,
+      255,
+      255
+     ],
+     [
+      120,
+      0,
+      255
+     ]
+    ],
+    "wrap": true
+   },
+   "pure": {
+    "stops": [
+     [
+      0,
+      0,
+      255
+     ],
+     [
+      0,
+      200,
+      255
+     ],
+     [
+      255,
+      255,
+      255
+     ]
+    ],
+    "wrap": false
+   }
+  },
+  "scenes": [
+   {
+    "name": "arp",
+    "from": -1.0,
+    "to": 12.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.6
+      },
+      "c": {
+       "n": 0.75
+      },
+      "gate": null,
+      "env": {
+       "in": 8.0,
+       "out": 0.0
+      },
+      "rate": {
+       "n": 2.0
+      },
+      "life": {
+       "n": 1.5
+      },
+      "spread": {
+       "n": 0.2
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 16,
+      "seed": 3.0
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.25
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "call",
+    "from": 12.0,
+    "to": 48.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.6
+      },
+      "c": {
+       "n": 0.75
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "keys": [
+        [
+         12.0,
+         2.0
+        ],
+        [
+         24.0,
+         4.0
+        ]
+       ]
+      },
+      "life": {
+       "n": 1.5
+      },
+      "spread": {
+       "n": 0.2
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 16,
+      "seed": 3.0
+     },
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.3
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 1.0
+      },
+      "speed": {
+       "n": 0.03125
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 0.5
+      },
+      "axis": "y",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "band": "bass",
+       "lo": 0.0,
+       "hi": 1.0,
+       "punch": true
+      },
+      "c": {
+       "n": 0.66
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 4.0
+      },
+      "rise": {
+       "n": 0.35
+      },
+      "keep": {
+       "n": 0.0
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.25
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "climb",
+    "from": 48.0,
+    "to": 84.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "sweep",
+      "on": "shell",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.7
+      },
+      "c": {
+       "ramp": [
+        0.3,
+        0.95
+       ]
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "width": {
+       "n": 0.15
+      },
+      "soft": {
+       "n": 0.15
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": -0.1
+      },
+      "to": {
+       "n": 1.05
+      },
+      "axis": "y",
+      "shape": "p",
+      "mode": "fill"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "ramp": [
+        0.45,
+        0.85
+       ]
+      },
+      "c": {
+       "n": 0.6
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 1.0
+      },
+      "rise": {
+       "n": 0.15
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0
+       ],
+       [
+        1
+       ],
+       [
+        2
+       ],
+       [
+        1
+       ]
+      ],
+      "side": "both"
+     },
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "band": "high",
+       "lo": 0.2,
+       "hi": 1.0,
+       "punch": false
+      },
+      "c": {
+       "n": 1.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "keys": [
+        [
+         48.0,
+         1.0
+        ],
+        [
+         64.0,
+         2.0
+        ],
+        [
+         76.0,
+         4.0
+        ]
+       ]
+      },
+      "life": {
+       "n": 0.75
+      },
+      "spread": {
+       "n": 0.0
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 0,
+      "seed": 0.0
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.3
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "bloom1",
+    "from": 84.0,
+    "to": 108.0,
+    "out": 0.0,
+    "pump": {
+     "pat": "x...",
+     "step": 0.25,
+     "decay": 0.5,
+     "depth": 0.25
+    },
+    "layers": [
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.8
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 0.8
+      },
+      "speed": {
+       "n": 0.125
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.25
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0625
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "y",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.9
+      },
+      "c": {
+       "n": 0.6
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 1.0
+      },
+      "rise": {
+       "n": 0.12
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.5
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.5
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "break1",
+    "from": 108.0,
+    "to": 136.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.45
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "n": 2.0
+      },
+      "life": {
+       "n": 2.0
+      },
+      "spread": {
+       "n": 0.2
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 16,
+      "seed": 3.0
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.3
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.125
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "riser",
+    "from": 136.0,
+    "to": 141.0,
+    "out": 0.5,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "sweep",
+      "on": "shell",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.6
+      },
+      "c": {
+       "n": 0.66
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "keys": [
+        [
+         136.0,
+         0.25
+        ],
+        [
+         138.0,
+         0.5
+        ],
+        [
+         140.0,
+         1.0
+        ]
+       ]
+      },
+      "width": {
+       "n": 0.2
+      },
+      "soft": {
+       "n": 0.1
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": 0.0
+      },
+      "to": {
+       "n": 1.0
+      },
+      "axis": "y",
+      "shape": "saw",
+      "mode": "band"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "ramp": [
+        0.3,
+        0.9
+       ]
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "keys": [
+        [
+         136.0,
+         1.0
+        ],
+        [
+         139.0,
+         0.5
+        ],
+        [
+         140.0,
+         0.25
+        ]
+       ]
+      },
+      "rise": {
+       "n": 0.35
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0
+       ],
+       [
+        1
+       ],
+       [
+        2
+       ]
+      ],
+      "side": "both"
+     }
+    ]
+   },
+   {
+    "name": "bloom2",
+    "from": 141.0,
+    "to": 168.0,
+    "out": 0.0,
+    "pump": {
+     "pat": "x...",
+     "step": 0.25,
+     "decay": 0.5,
+     "depth": 0.25
+    },
+    "layers": [
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.8
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 16.0
+      },
+      "scale": {
+       "n": 0.8
+      },
+      "speed": {
+       "n": 0.125
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.25
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0625
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "y",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.9
+      },
+      "c": {
+       "n": 0.6
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 16.0
+      },
+      "step": {
+       "n": 1.0
+      },
+      "rise": {
+       "n": 0.12
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.5
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 16.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.5
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "band": "high",
+       "lo": 0.2,
+       "hi": 0.9,
+       "punch": false
+      },
+      "c": {
+       "n": 1.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 16.0
+      },
+      "rate": {
+       "n": 4.0
+      },
+      "life": {
+       "n": 0.5
+      },
+      "spread": {
+       "n": 0.0
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 0,
+      "seed": 0.0
+     }
+    ]
+   },
+   {
+    "name": "eyes",
+    "from": 168.0,
+    "to": 184.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "preset",
+      "on": "face",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.6
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": {
+       "pat": "x",
+       "step": 4.0,
+       "decay": 4.0,
+       "floor": 0.5
+      },
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "name": "sprite",
+      "params": {
+       "sprite": "x_eyes",
+       "color": [
+        252,
+        39,
+        111
+       ]
+      },
+      "tofs": 0.0
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.25
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.35
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 8.0
+      },
+      "rise": {
+       "n": 1.0
+      },
+      "keep": {
+       "n": 0.3
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "both"
+     }
+    ]
+   },
+   {
+    "name": "build",
+    "from": 184.0,
+    "to": 205.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "sweep",
+      "on": "shell",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "ramp": [
+        0.4,
+        0.9
+       ]
+      },
+      "c": {
+       "ramp": [
+        0.2,
+        0.95
+       ]
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "width": {
+       "n": 0.15
+      },
+      "soft": {
+       "n": 0.15
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": -0.1
+      },
+      "to": {
+       "n": 1.05
+      },
+      "axis": "y",
+      "shape": "p",
+      "mode": "fill"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "ramp": [
+        0.4,
+        1.0
+       ]
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "keys": [
+        [
+         184.0,
+         2.0
+        ],
+        [
+         192.0,
+         1.0
+        ],
+        [
+         198.0,
+         0.5
+        ],
+        [
+         202.0,
+         0.25
+        ]
+       ]
+      },
+      "rise": {
+       "n": 0.35
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0
+       ],
+       [
+        1
+       ],
+       [
+        2
+       ],
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "both"
+     },
+     {
+      "fx": "sparks",
+      "on": "all",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "band": "high",
+       "lo": 0.2,
+       "hi": 1.0,
+       "punch": false
+      },
+      "c": {
+       "n": 1.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "keys": [
+        [
+         184.0,
+         1.0
+        ],
+        [
+         196.0,
+         2.0
+        ],
+        [
+         200.0,
+         4.0
+        ]
+       ]
+      },
+      "life": {
+       "n": 0.5
+      },
+      "spread": {
+       "n": 0.0
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 0,
+      "seed": 0.0
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.4
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "keys": [
+        [
+         184.0,
+         0.25
+        ],
+        [
+         196.0,
+         0.5
+        ],
+        [
+         202.0,
+         1.0
+        ]
+       ]
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "lift",
+    "from": 205.0,
+    "to": 213.0,
+    "out": 0.0,
+    "pump": {
+     "pat": "x...",
+     "step": 0.25,
+     "decay": 0.5,
+     "depth": 0.3
+    },
+    "layers": [
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.7
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 2.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "saw"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.95
+      },
+      "c": {
+       "n": 0.25
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 1.0
+      },
+      "rise": {
+       "n": 0.12
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 0.75
+      },
+      "rim": {
+       "n": 0.6
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     }
+    ]
+   },
+   {
+    "name": "suck",
+    "from": 213.0,
+    "to": 217.0,
+    "out": 1.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.35
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 2.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "sweep",
+      "on": "shell",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "ramp": [
+        0.2,
+        0.7
+       ]
+      },
+      "c": {
+       "n": 0.9
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "width": {
+       "n": 0.12
+      },
+      "soft": {
+       "n": 0.1
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": 0.0
+      },
+      "to": {
+       "n": 1.1
+      },
+      "axis": "y",
+      "shape": "p",
+      "mode": "band"
+     }
+    ]
+   },
+   {
+    "name": "drop A",
+    "from": 217.0,
+    "to": 233.0,
+    "out": 0.0,
+    "pump": {
+     "pat": "x...",
+     "step": 0.25,
+     "decay": 0.5,
+     "depth": 0.35
+    },
+    "layers": [
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 0.25
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 1.0
+      },
+      "rise": {
+       "n": 0.12
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 0.75
+      },
+      "rim": {
+       "n": 0.7
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "band": "bass",
+       "lo": 0.4,
+       "hi": 0.9,
+       "punch": true
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 3.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "saw"
+     },
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.6
+      },
+      "c": {
+       "n": 0.66
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "n": 4.0
+      },
+      "life": {
+       "n": 0.5
+      },
+      "spread": {
+       "n": 0.2
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 16,
+      "seed": 3.0
+     }
+    ]
+   },
+   {
+    "name": "drop B",
+    "from": 233.0,
+    "to": 249.0,
+    "out": 0.0,
+    "pump": {
+     "pat": "x...",
+     "step": 0.25,
+     "decay": 0.5,
+     "depth": 0.25
+    },
+    "layers": [
+     {
+      "fx": "fill",
+      "on": "left",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.8
+      },
+      "c": {
+       "n": 0.1
+      },
+      "gate": {
+       "pat": "x.......",
+       "step": 0.25,
+       "decay": 0.75,
+       "floor": 0.0
+      },
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      }
+     },
+     {
+      "fx": "fill",
+      "on": "right",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.8
+      },
+      "c": {
+       "n": 0.75
+      },
+      "gate": {
+       "pat": "....x...",
+       "step": 0.25,
+       "decay": 0.75,
+       "floor": 0.0
+      },
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      }
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.9
+      },
+      "c": {
+       "n": 0.25
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 0.5
+      },
+      "rise": {
+       "n": 0.25
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 0.75
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0
+       ],
+       [
+        1
+       ],
+       [
+        2
+       ],
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.4
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "drop A+",
+    "from": 249.0,
+    "to": 268.0,
+    "out": 0.0,
+    "pump": {
+     "pat": "x...",
+     "step": 0.25,
+     "decay": 0.5,
+     "depth": 0.35
+    },
+    "layers": [
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 0.25
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 1.0
+      },
+      "rise": {
+       "n": 0.12
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 0.75
+      },
+      "rim": {
+       "n": 0.7
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "band": "bass",
+       "lo": 0.4,
+       "hi": 0.9,
+       "punch": true
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 3.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "saw"
+     },
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.6
+      },
+      "c": {
+       "n": 0.66
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "n": 4.0
+      },
+      "life": {
+       "n": 0.5
+      },
+      "spread": {
+       "n": 0.2
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 16,
+      "seed": 3.0
+     },
+     {
+      "fx": "sparks",
+      "on": "all",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "band": "high",
+       "lo": 0.2,
+       "hi": 0.8,
+       "punch": false
+      },
+      "c": {
+       "n": 1.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "n": 2.0
+      },
+      "life": {
+       "n": 1.0
+      },
+      "spread": {
+       "n": 0.0
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 0,
+      "seed": 0.0
+     }
+    ]
+   },
+   {
+    "name": "groove",
+    "from": 268.0,
+    "to": 297.0,
+    "out": 0.0,
+    "pump": {
+     "pat": "x...",
+     "step": 0.25,
+     "decay": 0.5,
+     "depth": 0.4
+    },
+    "layers": [
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 0.45
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 1.0
+      },
+      "speed": {
+       "n": 0.0625
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "y",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.9
+      },
+      "c": {
+       "n": 0.25
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 0.5
+      },
+      "rise": {
+       "n": 0.25
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 0.75
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0
+       ],
+       [
+        1
+       ],
+       [
+        2
+       ],
+       [
+        1
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "strobe",
+      "gain": {
+       "n": 0.3
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "wind",
+    "from": 297.0,
+    "to": 316.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "grad",
+      "on": "shell",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "ramp": [
+        0.7,
+        0.3
+       ]
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 1.0
+      },
+      "speed": {
+       "n": 0.125
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.2
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.125
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "y",
+      "axis2": "x",
+      "wave": "tri"
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "ramp": [
+        0.9,
+        0.3
+       ]
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 2.0
+      },
+      "rise": {
+       "n": 0.12
+      },
+      "keep": {
+       "n": 0.15
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "alt"
+     },
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "dawn",
+      "gain": {
+       "n": 0.5
+      },
+      "c": {
+       "n": 0.75
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "n": 2.0
+      },
+      "life": {
+       "n": 1.5
+      },
+      "spread": {
+       "n": 0.2
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 16,
+      "seed": 3.0
+     }
+    ]
+   },
+   {
+    "name": "outro",
+    "from": 316.0,
+    "to": 330.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": [
+     {
+      "fx": "sparks",
+      "on": "face",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "ramp": [
+        0.6,
+        0.1
+       ]
+      },
+      "c": {
+       "n": 0.75
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "rate": {
+       "n": 2.0
+      },
+      "life": {
+       "n": 1.5
+      },
+      "spread": {
+       "n": 0.2
+      },
+      "nbr": {
+       "n": 0.4
+      },
+      "loop": 16,
+      "seed": 3.0
+     },
+     {
+      "fx": "grad",
+      "on": "rims",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "ramp": [
+        0.3,
+        0.05
+       ]
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "scale": {
+       "n": 4.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "ofs": {
+       "n": 0.0
+      },
+      "warp": {
+       "n": 0.0
+      },
+      "wscale": {
+       "n": 1.0
+      },
+      "wspeed": {
+       "n": 0.0
+      },
+      "lo": {
+       "n": 0.0
+      },
+      "hi": {
+       "n": 1.0
+      },
+      "axis": "a",
+      "axis2": "x",
+      "wave": "tri"
+     }
+    ]
+   },
+   {
+    "name": "dark",
+    "from": 330.0,
+    "to": 339.0,
+    "out": 0.0,
+    "pump": null,
+    "layers": []
+   }
+  ],
+  "hits": [
+   {
+    "name": "bloom",
+    "at": 84.0,
+    "beats": 2.0,
+    "layers": [
+     {
+      "fx": "fill",
+      "on": "ears",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "ramp": [
+        1.0,
+        0.0
+       ]
+      },
+      "c": {
+       "n": 0.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      }
+     },
+     {
+      "fx": "sweep",
+      "on": "all",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 0.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "width": {
+       "n": 0.25
+      },
+      "soft": {
+       "n": 0.1
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": 0.0
+      },
+      "to": {
+       "n": 1.2
+      },
+      "axis": "r",
+      "shape": "p",
+      "mode": "band"
+     }
+    ]
+   },
+   {
+    "name": "STROBE",
+    "at": 116.0,
+    "beats": 32.0,
+    "layers": [
+     {
+      "fx": "preset",
+      "on": "face",
+      "mix": "over",
+      "pal": "dawn",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 2.0,
+       "out": 4.0
+      },
+      "name": "text",
+      "params": {
+       "text": "STROBE",
+       "color": [
+        200,
+        240,
+        255
+       ],
+       "speed": 65.101649,
+       "loop": false
+      },
+      "tofs": -2.882415
+     }
+    ]
+   },
+   {
+    "name": "return",
+    "at": 141.0,
+    "beats": 2.0,
+    "layers": [
+     {
+      "fx": "fill",
+      "on": "ears",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "ramp": [
+        1.0,
+        0.0
+       ]
+      },
+      "c": {
+       "n": 0.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      }
+     },
+     {
+      "fx": "sweep",
+      "on": "all",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 0.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "width": {
+       "n": 0.25
+      },
+      "soft": {
+       "n": 0.1
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": 0.0
+      },
+      "to": {
+       "n": 1.2
+      },
+      "axis": "r",
+      "shape": "p",
+      "mode": "band"
+     }
+    ]
+   },
+   {
+    "name": "lift",
+    "at": 205.0,
+    "beats": 1.0,
+    "layers": [
+     {
+      "fx": "fill",
+      "on": "ears",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "ramp": [
+        1.0,
+        0.0
+       ]
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      }
+     },
+     {
+      "fx": "sweep",
+      "on": "all",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 0.5
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "width": {
+       "n": 0.25
+      },
+      "soft": {
+       "n": 0.1
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": 0.0
+      },
+      "to": {
+       "n": 1.2
+      },
+      "axis": "r",
+      "shape": "p",
+      "mode": "band"
+     }
+    ]
+   },
+   {
+    "name": "DROP",
+    "at": 217.0,
+    "beats": 2.0,
+    "layers": [
+     {
+      "fx": "fill",
+      "on": "all",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "ramp": [
+        1.0,
+        0.0
+       ]
+      },
+      "c": {
+       "n": 1.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      }
+     },
+     {
+      "fx": "sweep",
+      "on": "all",
+      "mix": "add",
+      "pal": "pure",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 1.0
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "speed": {
+       "n": 0.25
+      },
+      "width": {
+       "n": 0.25
+      },
+      "soft": {
+       "n": 0.1
+      },
+      "cgrad": {
+       "n": 0.0
+      },
+      "from": {
+       "n": 0.0
+      },
+      "to": {
+       "n": 1.2
+      },
+      "axis": "r",
+      "shape": "p",
+      "mode": "band"
+     }
+    ]
+   },
+   {
+    "name": "last",
+    "at": 329.0,
+    "beats": 4.0,
+    "layers": [
+     {
+      "fx": "fill",
+      "on": "ears",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "ramp": [
+        1.0,
+        0.0
+       ]
+      },
+      "c": {
+       "n": 0.66
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      }
+     },
+     {
+      "fx": "blades",
+      "on": "ears",
+      "mix": "add",
+      "pal": "ice",
+      "gain": {
+       "n": 1.0
+      },
+      "c": {
+       "n": 0.66
+      },
+      "gate": null,
+      "env": {
+       "in": 0.0,
+       "out": 0.0
+      },
+      "step": {
+       "n": 4.0
+      },
+      "rise": {
+       "n": 0.25
+      },
+      "keep": {
+       "n": 0.0
+      },
+      "ctip": {
+       "n": 1.0
+      },
+      "rim": {
+       "n": 0.0
+      },
+      "seq": [
+       [
+        0,
+        1,
+        2
+       ]
+      ],
+      "side": "both"
+     }
+    ]
+   }
+  ]
+ }
 }
