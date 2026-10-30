@@ -33,6 +33,16 @@ browser comes back here, and what this keeps is a refresh token.
 
 The token lands in data/cal/spotify.json, which is gitignored: this
 repository is public and a refresh token is a credential.
+
+The phone never gets that token.  Spotify hands back a new refresh
+token when a PKCE one is used, and the page is written on the
+understanding that the old one then stops working (spotify.js keeps
+the new one for exactly that reason).  One token held in two places
+is then a token each side kills for the other: `status` on the laptop
+could leave the phone's copy dead an hour into a show, and the phone's
+own refresh left the laptop handing out dead ones.  So `handoff` signs
+in again and gives the phone a grant of its own, which the laptop
+never keeps.
 """
 
 from __future__ import annotations
@@ -97,13 +107,17 @@ def write(doc):
     os.replace(tmp, STORE)
 
 
-def login(client_id, open_browser=True):
+def login(client_id, open_browser=True, store=True):
     """Authorisation Code with PKCE -- no client secret anywhere.
 
     PKCE exists for clients that cannot keep a secret, which is
     exactly this: whatever comes out of here ends up in a phone's
     localStorage.  The refresh is done by the page itself later, and
     it needs only the client id and the refresh token.
+
+    `store=False` is the phone's sign-in (handoff): the grant is
+    returned and never written here, so nothing on the laptop can
+    spend it.
     """
     verifier = _b64url(secrets.token_bytes(64))
     challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
@@ -163,9 +177,13 @@ def login(client_id, open_browser=True):
     })
     if "refresh_token" not in tok:
         raise SystemExit("  no refresh token came back: %s" % json.dumps(tok))
-    write({"client_id": client_id, "refresh_token": tok["refresh_token"],
-           "scope": tok.get("scope", SCOPE)})
-    print("  saved %s  (mode 600, and gitignored)" % STORE)
+    if store:
+        # laptop_only: this token is the laptop's alone, so status may
+        # spend it.  A store written before handoff had its own sign-in
+        # lacks it, and that token may also be sitting on a phone.
+        write({"client_id": client_id, "refresh_token": tok["refresh_token"],
+               "scope": tok.get("scope", SCOPE), "laptop_only": True})
+        print("  saved %s  (mode 600, and gitignored)" % STORE)
     return tok
 
 
@@ -177,20 +195,41 @@ def blob(doc=None):
     return doc["client_id"] + "." + doc["refresh_token"]
 
 
-def status():
+def status(spend=False):
     doc = read()
     if not doc.get("refresh_token"):
         print("  not connected.  python3 mau5spotify.py login --client-id <id>")
         return 1
     print("  connected, client %s…, scope %s"
           % (doc["client_id"][:8], doc.get("scope")))
+    if not doc.get("laptop_only") and not spend:
+        # Checking means refreshing, and refreshing rotates the token.
+        # Until handoff signed in separately it gave the phone this very
+        # token, so spending it here could leave the phone's copy dead
+        # mid-show.  Ask first.
+        print("  not checked: this token may also be on a phone (handoff used\n"
+              "  to give the phone the laptop's own), and checking it would\n"
+              "  stop that copy working.  `status --refresh` checks anyway;\n"
+              "  run `handoff` for the phone afterwards.")
+        return 0
     try:
         tok = _post_form(TOKEN, {"grant_type": "refresh_token",
                                  "refresh_token": doc["refresh_token"],
                                  "client_id": doc["client_id"]})
     except Exception as e:
         print("  the refresh token did not work: %s" % e)
+        print("  python3 mau5spotify.py login --client-id %s" % doc["client_id"])
         return 1
+    # Keep the rotated one.  Throwing it away left the store holding a
+    # token Spotify had already retired, and the next status said the
+    # refresh token did not work.
+    if tok.get("refresh_token") and (tok["refresh_token"] != doc["refresh_token"]
+                                     or not doc.get("laptop_only")):
+        if not doc.get("laptop_only"):
+            print("  token rotated: a phone given the old one needs `handoff` again")
+        doc["refresh_token"] = tok["refresh_token"]
+        doc["laptop_only"] = True
+        write(doc)
     req = urllib.request.Request(
         "https://api.spotify.com/v1/me/player/currently-playing",
         headers={"Authorization": "Bearer " + tok["access_token"]})
@@ -218,9 +257,15 @@ def main(argv=None):
     s.add_argument("--client-id", required=True)
     s.add_argument("--no-browser", dest="browser", action="store_false",
                    default=True)
-    sub.add_parser("status")
+    s = sub.add_parser("status")
+    s.add_argument("--refresh", action="store_true",
+                   help="check a token that may also be on a phone anyway")
     s = sub.add_parser("handoff")
     s.add_argument("--host", default=None, help="the controller's address")
+    s.add_argument("--client-id", default=None,
+                   help="if `login` has not been run on this machine")
+    s.add_argument("--no-browser", dest="browser", action="store_false",
+                   default=True)
     a = ap.parse_args(argv)
 
     if a.cmd == "login":
@@ -228,12 +273,19 @@ def main(argv=None):
         print("\n  now: python3 mau5spotify.py handoff")
         return 0
     if a.cmd == "status":
-        return status()
+        return status(spend=a.refresh)
     if a.cmd == "handoff":
-        b = blob()
-        if not b:
-            print("  not connected yet")
+        cid = a.client_id or read().get("client_id")
+        if not cid:
+            print("  not connected yet: python3 mau5spotify.py handoff "
+                  "--client-id <id>")
             return 1
+        # A sign-in of the phone's own, never stored here -- see the
+        # top of this file for why the laptop's token cannot be shared.
+        # Spotify skips the permission page for an app already allowed,
+        # so this is usually a browser tab that opens and closes.
+        print("  signing in for the phone (its own token, not kept here)")
+        b = blob(dict(login(cid, a.browser, store=False), client_id=cid))
         host = a.host or "4.3.2.1"
         print("  Open this once on the phone, on the page the controller")
         print("  serves.  It stores the token in that page and nothing")

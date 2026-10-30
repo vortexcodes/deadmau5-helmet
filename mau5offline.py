@@ -108,6 +108,33 @@ def bundle():
     return d
 
 
+def _unstamped(page):
+    """The page with its build date blanked, for comparing two builds.
+
+    The date is there for whoever is holding the phone, and it is the
+    one part of a build that changes when nothing else has: `check`
+    compared the controller's copy with a fresh build byte for byte,
+    so a page deployed at eleven at night was reported out of date the
+    next morning, and the only fix it offered was a redeploy that needs
+    the laptop on the helmet's network -- the day of a show.
+    """
+    return re.sub(rb'"built":"[^"]*"', b'"built":""', page)
+
+
+def _built_on(page):
+    m = re.search(rb'"built":"([^"]*)"', page)
+    return m.group(1).decode() if m else "?"
+
+
+# The map has 621 LEDs and the controller is deliberately left driving
+# 622: one rim segment was cut on 2026-10-29 and the bus was not
+# reconfigured, because the last index has nothing behind it
+# (mau5map.TOTAL_N).  Either count is a correct controller; anything
+# else is a bus that needs looking at.
+def count_agrees(controller, mapped):
+    return int(controller or 0) in (int(mapped), int(mapped) + 1)
+
+
 def _preset_specs():
     """Name, defaults and parameter kinds, so the page can build controls.
 
@@ -533,6 +560,70 @@ def bus_budgets(buses, total_ma, per_led_ma):
     return out
 
 
+def limiter_ma(power):
+    """What WLED's own limiter is set to, in mA at 12 V, standby included.
+
+    WLED's limiter is a per-frame clamp with no memory.  It cannot let
+    a chorus through and then ration the next ten minutes the way the
+    guard's thermal bucket does: whatever it allows, it allows for
+    ever.  And what it governs runs for ever too -- the standby preset
+    on a shelf, the hand-back after every phone session, the boot
+    preset, a stray tap in WLED's own app -- with no guard and no
+    bucket anywhere.  So it gets the figure the helmet can hold
+    indefinitely: power.json's sustained watts less standby, 11.0 -
+    7.45 W, which is 296 mA of LED current.  It used to get the
+    per-frame budget plus standby, 1621 mA, which let WLED's own
+    effects sit at about 0.9 A of LED current -- three times the
+    sustained figure -- for as long as nobody noticed.
+
+    On top go the two things WLED takes off a bus cap before it lights
+    anything: a milliamp per LED of standby (measured, see bus_budgets)
+    and 100 mA for the board itself (MA_FOR_ESP, the same in WLED and
+    in mau5wled).  Without the second the helmet would sit 100 mA under
+    the sustained figure, which is safe and pointlessly dim.
+
+    Never more than the old per-frame figure, whatever a profile says,
+    and a profile with no thermal section keeps exactly that.
+    """
+    import mau5power
+    import mau5wled
+    standby = power["count"] * mau5power.MA_PER_LED_STANDBY
+    old = power["budget_ma"] + standby
+    th = power.get("thermal") or {}
+    if not th:
+        return int(round(old))
+    # The same subtraction ThermalBudget.allowance_w makes once the
+    # bucket is full, at the 12 V the rest of the power model uses.
+    led = max(float(th.get("sustained_w", 11.0))
+              - float(th.get("standby_w", 0.0)), 0.0) / 12.0 * 1000.0
+    want = led + standby + mau5wled.WLED.MA_FOR_ESP
+    return int(min(old, want))          # floor: round towards less light
+
+
+# What the ESP32's soft-AP will take.  WLED accepts anything over
+# /json/cfg and stores it, but the Arduino core's WiFi.softAP() refuses
+# a passphrase of one to seven characters and returns false -- so a
+# short password does not make a weak access point, it makes none, and
+# at a show with no house network that is offline mode gone.
+def ap_problem(ssid=None, psk=None):
+    """Why this SSID or password would leave the helmet with no AP, or None."""
+    if ssid is not None:
+        b = str(ssid).encode("utf-8")
+        if not 1 <= len(b) <= 32:
+            return ("an access point name has to be 1 to 32 bytes; %r is %d"
+                    % (ssid, len(b)))
+    if psk is not None:
+        p = str(psk)
+        if not 8 <= len(p) <= 63:
+            return ("an access point password has to be 8 to 63 characters "
+                    "(that one is %d) -- the controller would accept it and "
+                    "then bring up no access point at all" % len(p))
+        if any(not 32 <= ord(c) <= 126 for c in p):
+            return ("an access point password has to be plain printable "
+                    "ASCII -- WPA2 takes nothing else")
+    return None
+
+
 def wanted_cfg(power, ap_ssid=None, ap_psk=None, buses=None):
     """The configuration changes offline mode depends on.
 
@@ -543,14 +634,17 @@ def wanted_cfg(power, ap_ssid=None, ap_psk=None, buses=None):
     it when the join fails -- which it does, but a minute later and
     not at all if some open network happens to answer.
 
-    The brightness limiter has to be set from the same budget the
+    The brightness limiter has to be set from the same profile the
     software guard uses.  On the house network the guard in Pixels.send
     is the only thing between a preset and 11.8 A, and that is fine
-    because every frame goes through it.  Offline the frames come from
-    a phone, and a limiter a browser tab can skip is not a limiter.
-    WLED's own one runs on the controller, below anything the page can
-    reach, so it is set to the same number and left there.
+    because every frame goes through it.  What the controller renders
+    by itself -- standby, boot, the hand-back -- never passes a guard,
+    so WLED's own limiter runs below anything a page can reach, set to
+    what the helmet can sustain (limiter_ma) and left there.
     """
+    why = ap_problem(ap_ssid, ap_psk)
+    if why:
+        raise ValueError(why)
     # WLED's limiter is pure current arithmetic and never learns the
     # supply voltage, so feeding it milliamps measured at 12 V is
     # consistent as long as ledma is too -- which is why both numbers
@@ -558,9 +652,16 @@ def wanted_cfg(power, ap_ssid=None, ap_psk=None, buses=None):
     import mau5power
     ma = int(round(power["budget_ma"] + power["count"]
                    * mau5power.MA_PER_LED_STANDBY))
+    # Two figures, on purpose.  The buses get the sustained cap, and
+    # they are the limiter 0.15 enforces (bus_budgets).  The global
+    # keeps the per-frame budget: 0.15 accepts it and ignores it, and
+    # test_mau5's t_offline_limiter_matches_the_budget still pins it
+    # there.  Lowering the global to match is safe and wanted, and
+    # waits on that test.
     led = {"maxpwr": ma, "ledma": int(round(mau5power.MA_PER_LED_FULL_WHITE))}
     if buses:
-        led["ins"] = bus_budgets(buses, ma, mau5power.MA_PER_LED_FULL_WHITE)
+        led["ins"] = bus_budgets(buses, limiter_ma(power),
+                                 mau5power.MA_PER_LED_FULL_WHITE)
     cfg = {"ap": {"behav": 2},        # 2 = always on, not only when lost
            "hw": {"led": led}}
     if ap_ssid:
@@ -581,6 +682,12 @@ def _flat(d, p=""):
 
 
 def config(host=None, apply=False, ap_ssid=None, ap_psk=None):
+    # Before anything is sent, or even looked for: `config` used to
+    # print "applied." over a password the controller then could not
+    # start an access point with.
+    why = ap_problem(ap_ssid, ap_psk)
+    if why:
+        raise SystemExit("not sent: " + why)
     w = _find(host)
     power = json.load(open(os.path.join(CAL, "power.json")))
     cur = w.cfg()
@@ -615,10 +722,18 @@ def config(host=None, apply=False, ap_ssid=None, ap_psk=None):
     print("%-16s %-22s %s" % ("setting", "now", "wanted"))
     for k, a, b in changes:
         print("  %-14s %-22s %s" % (k, a, b))
-    print("\n  maxpwr is the budget plus standby, in mA at 12 V -- the same\n"
-          "  number data/cal/power.json gives the software guard.  The bus\n"
-          "  figure is the one WLED 0.15 enforces; the global is for older\n"
-          "  builds and is inert here.")
+    print("\n  The bus maxpwr is what data/cal/power.json says the helmet can\n"
+          "  sustain indefinitely, plus standby and WLED's 100 mA board\n"
+          "  reserve, in mA at 12 V: %d mA.  WLED's limiter has no memory,\n"
+          "  so it cannot allow a burst and then ration it the way the guard\n"
+          "  does -- whatever it allows, it allows for ever.  It covers what\n"
+          "  the controller renders by itself: standby, boot, the hand-back\n"
+          "  and WLED's own app.  It does not see the phone's frozen-segment\n"
+          "  frames (measured).  Whether it also clamps DDP from the laptop\n"
+          "  has not been measured; if it does, laptop shows will peak lower\n"
+          "  than the guard alone would let them.  The global maxpwr is\n"
+          "  inert on 0.15 and keeps the per-frame budget."
+          % limiter_ma(power))
     if not apply:
         print("\nnothing changed.  Re-run with --apply.")
         return 0
@@ -740,13 +855,32 @@ def standby(host=None, fx="pacifica", bri=96, boot=True, apply=False):
     if not apply:
         print("\n  nothing changed.  Re-run with --apply.")
         return 0
+    # One unfrozen segment over the whole chain, and any others the
+    # player left behind deleted -- the same layout wire.js release()
+    # hands back -- so that what is saved below is exactly one effect
+    # and never a frozen segment, which the limiter cannot see.
+    n = w.count
+    if not n:
+        # stop 0 is how a segment is deleted; never send it for segment 0.
+        raise SystemExit("the controller reports no LEDs -- not touching it")
+    others = [s.get("id") for s in (w.state().get("seg") or [])
+              if s.get("id") not in (None, 0)]
+    seg = [{"id": 0, "start": 0, "stop": n, "frz": False, "fx": fxid,
+            "sx": 110, "ix": 128, "pal": 0, "on": True, "bri": 255}]
+    seg += [{"id": i, "stop": 0} for i in others]
     w._post("/json/state", {"on": True, "bri": int(bri), "transition": 7,
-                            "nl": {"on": False},
-                            "seg": [{"id": 0, "frz": False, "fx": fxid,
-                                     "sx": 110, "ix": 128, "pal": 0,
-                                     "on": True, "bri": 255}]})
+                            "nl": {"on": False}, "seg": seg})
     time.sleep(0.6)
-    w._post("/json/state", {"psave": STANDBY_SLOT, "n": "mau5 standby"})
+    # ib and sb, or WLED saves neither the brightness nor the segment
+    # bounds: a psave that carries anything besides the slot keeps the
+    # brightness only with ib and the bounds only with sb (savePreset in
+    # WLED's presets.cpp), which is why WLED's own UI always sends both.
+    # Without ib the hand-back -- {ps: 1}, with no brightness of its own
+    # -- runs at whatever brightness the phone left, 255 by default,
+    # instead of the 96 asked for here.  Not yet read back from this controller:
+    # preset 1 in /presets.json should now carry "bri".
+    w._post("/json/state", {"psave": STANDBY_SLOT, "n": "mau5 standby",
+                            "ib": True, "sb": True})
     time.sleep(0.6)
     if boot:
         w._post("/json/cfg", {"def": {"ps": STANDBY_SLOT, "on": True,
@@ -796,10 +930,13 @@ def check(host=None):
     # setting, because it does cover everything the controller renders
     # itself, which is what a stray tap in WLED's own UI produces.  It
     # is not what keeps the phone honest; the guard in the page is.
+    want_cap = sum(int(b["maxpwr"]) for b in wb)
     row(bool(wb) and all(buses[i].get("maxpwr") == b["maxpwr"]
                          for i, b in enumerate(wb)),
         "limiter set, for WLED's own effects",
-        "bus caps total %s mA, wanted %s" % (cap, wl["maxpwr"]))
+        "bus caps total %s mA, wanted %s%s"
+        % (cap, want_cap,
+           " -- above what the helmet can sustain" if cap > want_cap else ""))
     row(bool(wb) and all(int(buses[i].get("ledma") or 0) == b["ledma"]
                          for i, b in enumerate(wb)),
         "limiter knows the per-LED current",
@@ -813,10 +950,12 @@ def check(host=None):
                 got = gzip.decompress(got)
     except urllib.error.URLError:
         got = b""
-    row(got == raw, "player page installed and current",
-        "%d bytes on the controller, %d built" % (len(got), len(raw)))
+    row(bool(got) and _unstamped(got) == _unstamped(raw),
+        "player page installed and current",
+        "%d bytes on the controller (built %s), %d built"
+        % (len(got), _built_on(got) if got else "-", len(raw)))
 
-    row(int(info.get("leds", {}).get("count") or 0) == power["count"],
+    row(count_agrees(info.get("leds", {}).get("count"), power["count"]),
         "controller agrees about the LED count",
         "%s, map has %d" % (info.get("leds", {}).get("count"), power["count"]))
 
@@ -827,8 +966,10 @@ def check(host=None):
         print("\n%d of %d not ready.  `config --apply` fixes the settings, "
               "`deploy` the page." % (bad, len(rows)))
     else:
-        print("\noffline mode is ready: join the access point and open\n"
-              "  http://4.3.2.1/%s" % PAGE)
+        # The name it really has: the README once said mau5head-AP
+        # while this controller was still broadcasting WLED-AP.
+        print("\noffline mode is ready: join the access point %r and open\n"
+              "  http://4.3.2.1/%s" % (ap.get("ssid"), PAGE))
     return 1 if bad else 0
 
 
@@ -856,9 +997,10 @@ def main(argv=None):
     s = sub.add_parser("config", help="AP and power limiter")
     s.add_argument("--host", default=None)
     s.add_argument("--apply", action="store_true")
-    s.add_argument("--ap-ssid", default=None)
+    s.add_argument("--ap-ssid", default=None, help="1 to 32 bytes")
     s.add_argument("--ap-psk", default=None,
-                   help="at least 8 characters; not stored in this repo")
+                   help="8 to 63 printable ASCII characters, refused "
+                        "otherwise; not stored in this repo")
 
     s = sub.add_parser("standby", help="what the helmet does with no phone")
     s.add_argument("--host", default=None)

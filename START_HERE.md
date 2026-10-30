@@ -31,6 +31,16 @@ python3 mau5fake.py                     # a controller that is not there
 Open `http://127.0.0.1:8770/mau5.htm` for the player and
 `http://127.0.0.1:8770/fake/view` for what the helmet would be showing.
 
+## Before a show, on the phone
+
+Set the phone's screen timeout to the longest it offers. The player page
+is served over plain http from the controller, and browsers only grant the
+screen wake lock to https pages, so the page can only try a muted-video
+workaround to stay awake. When the screen goes off, the page stops and the
+helmet drops to its standby preset (or goes dark) while the song can keep
+playing. Try it once with the phone put down untouched. The README's
+offline-mode section has the rest, including the access point's real name.
+
 ## What needs to be on the home network
 
 The helmet is a WLED controller on the house LAN (it was 192.168.10.172,

@@ -21,6 +21,7 @@ behind, which nobody can see.
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import base64
 import socket
@@ -85,8 +86,11 @@ class Controller:
         self.show_name = None
         self.player = None
         self.music = None
-        self._t = 0.0                  # last position the phone reported
+        self._t = 0.0                  # position at _at, as we believe it
         self._at = time.monotonic()
+        self._corr = 0.0               # correction being eased in (clock())
+        self._sid, self._seq = None, -1
+        self._lag = collections.deque(maxlen=25)
         self.playing = False
 
         # The guard, even with no helmet attached.  The preview is meant
@@ -127,21 +131,94 @@ class Controller:
             threading.Thread(target=self._watchdog, daemon=True).start()
 
     # -- clock ---------------------------------------------------------
-    def clock(self, t=None, playing=None):
-        """The phone tells us where the audio is; we interpolate between."""
-        with self.lock:
-            if t is not None:
-                self._t, self._at = float(t), time.monotonic()
-            if playing is not None:
-                self.playing = bool(playing)
+    # A report further out than this is a seek, a stall or a new track,
+    # and is jumped to.  Anything nearer is eased in over EASE_S, at no
+    # more than MAX_CORR_S per report -- a tenth faster or slower for
+    # half a second, which nobody can see, where a step is a hitch.
+    SNAP_S = 0.5
+    EASE_S = 0.5
+    GAIN = 0.5
+    MAX_CORR_S = 0.05
 
-    def now(self):
+    def clock(self, t=None, playing=None, seq=None, sid=None, pt=None):
+        """The phone tells us where the audio is; we follow it smoothly.
+
+        This used to set the clock to each report as it arrived.  Every
+        report is late by its own trip across the network, and on phone
+        Wi-Fi, a hotspot or the tunnel those trips differ by tens to
+        hundreds of milliseconds, so the show clock stepped forward and
+        back by the difference every 400 ms -- and two POSTs handled out
+        of order set it back a whole report.  Fast chases and beat
+        flashes hitched two or three times a second at a steady 40 fps.
+
+        Three things now, each optional so an older page still works:
+        `seq` with `sid` (one per page load) drops a report overtaken by
+        a later one; `pt`, the phone's performance.now() when it read
+        the position, measures how much later than the quickest recent
+        report this one arrived, and adds that back; and the remaining
+        error is eased in rather than assigned.
+        """
+        mono = time.monotonic()
+        with self.lock:
+            if seq is not None and sid is not None:
+                if sid == self._sid and seq <= self._seq:
+                    return                         # stale: a later one landed
+                if sid != self._sid:
+                    self._sid = sid
+                    self._lag.clear()
+                self._seq = seq
+            was = self.playing
+            go = was if playing is None else bool(playing)
+            cur = self._now_locked(mono)
+            if t is None:
+                # Only the state changed: hold the position we have.
+                self._t, self._at, self._corr = cur, mono, 0.0
+                self.playing = go
+                return
+            t = float(t)
+            if pt is not None and go:
+                # Arrival minus the phone's own clock is a fixed offset
+                # plus this report's delay; against the smallest of the
+                # last ten seconds it is just the extra delay.
+                self._lag.append(mono - float(pt) / 1000.0)
+                t += min(mono - float(pt) / 1000.0 - min(self._lag), 1.0)
+            err = t - cur
+            if not (go and was) or abs(err) > self.SNAP_S:
+                self._t, self._at, self._corr = t, mono, 0.0
+            else:
+                c = self.GAIN * err
+                self._t, self._at = cur, mono
+                self._corr = max(-self.MAX_CORR_S, min(self.MAX_CORR_S, c))
+            self.playing = go
+
+    def _now_locked(self, mono):
         if not self.playing:
             return self._t
-        return self._t + (time.monotonic() - self._at)
+        dt = mono - self._at
+        return self._t + dt + self._corr * min(dt / self.EASE_S, 1.0)
+
+    def now(self):
+        # Under the lock, or a frame can pair a new position with the
+        # old time it was taken at and jump for one frame.
+        with self.lock:
+            return self._now_locked(time.monotonic())
 
     # -- what to show --------------------------------------------------
     def set_preset(self, name, **params):
+        # Render one frame on a throwaway copy before it replaces what
+        # is playing.  The sliders run from the spec's minimum, which is
+        # 0 for every positive number, and at 0 twenty-odd presets
+        # divide by it -- period, fade, every, step, bands -- and raise
+        # on every frame.  Refused here, the old preset carries on and
+        # the phone is told why; accepted, the helmet would go dark.
+        probe = E.make(name, **params)
+        try:
+            for m in ((None, self.music) if self.music is not None else (None,)):
+                probe.render(self.h, 1.7, m)
+        except (Exception, SystemExit) as e:
+            raise ValueError("%s will not render with those settings (%s: %s) "
+                             "-- kept what was playing"
+                             % (name, type(e).__name__, e)) from e
         with self.lock:
             self.preset = E.make(name, **params)
             self.preset_name = name
@@ -164,6 +241,7 @@ class Controller:
             self.player = mau5show.Player(show, helmet=self.h, music=music)
             self.mode = "show"
             self._t, self._at, self.playing = 0.0, time.monotonic(), False
+            self._corr = 0.0
 
     # -- favourites ----------------------------------------------------
     def save_favourite(self, label):
@@ -278,6 +356,10 @@ class Controller:
                     time.sleep(period)
                     continue
                 buf = self._frame() * self.brightness
+                if self.error is not None:
+                    # Coming back from black after a render error is
+                    # coming out of dark, and gets the same climb.
+                    self._soft_t0 = time.monotonic()
                 if self.soft_start > 0:
                     k = (time.monotonic() - self._soft_t0) / self.soft_start
                     if k < 1.0:
@@ -302,20 +384,41 @@ class Controller:
                 else:
                     self.last_frame = np.clip(buf, 0, 255).astype(np.uint8)
                 self.error = None
-            except Exception as e:
-                # Report it once rather than looping silently: a preset
-                # that throws every frame otherwise looks like a helmet
-                # that simply went dark.
+            except (Exception, SystemExit) as e:
+                # Report it once rather than looping silently.  SystemExit
+                # too: mau5engine.make() raises it for an unknown preset,
+                # a show builds its presets lazily, and an uncaught one
+                # ended this thread without a word -- no more frames, the
+                # same hand-off to WLED, and nothing short of a restart.
                 msg = "%s: %s" % (type(e).__name__, e)
                 if msg != getattr(self, "error", None):
                     self.error = msg
                     print("  render error: %s" % msg)
+                # And keep the stream alive, with black.  Sending nothing
+                # did not make the helmet go dark: 2.5 s later WLED left
+                # realtime and ran its own effect at the brightness 255
+                # _set_output asked for, with no guard and no bucket,
+                # while this still said "preset".  Black through the
+                # guard holds the helmet here, and dark, until a frame
+                # renders again.
+                if self.mode != "off":
+                    self._blank()
             nxt += period
             slack = nxt - time.monotonic()
             if slack > 0:
                 time.sleep(slack)
             else:
                 nxt = time.monotonic()
+
+    def _blank(self):
+        black = np.zeros((self.h.n, 3), np.uint8)
+        try:
+            if self.pix is not None:
+                self.pix.send(black)
+                self.last_power = self.pix.last_power
+        except Exception:
+            pass                     # unreachable; the watchdog says so
+        self.last_frame = black
 
     def _watchdog(self):
         """Notice if the helmet goes away, and re-arm it when it returns.
@@ -608,8 +711,21 @@ def make_handler(ctl):
         def do_POST(self):
             path = urllib.parse.urlparse(self.path).path
             n = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(n) or b"{}")
+            raw = self.rfile.read(n)
+            # JSON only.  This listens on every interface with no login,
+            # and a text/plain POST is one any web page can send from any
+            # browser on the same network without asking -- it was enough
+            # to save a favourite whose label ran script in the control
+            # page.  application/json makes the browser ask first, and
+            # nothing here answers OPTIONS, so the cross-site write never
+            # leaves the browser.  control.html already sends it.
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0]
+            if ctype.strip().lower() != "application/json":
+                return self._send({"error": "send application/json"}, code=415)
             try:
+                body = json.loads(raw or b"{}")
+                if not isinstance(body, dict):
+                    raise ValueError("expected a JSON object")
                 if path == "/api/preset":
                     # Filter at the boundary: one generic control surface
                     # sends the same payload to every preset, so unknown
@@ -624,7 +740,8 @@ def make_handler(ctl):
                 elif path == "/api/show":
                     ctl.set_show(body["name"])
                 elif path == "/api/clock":
-                    ctl.clock(body.get("t"), body.get("playing"))
+                    ctl.clock(body.get("t"), body.get("playing"),
+                              body.get("seq"), body.get("sid"), body.get("pt"))
                 elif path == "/api/sync":
                     if "sync" in body:
                         ctl.sync = bool(body["sync"])
