@@ -77,6 +77,12 @@ footer{position:fixed;left:0;right:0;bottom:0;background:#0b0b10f2;
 #showbox button[disabled]{opacity:.4}
 #showbox input[type=range]{flex:1}
 button.reactive::after{content:"\00a0♪";opacity:.75}
+/* The video that holds the screen on where there is no wake lock (ui.js,
+   holdScreen).  The whole viewport, so that however a browser decides a
+   video is on screen this one is, and under body's own background, so
+   nobody sees it. */
+#awake{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:-1;
+  pointer-events:none;object-fit:fill;background:#07070a}
 </style>
 </head>
 <body>
@@ -93,6 +99,7 @@ button.reactive::after{content:"\00a0♪";opacity:.75}
   <span><b id="w">0</b> W</span>
   <span>heat <b id="therm">-</b></span>
   <span>dropped <b id="drop">0</b></span>
+  <span>screen <b id="scr">-</b></span>
   <span>now <b id="now">—</b></span>
 </div>
 

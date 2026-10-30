@@ -53,6 +53,9 @@ const state = {
   t0: 0, bri: 255, fps: 0, cycle: 0, lastCycle: 0,
   music: null, show: null, showT0: null, drive: null, follow: false,
   handover: true,
+  // Where a show is held while Spotify is paused, in seconds; null when
+  // it runs.
+  showHold: null,
 };
 
 // ----------------------------------------------------------------------
@@ -125,12 +128,43 @@ const CYCLE_THROUGH = Object.keys(D.presets).filter(n => !NOT_IN_CYCLE[n]);
 const FLOOR_MS = 1000 / 30;     // never ask for more than 30 fps
 let frames = 0, lastReport = 0, lastDraw = 0, lastFrame = 0, timer = null;
 let parked = false;             // waiting on the controller, not on a timer
+let revivedSaid = 0;            // link.revived, as last reported
 link.onready = () => {
   if (state.running && parked) { parked = false; clearTimeout(timer); tick(); }
 };
 
+// Nothing may leave the loop without either scheduling the next frame
+// or letting go of the helmet.  An exception used to do neither:
+// state.running stayed true with no timer pending, the frozen segments
+// held the last frame, and the dead man -- re-armed only by sends --
+// put the helmet out about a minute later while the page still said
+// 'stop'.  Cycling after moving any slider did it every time.  Now a
+// frame that throws is skipped, so the helmet keeps the last good one
+// (which the guard passed), and a fault that repeats hands the helmet
+// back and says why.
+let tickFails = 0;
+const TICK_FAILS_MAX = 3;
+
 function tick() {
   if (!state.running) return;
+  try {
+    step();
+  } catch (e) {
+    clearTimeout(timer);
+    const why = String((e && e.message) || e);
+    if (++tickFails >= TICK_FAILS_MAX) {
+      tickFails = 0;
+      unfollow();               // or Spotify following starts it straight back
+      stop();
+      pageWarn('stopped: the animation kept failing (' + why + ')');
+      return;
+    }
+    pageWarn('a frame failed and was skipped (' + why + ')');
+    if (state.running) timer = setTimeout(tick, 100);
+  }
+}
+
+function step() {
   const now = performance.now();
   if (link.busy(now)) {
     // woken by the pong; the timer only covers one that never comes
@@ -150,15 +184,25 @@ function tick() {
     state.lastCycle = t;
     const names = CYCLE_THROUGH;
     const at = names.indexOf(state.preset);
-    choose(names[(at + 1) % names.length], true);
+    // Each preset starts from its own defaults: the params on hand are
+    // the last preset's, and make() refuses a name it does not have
+    // ('blades has no parameter floor').
+    choose(names[(at + 1) % names.length]);
   }
 
+  // A show's beat pulse is applied after the guard, which would flatten
+  // it -- but only to a frame the show drew.  Read whenever a show was
+  // picked, it went on dimming the plain presets after the show
+  // stopped, by wherever in the beat its last frame fell (to 0.66).
+  let gain = 1;
   if (state.show && (state.showT0 !== null || an.el)) {
     // The track, when there is one, IS the clock.  Reading the audio
     // element's own currentTime cannot drift from the sound the room
     // is hearing, which a wall clock started by hand always does --
     // and it makes pause, seek and volume somebody else's problem.
-    const st = an.el ? an.el.currentTime : (now - state.showT0) / 1000;
+    const st = an.el ? an.el.currentTime
+      : state.showHold !== null ? state.showHold
+      : (now - state.showT0) / 1000;
     if (st >= state.show.duration && !an.el) {
       stopShow();
       frame.fill(0);
@@ -166,13 +210,12 @@ function tick() {
     } else {
       const cue = state.show.frame(st, state.drive || state.music, frame);
       showClock(st, cue);
+      if (state.show.gain !== undefined) gain = state.show.gain;
     }
   } else {
     frame.fill(0);
     state.inst.render(helmet, t, state.music, frame);
   }
-  // a show's beat pulse is applied after the guard, which would flatten it
-  const gain = state.show && state.show.gain !== undefined ? state.show.gain : 1;
   const rep = guard.apply(frame, frame, now / 1000, gain);
   const sent = link.send(frame);
 
@@ -192,8 +235,14 @@ function tick() {
     $('therm').textContent = rep.thermal ? rep.thermal.full_pct.toFixed(0) + '%' : '-';
     $('drop').textContent = link.failed + link.refused;
     $('bar').style.width = Math.min(100, rep.total_ma / 16.0) + '%';
+    if (link.revived !== revivedSaid) {
+      revivedSaid = link.revived;
+      pageWarn('the phone lost the helmet for most of a minute, long enough '
+               + 'for it to put itself out -- turned it back on');
+    }
   }
 
+  tickFails = 0;
   // measured from when this frame started, so drawing it is not added on
   timer = setTimeout(tick, Math.max(0, FLOOR_MS - (performance.now() - now)));
 }
@@ -248,16 +297,53 @@ function buildControls(name) {
   }
 }
 
+// Only the params this preset has.  make() throws on any other, and
+// params reach choose() from places written for something else: the
+// last preset's, or localStorage after a build that renamed one --
+// which used to throw at load, before connect(), and leave the page
+// with no preset to render.
+function ownParams(name, params) {
+  const have = (D.presets[name] || {}).params || {};
+  const out = {};
+  for (const k of Object.keys(params || {})) if (k in have) out[k] = params[k];
+  return out;
+}
+
+// A preset made and drawn once, off to one side, so a value it cannot
+// use -- a sprite this build does not have, an axis it does not know,
+// typed into a text box -- is refused here rather than thrown by the
+// render loop at the helmet.
+const scratch = new Float32Array(helmet.n * 3);
+function tryMake(name, params) {
+  const test = M.make(name, params, helmet, D.fonts);
+  test.render(helmet, 0, state.music, scratch);
+  return M.make(name, params, helmet, D.fonts);
+}
+
 function set(k, v) {
-  state.params[k] = v;
-  state.inst = M.make(state.preset, state.params, helmet, D.fonts);
+  const was = state.params;
+  state.params = Object.assign({}, was, { [k]: v });
+  try {
+    state.inst = tryMake(state.preset, state.params);
+  } catch (e) {
+    state.params = was;
+    pageWarn(state.preset + ' cannot use ' + k.replace(/_/g, ' ') + ' "' + v + '" ('
+             + ((e && e.message) || e) + ')');
+    return;
+  }
   save();
 }
 
 function choose(name, keepParams) {
   state.preset = name;
-  if (!keepParams) state.params = {};
-  state.inst = M.make(name, state.params, helmet, D.fonts);
+  state.params = keepParams ? ownParams(name, state.params) : {};
+  try {
+    state.inst = tryMake(name, state.params);
+  } catch (e) {
+    // a saved value this build cannot use: its defaults instead
+    state.params = {};
+    state.inst = M.make(name, state.params, helmet, D.fonts);
+  }
   for (const b of document.querySelectorAll('#grid button'))
     b.classList.toggle('on', b.dataset.name === name);
   $('now').textContent = name;
@@ -298,6 +384,16 @@ function say(msg, cls) {
   el.className = cls || '';
 }
 
+// A line added to the warning box, which connect() clears on the next
+// start.  Said once however often it happens: a frame failing ten
+// times a second is one thing to know, not ten.
+function pageWarn(msg) {
+  const w = $('warn');
+  if (w.textContent.indexOf(msg) >= 0) return;
+  w.textContent = (w.textContent ? w.textContent + '. ' : '') + msg;
+  w.style.display = 'block';
+}
+
 async function connect() {
   say('looking for the controller...');
   let hi;
@@ -335,49 +431,163 @@ async function connect() {
 // is hidden anyway is the honest fallback -- a helmet that goes dark
 // when you pocket the phone is better than one that freezes on
 // whatever frame it happened to be showing.
-let wake = null;
+//
+// But navigator.wakeLock only exists on a secure page, and this one is
+// plain http from the controller -- the reason it has no microphone
+// either -- so on the helmet's own network the lock was never there:
+// holdScreen() did nothing, said nothing, and the phone's auto-lock
+// stopped the show 30 s to 2 min in.  Where it is missing the screen is
+// held the way NoSleep.js holds it, with a video playing: two seconds
+// of black, muted, inline and looped, behind the page (64x64, under a
+// kilobyte each as WebM and MP4).  That is a technique rather than an
+// API and it has not been proven on the show phone, so the page says
+// which it is using, and says plainly when the screen going off is
+// what stopped the helmet.
+const AWAKE_WEBM = 'data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAKcEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHGTbuMU6uEElTDZ1OsggEiTbuMU6uEHFO7a1OsggKG7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmoCrXsYMPQkBNgIRMYXZmV0GETGF2ZkSJiECfQAAAAAAAFlSua9euAQAAAAAAAE7XgQFzxYgAAAAAAAAAAZyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhAvrwgDgkLCBQLqBQJqBAlWwhFW5gQFV7oEA7AEAAAAAAAACAAASVMNn0HNzzWPAi2PFiAAAAAAAAAABZ8iYRaOHRU5DT0RFUkSHi0xhdmMgbGlidnB4Z8ihRaOIRFVSQVRJT05Eh5MwMDowMDowMi4wMDAwMDAwMDAAH0O2dUEJ54EAo6yBAACA8AIAnQEqQABAAABHCIWFiIWEiAICAAZwPEJgCrIg9zAA/v+iPFh5AKOWgQDIANEBAAEQEAAYABhYL/QACI6AAKOWgQGQANEBAAEQEAAYABhYL/QACI6AAKOWgQJYANEBAAEQEAAYABhYL/QACI6AAKOWgQMgANEBAAEQEAAYABhYL/QACI6AAKOWgQPoANEBAAEQEAAYABhYL/QACI6AAKOWgQSwANEBAAEQEAAYABhYL/QACI6AAKOWgQV4ANEBAAEQEBRgAGFgv9AAIjoAAKOWgQZAANEBAAEQEAAYABhYL/QACI6AAKOWgQcIANEBAAEQEAAYABhYL/QACI6AABxTu2uRu4+zgQC3iveBAfGCAXfwgQM=';
+const AWAKE_MP4 = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMpbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAnh0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAB9AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAEAAAABAAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAfQAAAAAAABAAAAAAHwbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAAoAAAAUABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABm21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAVtzdGJsAAAAu3N0c2QAAAAAAAAAAQAAAKthdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAEAAQABIAAAASAAAAAAAAAABDExhdmMgbGlieDI2NAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAAMWF2Y0MBQsAe/+EAGGdCwB6mERCbARAAAAMAEAAAAwCg8WLhGAEABmjIQgOSyAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAAH0AAAAAAAAABhzdHRzAAAAAAAAAAEAAAAKAAAIAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAKAAAAAQAAADxzdHN6AAAAAAAAAAAAAAAKAAAAGwAAAAoAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAABRzdGNvAAAAAAAAAAEAAANZAAAAPXVkdGEAAAA1bWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAIaWxzdAAAAAhmcmVlAAAAhW1kYXQAAAAXZYiCAj4jFAAEVfV999dddddddddddeAAAAAGQZocBHwjAAAAB0GaKgEfCMAAAAAHQZo7AR8IwAAAAAdBmkkAR8IwAAAAB0GaWUBHwjAAAAAHQZppgEfCMAAAAAdBmnnAR8IwAAAAB0GaiIAQ8IwAAAAHQZqYkD/CMA==';
+let wake = null, awakeVideo = null;
 
+function awakeEl() {
+  if (awakeVideo) return awakeVideo;
+  const v = document.createElement('video');
+  // attributes as well as properties: iOS goes by the attributes
+  for (const a of ['muted', 'loop', 'playsinline', 'webkit-playsinline',
+                   'disablepictureinpicture', 'disableremoteplayback'])
+    v.setAttribute(a, '');
+  v.setAttribute('aria-hidden', 'true');
+  v.muted = true; v.loop = true; v.playsInline = true;
+  v.id = 'awake';
+  for (const [type, url] of [['video/webm', AWAKE_WEBM], ['video/mp4', AWAKE_MP4]]) {
+    const s = document.createElement('source');
+    s.type = type; s.src = url;
+    v.appendChild(s);
+  }
+  document.body.appendChild(v);
+  awakeVideo = v;
+  return v;
+}
+
+// What is keeping the screen on: 'held' (a wake lock), 'video' or
+// 'free' (nothing).  Called first thing in start(), inside the tap,
+// which is when a browser will play a video for a page.
 async function holdScreen() {
+  if (navigator.wakeLock) {
+    try {
+      if (!wake) {
+        wake = await navigator.wakeLock.request('screen');
+        wake.addEventListener('release', () => { wake = null; });
+      }
+      return 'held';
+    } catch (e) { wake = null; return 'free'; }
+  }
   try {
-    if (navigator.wakeLock && !wake) {
-      wake = await navigator.wakeLock.request('screen');
-      wake.addEventListener('release', () => { wake = null; });
-    }
-  } catch (e) { wake = null; }
+    await awakeEl().play();
+    return 'video';
+  } catch (e) {
+    return 'free';
+  }
 }
 
 function releaseScreen() {
   if (wake) { try { wake.release(); } catch (e) {} wake = null; }
+  if (awakeVideo) { try { awakeVideo.pause(); } catch (e) {} }
 }
 
-async function start() {
-  if (state.running) return;
-  if (!await connect()) return;
-  const frozen = await link.begin(state.bri);
-  if (!frozen) {
-    const w = $('warn');
-    w.textContent = (w.textContent ? w.textContent + '. ' : '') +
-      'the controller did not take the frozen segments the player asked ' +
-      'for, so frames may land in the wrong place or be painted over';
-    w.style.display = 'block';
+function screenSays(how) {
+  $('scr').textContent = { held: 'held', video: 'video', free: 'may lock' }[how] || '-';
+  if (how === 'free')
+    pageWarn('nothing is keeping this phone\'s screen on -- set its auto-lock '
+             + 'to Never, or the helmet stops when the screen goes off');
+}
+
+// Said when the page comes back after hiding stopped the helmet, and
+// again after the start that follows, which clears the warning box.
+let stopNote = '';
+
+// The start on its way, if one is: a second tap, or Spotify following
+// once a second, joins it instead of starting another alongside -- on a
+// slow controller start() takes seconds, and each extra one used to
+// mean another begin() and another render loop.  `runs` is bumped by
+// stop(), so a start still waiting on the controller can tell it was
+// cancelled, and let go of whatever it had already taken.
+let starting = null, startingRun = 0, runs = 0;
+
+function start() {
+  if (state.running) return Promise.resolve();
+  if (starting) {
+    if (startingRun === runs) return starting;
+    // stopped while starting: start again once that one has let go
+    const want = runs;
+    return starting.then(() => { if (runs === want) return start(); });
   }
-  state.running = true;
-  holdScreen();
-  state.t0 = performance.now();
-  state.lastCycle = 0;
-  lastFrame = 0;
-  lastReport = performance.now();
+  // Never from a hidden page.  Spotify following, a track chosen in a
+  // file picker, 'lights only' -- anything that started the player
+  // without a tap used to undo the stop that hiding does, and then
+  // stream from the background on throttled timers, about one frame a
+  // second, re-arming the dead man every time.
+  if (document.visibilityState === 'hidden') return Promise.resolve();
+  const run = startingRun = ++runs;
+  const held = holdScreen();
   $('go').textContent = 'stop';
   $('go').classList.add('stop');
-  tick();
+  const gone = () => run !== runs || document.visibilityState === 'hidden';
+  // Put the page back as it was -- unless stop() already has, and a
+  // newer start may own the button and the screen by now.
+  const quit = () => {
+    if (run !== runs) return;
+    releaseScreen();
+    $('go').textContent = 'start';
+    $('go').classList.remove('stop');
+  };
+  starting = (async () => {
+    let begun = false;
+    try {
+      if (!await connect() || gone()) { quit(); return; }
+      if (stopNote) pageWarn(stopNote);
+      begun = true;
+      const frozen = await link.begin(state.bri);
+      if (gone()) {
+        // Stopped, or hidden, while the controller was being set up:
+        // whatever stop() sent may have landed before begin's layout,
+        // so let go again now that the layout is in.
+        link.release();
+        quit();
+        return;
+      }
+      if (!frozen)
+        pageWarn('the controller did not take the frozen segments the player '
+                 + 'asked for, so frames may land in the wrong place or be painted over');
+      state.running = true;
+      stopNote = '';
+      tickFails = 0;
+      state.t0 = performance.now();
+      state.lastCycle = 0;
+      lastFrame = 0;
+      lastReport = performance.now();
+      tick();
+      const how = await held;
+      if (run === runs) screenSays(how);
+    } catch (e) {
+      // A controller that stopped answering half way through begin():
+      // the layout may be in, so let go rather than leave it frozen.
+      if (begun) link.release();
+      quit();
+      say('could not start: ' + ((e && e.message) || e), 'bad');
+    } finally {
+      starting = null;
+    }
+  })();
+  return starting;
 }
 
 async function stop() {
+  runs++;
   state.running = false;
   clearTimeout(timer);
   releaseScreen();
   $('go').textContent = 'start';
   $('go').classList.remove('stop');
+  $('scr').textContent = '-';
   await link.release();
   // The helmet is dark now, so the preview must be too -- a preview
   // still showing the last frame is a preview that is lying.
@@ -538,6 +748,7 @@ const tracks = new M.TrackCache();
 
 function stopShow() {
   state.showT0 = null;
+  state.showHold = null;
   $('showgo').textContent = 'start';
   $('showgo').classList.remove('on');
 }
@@ -629,8 +840,10 @@ async function startShow() {
     if (state.showT0 === null && !an.el) {
       startShow();
     } else {
-      // stop is stop: the song as well as the lights
+      // stop is stop: the song as well as the lights -- and following
+      // Spotify, which would start the show again within a second
       if (an.el) { an.stop(); audioSource('none'); }
+      unfollow();
       stopShow();
       showPP();
       showReadyText($('showpick').value);
@@ -642,6 +855,7 @@ async function startShow() {
     if (!state.show) return;
     if (an.el) { an.stop(); audioSource('none'); }
     state.showT0 = performance.now();
+    state.showHold = null;
     showRunning();
     $('showat').textContent = 'lights only — no song; start plays it with sound';
     if (!state.running) start();
@@ -833,8 +1047,50 @@ function spButton() {
   }
 })();
 
+// Turning following off, from its button or from anything that means
+// stop.  It used to survive the stop button, so the page that had just
+// handed the helmet back started it again within a second.
+let spRun = 0;          // bumped on every toggle, so an old poll chain ends
+
+function unfollow() {
+  if (!state.follow) return;
+  state.follow = false;
+  spRun++;
+  clearTimeout(spTimer);
+  spTimer = null;
+  spButton();
+  spSay('stopped following Spotify');
+}
+
+// Spotify playing something with no show, or nothing: the show stops
+// and the presets carry on, rather than the last show running on into
+// a song it was not made for.
+function spIdle() {
+  if (state.showT0 !== null && !an.el) {
+    stopShow();
+    showReadyText($('showpick').value);
+  }
+}
+
+// One poll, then the next a second after it is answered -- never on a
+// fixed beat.  setInterval did not wait for the answer, so slow ones
+// overlapped, and an older answer arriving last moved the clock back.
 async function spTick() {
   if (!state.follow) return;
+  const mine = spRun;
+  try {
+    await spPoll();
+  } catch (e) {
+    spSay('Spotify: ' + String((e && e.message) || e));
+  } finally {
+    if (state.follow && mine === spRun) {
+      clearTimeout(spTimer);
+      spTimer = setTimeout(spTick, Math.max(1000, sp.waitMs()));
+    }
+  }
+}
+
+async function spPoll() {
   try {
     await sp.poll();
   } catch (e) {
@@ -842,34 +1098,47 @@ async function spTick() {
     if (why !== spSaidWhy) { spSaidWhy = why; spSay('Spotify: ' + why); }
     return;
   }
+  if (!state.follow) return;      // turned off while the answer was coming
   spSaidWhy = '';
   const tr = sp.track;
-  if (!tr) { spSay('Spotify: nothing playing'); return; }
+  if (!tr) { spSay('Spotify: nothing playing'); spIdle(); return; }
 
   const hit = M.bestShow(tr.name, tr.artists, D.shows);
   if (!hit) {
     spSay('playing "' + tr.name + '" — no show for that one');
+    spIdle();
     return;
   }
   if (!state.show || $('showpick').value !== hit.name) {
     $('showpick').value = hit.name;
     await pickShow(hit.name);
+    if (!state.follow) return;
   }
   const pos = sp.position();
   if (pos === null) return;
-  // Snap when it is a long way out -- first lock, a seek, a skip --
-  // and ease otherwise, because a poll a second against a frame
-  // clock will always disagree by a few tens of milliseconds and
-  // snapping on that makes the show stutter once a second.
   const want = performance.now() - pos * 1000;
-  if (state.showT0 === null || Math.abs(state.showT0 - want) > 250) {
+  if (!sp.playing) {
+    // Paused: hold the show where the track is.  Left on the frame
+    // clock it played the second since the last poll and then snapped
+    // back to the same place, a one-second loop for as long as the
+    // pause lasted.
+    state.showHold = pos;
+    state.showT0 = want;
+  } else if (state.showHold !== null || state.showT0 === null
+             || Math.abs(state.showT0 - want) > 600) {
+    // Snap when it is a long way out -- first lock, a seek, a skip,
+    // the end of a pause -- and ease otherwise, because a poll a
+    // second against a frame clock will always disagree by a few tens
+    // of milliseconds and snapping on that makes the show stutter.
+    // 600 ms, not 250: on school or phone WiFi the answer's own
+    // latency wanders by more than 250 and every few polls jumped.
+    state.showHold = null;
     state.showT0 = want;
   } else {
     state.showT0 += (want - state.showT0) * 0.15;
   }
   if (!state.running) start();
-  $('showgo').textContent = 'stop';
-  $('showgo').classList.add('on');
+  showRunning();
   spSay((sp.playing ? '▶ ' : '❚❚ ') + tr.name + ' · '
         + hit.name.replace(/^deadmau5 - /, '') + ' · ' + mmss(pos));
 }
@@ -881,18 +1150,18 @@ $('spbtn').onclick = async () => {
     if (!blob) return;
     try { sp.connect(blob); } catch (e) { spSay(String(e.message || e)); return; }
   }
-  state.follow = !state.follow;
-  spButton();
   if (state.follow) {
-    spSay('asking Spotify…');
-    if (spTimer) clearInterval(spTimer);
-    spTimer = setInterval(spTick, 1000);
-    spTick();
-  } else {
-    if (spTimer) clearInterval(spTimer);
-    spTimer = null;
+    unfollow();
     spSay('');
+    return;
   }
+  state.follow = true;
+  spRun++;
+  spButton();
+  spSay('asking Spotify…');
+  clearTimeout(spTimer);
+  spTimer = null;
+  spTick();
 };
 spButton();
 
@@ -909,7 +1178,18 @@ for (const name of Object.keys(D.presets)) {
   grid.appendChild(b);
 }
 
-$('go').onclick = () => (state.running ? stop() : start());
+// While a start is on its way the button already says stop, and means
+// it: the start is cancelled and lets go of whatever it had taken.
+$('go').onclick = () => {
+  if (state.running || (starting && startingRun === runs)) {
+    // stop is stop: following Spotify would start it again within a second
+    unfollow();
+    stopNote = '';
+    stop();
+  } else {
+    start();
+  }
+};
 $('hand').onchange = (e) => {
   state.handover = e.target.checked;
   link.standby = state.handover ? (D.standby || null) : null;
@@ -918,16 +1198,31 @@ $('hand').onchange = (e) => {
 $('bri').oninput = (e) => {
   state.bri = +e.target.value;
   $('brival').textContent = state.bri;
-  if (state.running) link.postJSON({ bri: state.bri }).catch(() => {});
+  if (state.running) link.setBri(state.bri).catch(() => {});
   save();
 };
 $('cycle').onchange = (e) => { state.cycle = +e.target.value; save(); };
 
 // Leaving must put the helmet out.  The segment is frozen, so without
 // this the last frame stays lit until somebody pulls the plug.
-addEventListener('pagehide', () => { if (state.running) link.release(); });
+// A start still on its way counts: its layout may land after this.
+addEventListener('pagehide', () => { if (state.running || starting) link.release(); });
 addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && state.running) stop();
+  if (document.visibilityState === 'hidden') {
+    if (state.running || (starting && startingRun === runs)) {
+      stopNote = 'the helmet stopped while this page was out of sight (another '
+        + 'app, a file picker, or the screen going off) -- keep it in front '
+        + 'during a show, and if the screen locked by itself, set the '
+        + 'phone\'s auto-lock to Never';
+      stop();
+    }
+  } else if (stopNote) {
+    pageWarn(stopNote);
+    // The song plays on with the screen off, and the lights can pick it
+    // up again now that they can be driven properly.  (Following
+    // Spotify picks itself up on its next poll.)
+    if (an.el && !an.el.paused) start();
+  }
 });
 addEventListener('resize', () => { dots = null; draw(); });
 

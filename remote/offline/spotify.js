@@ -72,7 +72,8 @@ class Spotify {
     this.expires = 0;
     this.err = '';
     this.last = null;          // the most recent currently-playing
-    this.at = 0;               // performance.now() when it arrived
+    this.at = 0;               // performance.now() it was true at
+    this.notBefore = 0;        // performance.now() a 429 said to wait for
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) {
@@ -84,13 +85,20 @@ class Spotify {
 
   get connected() { return !!(this.clientId && this.refresh); }
 
-  // "<client id>.<refresh token>", as mau5spotify.py prints it.
+  // "<client id>.<refresh token>", as mau5spotify.py prints it.  Every
+  // space and line break goes, not just the ends: the line is printed
+  // indented, and the dot used to be found in the trimmed string and
+  // then cut from the untrimmed one, so four leading spaces moved the
+  // cut four characters left and spoiled the id and the token both --
+  // saved, so every poll after failed with 400.  Neither part can
+  // contain whitespace, and a Terminal copy of a wrapped line can.
   connect(blob) {
-    const i = String(blob).trim().indexOf('.');
+    const s = String(blob).replace(/\s+/g, '');
+    const i = s.indexOf('.');
     if (i < 8) throw new Error('that does not look like the line '
                                + 'mau5spotify.py printed');
-    this.clientId = blob.slice(0, i).trim();
-    this.refresh = blob.slice(i + 1).trim();
+    this.clientId = s.slice(0, i);
+    this.refresh = s.slice(i + 1);
     this.access = null; this.expires = 0; this.err = '';
     try {
       localStorage.setItem(KEY, JSON.stringify({ c: this.clientId,
@@ -130,16 +138,33 @@ class Spotify {
     return this.access;
   }
 
+  // How long to wait before the next poll, beyond the usual second.
+  waitMs() { return Math.max(0, this.notBefore - performance.now()); }
+
   async poll() {
+    if (this.waitMs() > 0)
+      throw new Error('rate limited, waiting ' + Math.ceil(this.waitMs() / 1000) + ' s');
     const tok = await this.token();
+    const t0 = performance.now();
     const r = await fetch(NOW, { headers: { Authorization: 'Bearer ' + tok } });
+    const t1 = performance.now();
     if (r.status === 204) { this.last = null; return null; }
     if (r.status === 401) { this.access = null; throw new Error('token expired'); }
-    if (r.status === 429) { throw new Error('rate limited'); }
+    if (r.status === 429) {
+      // Asking again every second is what keeps a rate limit on, so
+      // wait as long as Spotify says -- or 5 s when the header is not
+      // readable from a page, which it need not be.
+      const ra = Number(r.headers && r.headers.get('Retry-After'));
+      this.notBefore = performance.now() + Math.min(60, ra > 0 ? ra : 5) * 1000;
+      throw new Error('rate limited');
+    }
     if (!r.ok) throw new Error('Spotify said ' + r.status);
     const d = await r.json();
     this.last = d;
-    this.at = performance.now();
+    // progress_ms is from somewhere between asking and hearing back, so
+    // the middle, not the arrival: the arrival put the request's whole
+    // latency, and all its jitter, into where the show thought it was.
+    this.at = (t0 + t1) / 2;
     this.err = '';
     return d;
   }
