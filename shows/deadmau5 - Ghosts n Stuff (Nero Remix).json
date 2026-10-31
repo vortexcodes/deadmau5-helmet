@@ -8,14 +8,14 @@
  "fade": 0.45,
  "accent": true,
  "pulse": 0.4,
- "lock": true,
+ "lock": false,
  "cues": [
   {
-   "start": 0.986,
-   "end": 14.7,
+   "start": 0.129,
+   "end": 13.843,
    "preset": "wipe",
    "params": {
-    "period": 3.429,
+    "period": 1.714,
     "a": [
      255,
      40,
@@ -28,33 +28,27 @@
     ]
    },
    "level": 1,
-   "shape": "steady",
-   "gain": 0.246
+   "shape": "build",
+   "gain": 0.265
   },
   {
-   "start": 14.7,
-   "end": 28.415,
-   "preset": "gradient",
+   "start": 13.843,
+   "end": 27.558,
+   "preset": "matrix",
    "params": {
-    "period": 3.429,
-    "a": [
+    "color": [
      255,
      40,
-     0
-    ],
-    "b": [
-     255,
-     150,
      0
     ]
    },
    "level": 1,
-   "shape": "fall",
-   "gain": 0.217
+   "shape": "build",
+   "gain": 1.645
   },
   {
-   "start": 28.415,
-   "end": 42.129,
+   "start": 27.558,
+   "end": 41.272,
    "preset": "comet",
    "params": {
     "period": 1.714,
@@ -69,10 +63,11 @@
    "gain": 2.038
   },
   {
-   "start": 42.129,
-   "end": 55.843,
-   "preset": "chase",
+   "start": 41.272,
+   "end": 54.986,
+   "preset": "scanner",
    "params": {
+    "bounce": false,
     "period": 1.714,
     "color": [
      255,
@@ -82,45 +77,13 @@
    },
    "level": 1,
    "shape": "build",
-   "gain": 2.203
+   "gain": 2.33
   },
   {
-   "start": 55.843,
-   "end": 69.557,
-   "preset": "lightning",
+   "start": 54.986,
+   "end": 68.7,
+   "preset": "beatpulse",
    "params": {
-    "every": 0.8,
-    "color": [
-     255,
-     40,
-     0
-    ]
-   },
-   "level": 1,
-   "shape": "drop",
-   "overlay": {
-    "preset": "beatpulse",
-    "params": {
-     "floor": 0.0,
-     "color": [
-      255,
-      150,
-      0
-     ]
-    },
-    "band": "bass",
-    "gain": 0.9,
-    "floor": 0.1,
-    "mix": "add"
-   },
-   "gain": 1.034
-  },
-  {
-   "start": 69.557,
-   "end": 83.271,
-   "preset": "scanner",
-   "params": {
-    "period": 3.429,
     "color": [
      0,
      180,
@@ -128,27 +91,35 @@
     ]
    },
    "level": 1,
-   "shape": "steady",
-   "gain": 1.58
-  },
-  {
-   "start": 83.271,
-   "end": 110.7,
-   "preset": "matrix",
-   "params": {
-    "color": [
-     255,
-     0,
-     120
-    ]
+   "shape": "drop",
+   "overlay": {
+    "preset": "tubepulse",
+    "params": {
+     "color": [
+      120,
+      0,
+      255
+     ]
+    },
+    "band": "bass",
+    "gain": 0.9,
+    "floor": 0.1,
+    "mix": "add"
    },
-   "level": 0,
-   "shape": "build",
-   "gain": 0.729
+   "gain": 0.448
   },
   {
-   "start": 110.7,
-   "end": 124.414,
+   "start": 68.7,
+   "end": 82.415,
+   "preset": "sparkle",
+   "params": {},
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.589
+  },
+  {
+   "start": 82.415,
+   "end": 116.7,
    "preset": "wipe",
    "params": {
     "period": 3.429,
@@ -168,150 +139,410 @@
    "gain": 0.2
   },
   {
-   "start": 124.414,
-   "end": 138.128,
-   "preset": "sparkle",
-   "params": {},
-   "level": 1,
-   "shape": "steady",
-   "gain": 0.589
-  },
-  {
-   "start": 138.128,
-   "end": 151.843,
-   "preset": "chase",
+   "start": 116.7,
+   "end": 123.558,
+   "preset": "strobe",
    "params": {
-    "period": 2.2,
+    "hz": 6.0,
     "color": [
      255,
      40,
      0
     ]
    },
-   "level": 1,
+   "level": 3,
    "shape": "steady",
-   "gain": 2.267
-  },
-  {
-   "start": 151.843,
-   "end": 158.7,
-   "preset": "earspin",
-   "params": {
-    "period": 2.4,
-    "color": [
-     0,
-     180,
-     255
-    ]
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      255,
+      150,
+      0
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
    },
-   "level": 1,
-   "shape": "steady",
-   "gain": 1.595
+   "gain": 3.306
   },
   {
-   "start": 158.7,
-   "end": 172.414,
-   "preset": "comet",
+   "start": 123.558,
+   "end": 130.415,
+   "preset": "fire",
    "params": {
-    "period": 4.0,
+    "speed": 1.8
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "confetti",
+    "params": {
+     "rate": 9.0
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.929
+  },
+  {
+   "start": 130.415,
+   "end": 137.272,
+   "preset": "confetti",
+   "params": {
+    "rate": 26.0
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 3.364
+  },
+  {
+   "start": 137.272,
+   "end": 144.129,
+   "preset": "eq",
+   "params": {},
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      120,
+      0,
+      255
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 1.552
+  },
+  {
+   "start": 144.129,
+   "end": 150.986,
+   "preset": "split",
+   "params": {
+    "shell": "fire",
+    "ears": "pinwheel"
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.758
+  },
+  {
+   "start": 150.986,
+   "end": 157.843,
+   "preset": "lightning",
+   "params": {
+    "every": 1.1,
     "color": [
      255,
      0,
      120
     ]
    },
-   "level": 1,
+   "level": 3,
    "shape": "steady",
-   "gain": 1.602
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 2.621
   },
   {
-   "start": 172.414,
-   "end": 186.128,
-   "preset": "scanner",
+   "start": 157.843,
+   "end": 164.7,
+   "preset": "rainbow",
    "params": {
-    "period": 1.714,
-    "color": [
-     0,
-     255,
-     140
-    ]
+    "period": 2.5
    },
-   "level": 1,
-   "shape": "build",
-   "gain": 1.749
-  },
-  {
-   "start": 186.128,
-   "end": 192.985,
-   "preset": "matrix",
-   "params": {
-    "color": [
-     0,
-     255,
-     140
-    ]
-   },
-   "level": 1,
+   "level": 3,
    "shape": "steady",
-   "gain": 1.23
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      0,
+      90,
+      255
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.596
   },
   {
-   "start": 192.985,
-   "end": 206.699,
+   "start": 164.7,
+   "end": 171.558,
+   "preset": "fire",
+   "params": {
+    "speed": 1.8
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      0,
+      90,
+      255
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.872
+  },
+  {
+   "start": 171.558,
+   "end": 178.415,
    "preset": "wipe",
    "params": {
-    "period": 3.429,
+    "period": 0.429,
     "a": [
-     0,
      255,
-     140
+     255,
+     255
     ],
     "b": [
      0,
-     90,
+     200,
      255
     ]
    },
-   "level": 1,
-   "shape": "steady",
-   "gain": 0.273
-  },
-  {
-   "start": 206.699,
-   "end": 220.414,
-   "preset": "spiral",
-   "params": {
-    "period": 6.0
+   "level": 3,
+   "shape": "build",
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
    },
-   "level": 1,
-   "shape": "steady",
-   "gain": 0.251
+   "gain": 0.369
   },
   {
-   "start": 220.414,
-   "end": 254.699,
-   "preset": "chase",
+   "start": 178.415,
+   "end": 185.272,
+   "preset": "pinwheel",
    "params": {
-    "period": 3.429,
+    "period": 1.2,
     "color": [
      255,
      255,
      255
     ]
    },
-   "level": 0,
-   "shape": "build",
-   "gain": 0.471
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "confetti",
+    "params": {
+     "rate": 9.0
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.625
   },
   {
-   "start": 254.699,
-   "end": 288.985,
-   "preset": "beatpulse",
+   "start": 185.272,
+   "end": 192.129,
+   "preset": "split",
    "params": {
+    "shell": "fire",
+    "ears": "pinwheel"
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.758
+  },
+  {
+   "start": 192.129,
+   "end": 198.986,
+   "preset": "blades",
+   "params": {
+    "period": 1.714,
     "color": [
      255,
      40,
      0
+    ]
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      255,
+      150,
+      0
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 2.534
+  },
+  {
+   "start": 198.986,
+   "end": 205.843,
+   "preset": "strobe",
+   "params": {
+    "hz": 6.0,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "confetti",
+    "params": {
+     "rate": 9.0
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 4.594
+  },
+  {
+   "start": 205.843,
+   "end": 212.7,
+   "preset": "police",
+   "params": {
+    "hz": 9.333
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 1.299
+  },
+  {
+   "start": 212.7,
+   "end": 219.558,
+   "preset": "confetti",
+   "params": {
+    "rate": 26.0
+   },
+   "level": 3,
+   "shape": "steady",
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      255,
+      150,
+      0
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 5.0
+  },
+  {
+   "start": 219.558,
+   "end": 253.843,
+   "preset": "comet",
+   "params": {
+    "period": 3.429,
+    "color": [
+     255,
+     40,
+     0
+    ]
+   },
+   "level": 0,
+   "shape": "build",
+   "gain": 1.147
+  },
+  {
+   "start": 253.843,
+   "end": 288.129,
+   "preset": "beatpulse",
+   "params": {
+    "color": [
+     0,
+     180,
+     255
     ]
    },
    "level": 0,
@@ -320,9 +551,9 @@
     "preset": "tubepulse",
     "params": {
      "color": [
-      255,
-      150,
-      0
+      120,
+      0,
+      255
      ]
     },
     "band": "bass",
@@ -330,30 +561,13 @@
     "floor": 0.1,
     "mix": "add"
    },
-   "gain": 0.344
+   "gain": 0.252
   },
   {
-   "start": 288.985,
-   "end": 302.699,
-   "preset": "comet",
+   "start": 288.129,
+   "end": 301.843,
+   "preset": "matrix",
    "params": {
-    "period": 4.0,
-    "color": [
-     0,
-     180,
-     255
-    ]
-   },
-   "level": 1,
-   "shape": "steady",
-   "gain": 1.381
-  },
-  {
-   "start": 302.699,
-   "end": 316.413,
-   "preset": "earspin",
-   "params": {
-    "period": 2.4,
     "color": [
      255,
      0,
@@ -362,11 +576,11 @@
    },
    "level": 1,
    "shape": "steady",
-   "gain": 1.609
+   "gain": 1.294
   },
   {
-   "start": 316.413,
-   "end": 323.27,
+   "start": 301.843,
+   "end": 315.558,
    "preset": "wipe",
    "params": {
     "period": 3.429,
@@ -386,111 +600,155 @@
    "gain": 0.273
   },
   {
-   "start": 323.27,
-   "end": 336.985,
-   "preset": "matrix",
+   "start": 315.558,
+   "end": 329.272,
+   "preset": "sparkle",
+   "params": {},
+   "level": 1,
+   "shape": "steady",
+   "gain": 0.589
+  },
+  {
+   "start": 329.272,
+   "end": 336.129,
+   "preset": "earspin",
    "params": {
+    "period": 2.4,
     "color": [
      255,
-     255,
-     255
+     40,
+     0
     ]
    },
    "level": 1,
    "shape": "steady",
-   "gain": 0.635
+   "gain": 1.628
   },
   {
-   "start": 336.985,
-   "end": 350.699,
-   "preset": "spiral",
+   "start": 336.129,
+   "end": 349.843,
+   "preset": "rainbow",
    "params": {
     "period": 6.0
    },
-   "level": 1,
+   "level": 2,
    "shape": "steady",
-   "gain": 0.251
-  },
-  {
-   "start": 350.699,
-   "end": 357.556,
-   "preset": "chase",
-   "params": {
-    "period": 2.2,
-    "color": [
-     255,
-     40,
-     0
-    ]
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      120,
+      0,
+      255
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
    },
-   "level": 1,
-   "shape": "steady",
-   "gain": 2.267
+   "gain": 0.41
   },
   {
-   "start": 357.556,
-   "end": 371.27,
+   "start": 349.843,
+   "end": 363.558,
+   "preset": "plasma",
+   "params": {},
+   "level": 2,
+   "shape": "steady",
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.354
+  },
+  {
+   "start": 363.558,
+   "end": 377.272,
+   "preset": "split",
+   "params": {
+    "shell": "plasma",
+    "ears": "chase"
+   },
+   "level": 2,
+   "shape": "steady",
+   "overlay": {
+    "preset": "sparkle",
+    "params": {
+     "density": 0.1
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 0.481
+  },
+  {
+   "start": 377.272,
+   "end": 384.129,
    "preset": "comet",
    "params": {
-    "period": 4.0,
+    "period": 1.6,
     "color": [
      255,
-     40,
-     0
+     0,
+     120
     ]
    },
-   "level": 1,
+   "level": 2,
    "shape": "steady",
-   "gain": 2.037
+   "overlay": {
+    "preset": "twinkle",
+    "params": {
+     "density": 0.08,
+     "color": [
+      255,
+      200,
+      0
+     ]
+    },
+    "band": "high",
+    "gain": 0.7,
+    "floor": 0.1,
+    "mix": "add"
+   },
+   "gain": 1.914
   },
   {
-   "start": 371.27,
-   "end": 384.984,
-   "preset": "scanner",
+   "start": 384.129,
+   "end": 414.986,
+   "preset": "ripple",
    "params": {
-    "period": 3.429,
+    "period": 3.4,
     "color": [
+     255,
      0,
-     180,
-     255
-    ]
-   },
-   "level": 1,
-   "shape": "steady",
-   "gain": 1.58
-  },
-  {
-   "start": 384.984,
-   "end": 414.127,
-   "preset": "gradient",
-   "params": {
-    "period": 6.857,
-    "a": [
-     0,
-     180,
-     255
-    ],
-    "b": [
-     120,
-     0,
-     255
+     120
     ]
    },
    "level": 0,
    "shape": "fall",
-   "gain": 0.2
+   "gain": 1.465
   }
  ],
  "scenes": {
   "v": 1,
-  "src": "",
-  "treatment": "0e0005da65c6",
+  "src": "13322987:c10b4b0291b44159bef332810369d3e588caf249",
+  "treatment": "9375d89eefc8",
   "grid": {
-   "t0": 0.9860709079241183,
-   "spb": 0.4285696342462771,
+   "t0": 0.128932,
+   "spb": 0.4285714282765738,
    "lead": 0.0
   },
-  "bars": 242,
+  "bars": 243,
   "pal": {
    "ghost": {
     "stops": [
@@ -587,7 +845,7 @@
    {
     "name": "ghosts",
     "from": -1.0,
-    "to": 7.0,
+    "to": 7.5,
     "out": 0.0,
     "pump": null,
     "layers": [
@@ -626,7 +884,7 @@
    },
    {
     "name": "kick",
-    "from": 7.0,
+    "from": 7.5,
     "to": 16.0,
     "out": 0.0,
     "pump": null,
@@ -1034,7 +1292,7 @@
    {
     "name": "drop1",
     "from": 32.0,
-    "to": 47.0,
+    "to": 48.0,
     "out": 0.0,
     "pump": {
      "pat": "x.......x.......",
@@ -1156,8 +1414,8 @@
    },
    {
     "name": "void",
-    "from": 47.0,
-    "to": 59.0,
+    "from": 48.0,
+    "to": 60.0,
     "out": 0.0,
     "pump": null,
     "layers": [
@@ -1196,8 +1454,8 @@
    },
    {
     "name": "rise",
-    "from": 59.0,
-    "to": 63.0,
+    "from": 60.0,
+    "to": 64.0,
     "out": 0.5,
     "pump": null,
     "layers": [
@@ -1267,15 +1525,15 @@
       "step": {
        "keys": [
         [
-         59.0,
+         60.0,
          1.0
         ],
         [
-         61.0,
+         62.0,
          0.5
         ],
         [
-         62.0,
+         63.0,
          0.25
         ]
        ]
@@ -1309,7 +1567,7 @@
    },
    {
     "name": "drop2 A",
-    "from": 63.0,
+    "from": 64.0,
     "to": 80.0,
     "out": 0.0,
     "pump": {
@@ -1874,7 +2132,7 @@
    {
     "name": "mid",
     "from": 128.0,
-    "to": 135.0,
+    "to": 136.0,
     "out": 0.0,
     "pump": null,
     "layers": [
@@ -2001,7 +2259,7 @@
    },
    {
     "name": "stabs",
-    "from": 135.0,
+    "from": 136.0,
     "to": 144.0,
     "out": 0.0,
     "pump": null,
@@ -2074,7 +2332,7 @@
    {
     "name": "strip",
     "from": 144.0,
-    "to": 149.0,
+    "to": 150.0,
     "out": 0.0,
     "pump": null,
     "layers": [
@@ -2160,8 +2418,8 @@
    },
    {
     "name": "build3",
-    "from": 149.0,
-    "to": 157.0,
+    "from": 150.0,
+    "to": 158.0,
     "out": 0.0,
     "pump": null,
     "layers": [
@@ -2231,15 +2489,15 @@
       "step": {
        "keys": [
         [
-         149.0,
+         150.0,
          1.0
         ],
         [
-         153.0,
+         154.0,
          0.5
         ],
         [
-         155.0,
+         156.0,
          0.25
         ]
        ]
@@ -2296,15 +2554,15 @@
       "rate": {
        "keys": [
         [
-         149.0,
+         150.0,
          1.0
         ],
         [
-         153.0,
+         154.0,
          2.0
         ],
         [
-         155.0,
+         156.0,
          4.0
         ]
        ]
@@ -2325,9 +2583,9 @@
    },
    {
     "name": "suck3",
-    "from": 157.0,
+    "from": 158.0,
     "to": 160.0,
-    "out": 1.0,
+    "out": 2.0,
     "pump": null,
     "layers": [
      {
@@ -3163,7 +3421,7 @@
    {
     "name": "dark",
     "from": 240.0,
-    "to": 242.0,
+    "to": 243.0,
     "out": 0.0,
     "pump": null,
     "layers": []
@@ -3293,10 +3551,10 @@
         251,
         158
        ],
-       "speed": 103.722934,
+       "speed": 103.7225,
        "loop": false
       },
-      "tofs": -1.809147
+      "tofs": -1.809154
      }
     ]
    },
@@ -3367,7 +3625,7 @@
    },
    {
     "name": "DROP 2",
-    "at": 63.0,
+    "at": 64.0,
     "beats": 2.0,
     "layers": [
      {

@@ -683,7 +683,7 @@ def build_timeline(h, beats, bars, levels, duration, title="", music=None):
 
 
 # --------------------------------------------------------------------------
-def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
+def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True, downbeat=None):
     wav = decode(path)
     a, sr = load_wav(wav)
     dur = len(a) / sr
@@ -721,7 +721,8 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
                 offset = float(grid[int(np.argmax(env[idx].sum(1)))])
         beats = beat_grid(bpm, offset, dur)
 
-    ph, bar_conf = downbeat_phase(low, log_bands(mag, freqs), fps, beats - env_t0)
+    ph, bar_conf = ((downbeat, float("nan")) if downbeat is not None else
+                    downbeat_phase(low, log_bands(mag, freqs), fps, beats - env_t0))
     bars = beats[ph::4]
     if len(bars) < 4:                     # three whole bars, see above
         raise ValueError("%s is %.1f s long and holds %d downbeat%s at "

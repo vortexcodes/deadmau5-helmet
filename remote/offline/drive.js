@@ -170,6 +170,8 @@ class TrackDrive {
   }
 }
 
+// `file` carries its size as a query, which the controller ignores: force-cache
+// otherwise keeps a song's old analysis for good once it has been replaced.
 async function loadDrive(origin, file) {
   const r = await fetch((origin || '') + '/' + file, { cache: 'force-cache' });
   if (!r.ok) throw new Error('no drive file (' + r.status + ')');

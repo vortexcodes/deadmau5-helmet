@@ -39,6 +39,7 @@
 // flat.  8192 points gives 5.4 Hz bins, which resolves a semitone
 // down to about 90 Hz, at a window of 186 ms that harmony does not
 // move inside anyway.
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
 const FFT_FAST = 1024;              // level, flux, bands
 const FFT_SLOW = 8192;              // pitch, centroid
 const TICK_MS = 20;                 // 50 Hz analysis, independent of render
@@ -93,6 +94,10 @@ class Analyser {
     this.node = null;
     this.src = null;
     this.el = null;
+    // The one element every file plays through, see useFile.
+    this.fileEl = null;
+    this.fileSrc = null;
+    this.unlocked = false;
     this.stream = null;
     this.timer = null;
     this.kind = 'none';
@@ -228,14 +233,42 @@ class Analyser {
     this._start();
   }
 
+  // The audio element for files, made once and kept.  A phone only lets an
+  // element start itself once a tap has started it, so a song following another
+  // with nobody touching anything has to be the same element, and it can only
+  // be wired into the graph once anyway.
+  _fileEl() {
+    if (!this.fileEl) {
+      const ctx = this._ctx();
+      const el = new Audio();
+      el.crossOrigin = 'anonymous';
+      el.loop = false;
+      this.fileEl = el;
+      this.fileSrc = ctx.createMediaElementSource(el);
+    }
+    return this.fileEl;
+  }
+
+  // Called straight from a tap, before anything is awaited: the tap is what
+  // gives the element and the audio context the right to play later on, and
+  // on an iPhone it does not last through a trip to the song store.
+  unlock() {
+    const ctx = this._ctx();
+    if (ctx.state !== 'running') { try { ctx.resume(); } catch (e) {} }
+    if (this.unlocked || this.el) return;
+    this.unlocked = true;
+    const el = this._fileEl();
+    el.src = SILENCE;
+    const p = el.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+
   async useFile(file) {
     this.stop();
     const ctx = this._ctx();
-    const el = new Audio();
+    const el = this._fileEl();
     el.src = URL.createObjectURL(file);
-    el.loop = false;
-    el.crossOrigin = 'anonymous';
-    this.src = ctx.createMediaElementSource(el);
+    this.src = this.fileSrc;
     this.src.connect(this.node);
     // The phone still plays it -- straight from the source, never from
     // the analyser.  This was node -> speakers, and stop() only unplugs
@@ -265,6 +298,7 @@ class Analyser {
   stop() {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     if (this.el) {
+      this.el.onended = this.el.onerror = this.el.onpause = null;
       try { this.el.pause(); URL.revokeObjectURL(this.el.src); } catch (e) {}
       this.el = null;
     }

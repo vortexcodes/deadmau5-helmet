@@ -22,6 +22,9 @@ data/cal/_tmp/
 # camera preview. Regenerate with setup/make_eye_cert.sh.
 data/cal/tls/
 
+# Controller firmware builds: firmware/README.md says how to make one.
+firmware/*.bin
+
 # The offline player, built from remote/offline/ by mau5offline.py.
 # Generated: it carries the map, the fonts and the power model baked
 # in, so a committed copy would silently go stale the first time any

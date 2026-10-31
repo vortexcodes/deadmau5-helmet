@@ -41,11 +41,17 @@ def _scene_times(spec, duration, even=40):
     """
     g = spec["grid"]
     t0, spb, lead = g["t0"], g["spb"], g.get("lead", 0.0)
+    holds = g.get("holds") or []
 
     def at(bar):
-        return t0 + 4.0 * bar * spb - lead
+        return (t0 + 4.0 * bar * spb - lead
+                + sum(beats * spb for beat, beats in holds if 4.0 * bar > beat))
 
     ts = []
+    for beat, beats in holds:
+        a = at(beat / 4.0)
+        ts += [a - 0.001, a + 0.001, a + beats * spb / 2.0,
+               a + beats * spb - 0.001, a + beats * spb + 0.001]
     for s in spec["scenes"]:
         a, b = at(s["from"]), at(s["to"])
         ts += [a + 0.001, (a + b) / 2.0, b - 0.001]
@@ -187,6 +193,24 @@ SYNTHETIC = {
         {"name": "later", "from": 34, "to": 38, "like": "grads",
          "patch": {"0": {"gain": 0.3}}, "add": [{"use": "ring", "gain": 0.5}],
          "each": {"env": {"out": 4}}},
+        {"name": "orbs", "from": 38, "to": 38.5, "pal": "warm", "layers": [
+            {"fx": "orb", "on": "all", "x": -40, "y": [60, 120], "rad": 70, "soft": 20,
+             "wx": 90, "wy": 30, "xf": 0.25, "yf": 0.5, "xp": 0.1, "cgrad": 0.5, "c": 0.3},
+            {"fx": "orb", "on": "jaw", "mix": "max", "x": 0, "y": -60, "rad": {"38": 40, "38.25": 60},
+             "soft": 10, "c": 0.8, "gain": 0.7},
+            {"fx": "orb", "on": "rim1+rim2", "mix": "over", "x": {"band": "bass", "lo": -300, "hi": 300},
+             "y": 150, "rad": 120, "soft": 30, "pal": "loop"},
+            {"fx": "preset", "name": "sprite", "on": "shell", "params": {
+                "sprite": "eyes|wink|smile", "rate": 3, "dx": 10, "dy": -5, "vx": 8, "vy": -4,
+                "wx": 30, "wy": 12, "wf": 0.5, "color": "warm@0.6",
+                "y_lo": -108, "y_hi": 166, "x_half": 171}, "gain": 0.6}]},
+        {"name": "twinkles", "from": 38.5, "to": 40, "pal": "loop", "layers": [
+            {"fx": "twinkle", "on": "all", "rate": 0.5, "sharp": 3, "spread": 0.4, "c": 0.2,
+             "seed": 2, "gain": 0.7},
+            {"fx": "twinkle", "on": "tubes1+tubes2", "mix": "max", "rate": {"38.5": 1, "39": 2},
+             "sharp": 6, "dens": 0.5, "pal": "pure", "c": 0.8},
+            {"fx": "twinkle", "on": "face", "mix": "over", "rate": 2, "sharp": [2, 8],
+             "dens": [0.2, 0.9], "seed": 5, "pal": "warm", "c": 1}]},
     ],
     "hits": [
         {"name": "TITLE", "at": "title", "beats": 8, "layers": [
@@ -445,5 +469,60 @@ def t_scene_cost():
          % (worst_mean, worst_max))
 
 
+def t_scene_grid_holds_for_a_seam():
+    """A track edited so the music comes back late: the grid waits for it."""
+    import mau5engine as E
+    import mau5scene
+
+    class Song:
+        pass
+    spb = 0.5
+    straight = 1.0 + spb * np.arange(64)
+    song = Song()
+    song.beats, song.bars = straight, straight[::4]
+    g, n = mau5scene.grid_of(song)
+    ok("holds" not in g, "a straight grid grew a hold: %s" % g)
+    eq(n, 16, "bars")
+
+    late = straight.copy()
+    late[32:] += 0.2                    # the beat that is bar 8 comes 200 ms late
+    song.beats, song.bars = late, late[::4]
+    g, n = mau5scene.grid_of(song)
+    eq(g["holds"], [[32.0, g["holds"][0][1]]], "the hold's place")
+    ok(abs(g["holds"][0][1] - 0.4) < 1e-9, "a hold of 0.2 s is 0.4 beats: %s" % g)
+    ok(abs(g["spb"] - spb) < 1e-9, "the seam changed the tempo: %s" % g)
+
+    early = straight.copy()
+    early[32:] -= 0.2
+    song.beats, song.bars = early, early[::4]
+    try:
+        mau5scene.grid_of(song)
+    except mau5scene.TreatmentError:
+        pass
+    else:
+        ok(False, "a beat that came early would have to run time backwards")
+
+    spec = json.load(open(os.path.join(HERE, "shows", "TIKI TIKI - Slowed.json")))["scenes"]
+    at, beats = spec["grid"]["holds"][0]
+    S = mau5scene.Scenes(spec, E.Helmet())
+    t = spec["grid"]["t0"] + at * spec["grid"]["spb"]
+    held = beats * spec["grid"]["spb"]
+    ok(abs(S.beat(t - 0.1) - (at - 0.1 / spec["grid"]["spb"])) < 1e-9, "before the seam")
+    for inside in (t, t + held / 2, t + held - 1e-6):
+        ok(abs(S.beat(inside) - at) < 1e-6, "the grid moved inside the seam")
+    ok(abs(S.beat(t + held + 0.1) - (at + 0.1 / spec["grid"]["spb"])) < 1e-9, "after the seam")
+
+
+def t_sprite_reaches_the_jaw_only_when_asked():
+    import mau5engine as E
+    h = E.Helmet()
+    low = h.shell & (h.py < 0)
+    lit = lambda **kw: np.asarray(E.make("sprite", sprite="tiki", color=(255, 0, 0), **kw)
+                                  .render(h, 0.0, None), float)[:, 0] > 0
+    ok(not lit()[low].any(), "a sprite placed as before lit the jaw")
+    ok(lit(y_lo=-108.0, y_hi=166.0, x_half=171.0)[low].any(), "the idol has no teeth")
+
+
 GROUP = [t_scene_every_primitive, t_scene_shows_match_phone, t_scenes_compiled_fresh,
-         t_scene_lint, t_cue_shows_unchanged, t_scene_cost]
+         t_scene_lint, t_cue_shows_unchanged, t_scene_cost,
+         t_scene_grid_holds_for_a_seam, t_sprite_reaches_the_jaw_only_when_asked]

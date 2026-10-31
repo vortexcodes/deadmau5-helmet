@@ -32,6 +32,7 @@ from __future__ import annotations
 import colorsys
 import json
 import math
+import os
 
 import numpy as np
 
@@ -140,6 +141,27 @@ SPRITES = {
         ".X...X.....X...X.",
         "X.....X   X.....X",
     ],
+    # The whole shell: y_lo=-108, y_hi=166, x_half=171.  The shell has no LEDs
+    # across the middle of the face, so the mouth is teeth along the jaw arc.
+    "tiki": [
+        ".XXXXXXXXXXXXXXX.",
+        ".................",
+        ".XXXXXXX.XXXXXXX.",
+        ".XXXXXXX.XXXXXXX.",
+        ".XX...XX.XX...XX.",
+        ".XX...XX.XX...XX.",
+        ".XXXXXXX.XXXXXXX.",
+        ".................",
+        "X...............X",
+        "X...............X",
+        ".................",
+        ".................",
+        "X...............X",
+        "X...............X",
+        ".XX.XX.....XX.XX.",
+        "..X.XX.XXX.XX.X..",
+        "...X..X...X..X...",
+    ],
     "eyes": [
         ".XXXXX.....XXXXX.",
         "XXXXXXX...XXXXXXX",
@@ -222,6 +244,31 @@ SPRITES = {
         ".................",
     ],
 }
+
+
+# Sprites a song brings with it: shows/scenes/<song>.sprites.json, {name: [rows]},
+# named after the song so two songs cannot collide.  A sheet that does not parse
+# is said and skipped, so one song being edited cannot stop the others compiling;
+# a scene asking for a sprite that went with it is refused by mau5scene's lint.
+def _song_sprites():
+    d = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shows", "scenes")
+    try:
+        sheets = sorted(f for f in os.listdir(d) if f.endswith(".sprites.json"))
+    except OSError:
+        return
+    for fn in sheets:
+        try:
+            with open(os.path.join(d, fn)) as f:
+                sheet = json.load(f)
+            for name, rows in sheet.items():
+                if not rows or len({len(r) for r in rows}) != 1:
+                    raise ValueError("sprite %s needs rows of one length" % name)
+                SPRITES[name] = list(rows)
+        except (OSError, ValueError) as e:
+            print("  %s: %s" % (fn, e))
+
+
+_song_sprites()
 
 
 def sprite_bitmap(name_or_rows):

@@ -1702,7 +1702,9 @@ def t_offline_drive_matches_the_analysis():
         for row in res["rows"]:
             t = row["t"]
             worst_lvl = max(worst_lvl, abs(row["level"] - music.level_at(t)))
-            worst_ph = max(worst_ph, abs(row["phase"] - music.beat_phase(t)))
+            # round the circle: a time right on a beat can read 0.999 in float32
+            d = abs(row["phase"] - music.beat_phase(t))
+            worst_ph = max(worst_ph, min(d, 1.0 - d))
             eq(row["down"], bool(music.is_downbeat(t)),
                "%s disagrees about a downbeat at %.1fs" % (name, t))
             checked += 1

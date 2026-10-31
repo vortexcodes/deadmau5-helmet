@@ -1,13 +1,13 @@
 {
  "v": 1,
  "show": "deadmau5 - Ghosts n Stuff (Nero Remix)",
- "about": "Bars of the analysis grid: bar b starts at 0.986 + 1.714 b seconds, 242 bars. Ghosts drift over the shell whenever the track empties out. The drops are half-time: the kick on the rims, the snare on beat three across the shell, and in the B sections the left half and ear 1 call on beat one while the right half and ear 2 answer on beat three. Drop 2 lands at bar 63, a bar ahead of the sixteen-bar grid, because that is where the bass lands. White once, on drop 3.",
+ "about": "Bars of the measured grid in the .beats beside this file: bar b starts at 0.129 + 1.714 b seconds, 243 bars. Ghosts drift over the shell whenever the track empties out. The drops are half-time: the kick on the rims, the snare on beat three across the shell, and in the B sections the left half and ear 1 call on beat one while the right half and ear 2 answer on beat three. Drop 2 lands at bar 64, on the sixteen-bar grid like the others; the bar before it is a pickup, the sub swelling under the build. White once, on drop 3.",
  "lead": 0,
  "marks": {
-  "kick": 7, "groove": 16, "build": 24, "roll": 31, "drop1": 32, "void": 47,
-  "title": 48, "sweep55": 55, "rise": 59, "drop2": 63, "drop2B": 80, "drop2A": 96,
-  "drop2B2": 112, "mid": 128, "stabs": 135, "strip": 144, "build3": 149,
-  "suck3": 157, "drop3": 160, "drop3A": 176, "drop3all": 192, "fin": 208,
+  "kick": 7.5, "groove": 16, "build": 24, "roll": 31, "drop1": 32, "void": 48,
+  "title": 48, "sweep55": 55, "rise": 60, "drop2": 64, "drop2B": 80, "drop2A": 96,
+  "drop2B2": 112, "mid": 128, "stabs": 136, "strip": 144, "build3": 150,
+  "suck3": 158, "drop3": 160, "drop3A": 176, "drop3all": 192, "fin": 208,
   "outro": 224, "end": 240
  },
  "palettes": {
@@ -72,7 +72,7 @@
 
   {"name": "rise", "from": "rise", "to": "drop2", "pal": "acid", "out": 0.5,
    "layers": [{"use": "rise", "c": [0.2, 1], "gain": [0.4, 0.9]},
-              {"fx": "blades", "seq": ["0", "1", "2"], "step": {"rise": 1, "61": 0.5, "62": 0.25},
+              {"fx": "blades", "seq": ["0", "1", "2"], "step": {"rise": 1, "62": 0.5, "63": 0.25},
                "c": 0.25, "gain": [0.5, 1]}]},
 
   {"name": "drop2 A", "from": "drop2", "to": "drop2B", "like": "drop1"},
@@ -110,12 +110,12 @@
 
   {"name": "build3", "from": "build3", "to": "suck3", "pal": "acid",
    "layers": [{"use": "rise", "c": [0.1, 0.9], "gain": [0.4, 0.9]},
-              {"fx": "blades", "step": {"build3": 1, "153": 0.5, "155": 0.25}, "c": 0.25,
+              {"fx": "blades", "step": {"build3": 1, "154": 0.5, "156": 0.25}, "c": 0.25,
                "gain": [0.5, 1]},
-              {"fx": "sparks", "on": "all", "rate": {"build3": 1, "153": 2, "155": 4},
+              {"fx": "sparks", "on": "all", "rate": {"build3": 1, "154": 2, "156": 4},
                "life": 0.5, "c": 0.66, "gain": {"band": "high", "lo": 0.2, "hi": 1}}]},
 
-  {"name": "suck3", "from": "suck3", "to": "drop3", "pal": "ghost", "out": 1,
+  {"name": "suck3", "from": "suck3", "to": "drop3", "pal": "ghost", "out": 2,
    "layers": [{"use": "spin", "gain": 0.35},
               {"fx": "sweep", "on": "shell", "axis": "y", "shape": "p", "mode": "band",
                "width": 0.12, "from": 0, "to": 1.1, "c": 0.9, "gain": [0.2, 0.7]}]},
