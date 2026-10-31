@@ -5,9 +5,15 @@ ready tonight. Everything below is on branch `halloween-handoff`. `main` is unto
 
 ## Update, 15:10 PDT: the ten shows are reviewed and inside the budget
 
-All ten new shows were reviewed and pushed to `halloween-handoff`. **Not yet deployed to the helmet:**
-it was streaming from the owner's Mac at first, and its signal has since been -88 to -90 dBm, too weak
-to deploy safely. 142 tests pass.
+All ten new shows were reviewed and pushed to `halloween-handoff`. 142 tests pass. **Deployed to the
+helmet at 16:45 PDT** (`mau5drive.py`, then `mau5offline.py deploy`): the page read back byte for byte,
+all 16 analyses match (two skipped as unchanged differ only in the gzip timestamp), 164 kB free, and
+the page loads against the helmet with all 16 shows listed. Still no presets on the controller, so a
+stop switches the helmet off until someone taps "set up" next to standby glow.
+
+**The helmet does not change access points on its own.** It sat on the far one at -88 to -94 dBm for
+hours, and moving it closer changed nothing. A restart (`{"rb":true}` to `/json/state`, with nothing
+streaming) brought it back in 6 s on the near one at -55 dBm.
 
 | Song | Mean W before | after | heat at end |
 |---|---|---|---|
