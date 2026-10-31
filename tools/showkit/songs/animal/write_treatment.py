@@ -3,6 +3,7 @@
 import sys, os
 KIT = "tools/showkit"
 sys.path.insert(0, KIT)
+from budget import scaled
 from fmt import save
 BASE = "deadmau5 & Wolfgang Gartner - Animal Rights"
 SPB = 0.46875
@@ -158,10 +159,11 @@ def jolts(a, b, amount):
         bar += 1
     return {"keys": keys}
 def cage(gain, warp, wspeed=2.0, scale=10.0, ofs=0.0):
+    # at 0.45 of the gain it was drawn with, the bars are still far brighter than "over" needs to hide what is behind them
     return {"fx": "grad", "on": "shell", "axis": "x", "axis2": "x", "scale": scale, "warp": warp, "wscale": 0.02, "wspeed": wspeed,
-            "lo": 0, "hi": 1, "pal": "steel", "mix": "over", "gain": gain, "ofs": ofs}
+            "lo": 0, "hi": 1, "pal": "steel", "mix": "over", "gain": scaled(gain, 0.45), "ofs": ofs}
 def tube_cage(gain, gate=None):
-    L = {"fx": "fill", "on": "tubes", "pal": "steel", "c": 0.9, "gain": gain}
+    L = {"fx": "fill", "on": "tubes", "pal": "steel", "c": 0.9, "gain": scaled(gain, 0.6)}
     if gate:
         L["gate"] = gate
     return L
@@ -411,4 +413,15 @@ tr["about"] = ("Bars of a measured grid, shows/scenes/deadmau5 & Wolfgang Gartne
  "The breakdown is a leopard at night: gold spots and a fawn glow, the arpeggio going up the tubes, and the title crossing once. The eyes come back, the spots multiply, the cage comes back, and the same riser breaks it at bar 112, the one moment of white in the song. "
  "The second drop is a cobra, interlaced green snakes with two slit eyes swaying and two fangs on the jaw, then a peacock whose fan opens across the dome in blue, green and gold with its plumes up the ears. The last sixteen bars are all of them, a different animal every two bars, ending in a chimera, half tiger, half zebra. "
  "Then the drums are alone again, as they were at the start, and the animals cross the empty cage one last time on their way out while the searchlight comes back and finds nothing. At bar 176 the eyes open again, out here with you. One pair is left at the end, and when the music stops they close.")
+# The long set's budget: each scene's shell asks for about what the guard sends (levels measured before the
+# guard, as written above), the ears dimmer all song, the cage left as written: it hides by painting over.
+from budget import fit
+SHELL_IN = {"scan": 9.6, "nearer": 10.0, "scratch": 12.3, "searchlight": 18.5, "found": 58.1, "alarm": 32.9, "alarm 2": 40.5,
+            "climb": 49.4, "riser": 50.1, "tiger": 37.2, "tiger siren": 25.8, "tiger b": 57.9, "tiger b siren": 25.8, "zebra": 33.4,
+            "zebra siren": 33.6, "zebra b": 33.3, "zebra b siren": 33.1, "stampede": 27.0, "stampede 2": 27.0, "leopard": 30.6,
+            "wake": 21.6, "roll": 48.3, "cobra": 30.1, "cobra siren": 37.7, "cobra b": 27.6, "cobra b siren": 37.7, "peacock": 33.8,
+            "peacock siren": 26.0, "peacock b": 35.9, "peacock b siren": 26.0, "zoo tiger": 42.4, "zoo zebra": 42.5, "zoo cobra": 33.6,
+            "zoo siren": 25.8, "zoo peacock": 42.3, "zoo tiger 2": 59.2, "chimera": 43.1, "zoo siren 2": 31.2, "empty cage": 20.6,
+            "watching": 11.0, "last pair": 8.5}
+fit(tr, SHELL_IN, ask=6.0, ears=0.6, keep=lambda L: L.get("pal") == "steel" and L.get("mix") == "over")
 save(tr, "shows/scenes/%s.scene.json" % BASE)
