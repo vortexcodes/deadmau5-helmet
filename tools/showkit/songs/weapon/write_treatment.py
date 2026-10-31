@@ -250,4 +250,13 @@ about=("Bars of a measured grid, shows/scenes/%s.beats. This song really changes
  "The drop is crimson and white-hot steel: one slash across the shell on every snare, left then right, and the far ear flares as the blade lands on it. Banners unfurl, the blade swings overhead in arcs, crossed swords stand on the dome. The singer comes back as a flame in the middle of the war, and on each long note a single sword is raised from the jaw. "
  "At the crash it all falls, the candle is lit again, the moon crosses again and the blade slides back into its scabbard before the flame gutters out.")%BASE
 tr={"v":1,"show":BASE,"about":about,"lead":0,"marks":MARKS,"palettes":PAL,"motifs":M,"scenes":S,"hits":H}
+# The long set's budget: each scene's shell asks for about what the guard sends (levels measured before the
+# guard, as written above), the ears dimmer all song; and every float to 4 places, so the page stays small.
+from budget import fit, tidy
+SHELL_IN = {"moonrise": 10.6, "moonlit": 15.4, "march": 9.1, "sung march": 12.5, "full march": 14.2, "the draw": 6.6, "on edge": 15.1,
+            "title": 48.9, "quiet": 35.2, "first blood": 25.5, "banners": 15.9, "arcs": 14.9, "crossed": 34.5, "stopped": 14.7,
+            "sung war": 18.8, "sung war 2": 32.3, "raised": 8.6, "lowered": 16.3, "white steel": 22.1, "white steel 2": 34.2,
+            "clash": 19.1, "raised 2": 9.5, "lowered 2": 19.9, "last stand": 34.3, "last stand 2": 41.0, "fall": 21.6, "relit": 7.3,
+            "sheathed": 9.9}
+tr = tidy(fit(tr, SHELL_IN, ask=6.0, ears=0.7))
 save(tr,"shows/scenes/%s.scene.json"%BASE)
