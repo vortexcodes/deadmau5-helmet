@@ -3,6 +3,48 @@
 Written 2026-10-31 at about 13:15 PDT, when the first person ran out of usage. The shows have to be
 ready tonight. Everything below is on branch `halloween-handoff`. `main` is untouched.
 
+## Update, 15:10 PDT: the ten shows are reviewed and inside the budget
+
+All ten new shows were reviewed and pushed to `halloween-handoff`. **Not yet deployed to the helmet:**
+it was streaming from the owner's Mac at first, and its signal has since been -88 to -90 dBm, too weak
+to deploy safely. 142 tests pass.
+
+| Song | Mean W before | after | heat at end |
+|---|---|---|---|
+| I Remember | 15.2 | 11.46 | 5% |
+| Moar Ghosts n Stuff | 14.4 | 11.48 | 4% |
+| Harder Better Faster Stronger | 13.6 | 11.49 | 5% |
+| Some Chords (Radio Edit) | 13.5 | 11.49 | 4% |
+| Strobe (Special Features Remix) | 13.4 | 11.41 | 6% |
+| Animal Rights | 13.1 | 11.39 | 8% |
+| Raise Your Weapon | 12.5 | 11.42 | 10% |
+| FN Pig | 12.4 | 11.30 | 15% |
+| The Veldt | 11.6 | 11.31 | 2% |
+| Some Chords | 11.3 | 11.26 (unchanged) | 5% |
+
+What was learned, so the next show starts there:
+- **Shell gain above the cap is thrown away.** The guard sends the shell at about 8 of 255 on average,
+  and most treatments asked for 30 to 60. A shell at its cap all song costs most of an 11.5 W budget by
+  itself. `tools/showkit/budget.py` `fit()` flattens a treatment exactly as `mau5scene` compiles it,
+  then scales each scene's shell layers so the shell asks for about what the guard sends, and the ears
+  by one factor. The picture barely changes, because the guard was already doing that dimming. Pass
+  `keep=` for dark occluders painted with mix "over" (stencils, curtains, silhouettes): dimmed, they
+  stop painting. Moar Ghosts, Harder Better and the Radio Edit have an inline copy from before
+  budget.py existed.
+- **Ears were the other half:** full tube fills and constant rim kicks. Bands instead of fills.
+- **The page has a 200 kB gzipped cap** (test `offline_page_is_self_contained`). It was within 1 kB at
+  the handoff. The build now drops whole-line JS comments (170 kB now). Grid holds are rounded to 6
+  places of a beat, and `budget.tidy` rounds long float tails.
+- **No ffmpeg on this Mac:** `grid.py` and `spectro.py` were run with a stand-in that decodes with
+  macOS `afconvert`. Its timings matched ffmpeg's within 1 ms on I Remember.
+- `grid.py check` reads Raise Your Weapon's hold-per-beat first half as noise. Folding the march on
+  plain 128 BPM puts the kick on step 0, as its builder measured.
+- Some Chords keeps its ears dark through the main drops; FN Pig mostly too. Both are under budget as
+  drawn.
+
+Open items below: 4 is done except the currentTime warning, retrying a failed start mid-song, and a
+resume button after a reload.
+
 ## Set up
 
 1. Clone, then `git checkout halloween-handoff`.
