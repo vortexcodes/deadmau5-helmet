@@ -255,5 +255,12 @@ def roar(at):
       {"fx":"preset","name":"sprite","on":"shell","mix":"over","gain":[1.0,0.5],"params":dict(SP,sprite="veldt_eyes",color=[255,170,60])}]}
 HITS+=[roar(55),roar(83)]
 tr["hits"]=HITS
-tr["about"]=open(KIT+"/work/veldt/about.txt").read().strip()
+tr["about"]=open(KIT+"/songs/veldt/about.txt").read().strip()
+# The long set's budget: each scene's shell asks for about what the guard sends (levels measured before the
+# guard, as written above), the ears a touch dimmer; the silhouettes stay DARK, or "over" would stop painting them.
+from budget import fit
+SHELL_IN = {"sunrise": 11.1, "plain": 12.2, "acacia": 9.3, "heatup": 9.9, "heat": 12.7, "stalk": 11.3, "open": 12.7, "pride": 17.6,
+            "noon": 8.9, "sundown": 7.2, "night": 9.7, "closer": 16.6, "prowl": 26.0, "day2": 18.9, "flicker": 9.7, "gold": 18.4,
+            "tear": 33.6, "static": 38.6}
+fit(tr, SHELL_IN, ask=10.0, ears=0.95, keep=lambda L: (L.get("params") or {}).get("color") == DARK)
 save(tr, "shows/scenes/%s.scene.json"%BASE)
