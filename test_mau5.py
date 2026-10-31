@@ -1743,6 +1743,26 @@ def t_offline_page_is_self_contained():
          % (len(raw) / 1024.0, len(gz) / 1024.0))
 
 
+def t_offline_page_drops_only_comments():
+    """The build drops whole-line // comments from the scripts; that must never drop code."""
+    import mau5offline, re as _re, tempfile
+    for js in ("engine.js", "guard.js", "wire.js", "audio.js",
+               "drive.js", "spotify.js", "show.js", "ui.js"):
+        src = mau5offline._read(js)
+        for m in _re.finditer(r"`[^`]*`", src):
+            ok(not any(l.lstrip().startswith("//") for l in m.group(0).split("\n")[1:]),
+               "%s has a template string with a line the build would drop" % js)
+        for ln in src.split("\n"):
+            ok(not (ln.lstrip().startswith("//") and "*/" in ln),
+               "%s: a // line closes a block comment: %s" % (js, ln.strip()[:60]))
+        if shutil.which("node"):
+            with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+                f.write(mau5offline._uncommented(src))
+            p = subprocess.run(["node", "--check", f.name], capture_output=True, text=True)
+            os.unlink(f.name)
+            ok(p.returncode == 0, "%s does not parse without its comments: %s" % (js, p.stderr[-200:]))
+
+
 def t_offline_limiter_matches_the_budget():
     """The controller's own limiter is set from the same power model.
 
@@ -1783,6 +1803,7 @@ GROUPS = {
                 t_offline_shows_match_python,
                 t_offline_drive_matches_the_analysis,
                 t_offline_page_is_self_contained,
+                t_offline_page_drops_only_comments,
                 t_offline_limiter_matches_the_budget],
     "camera": [t_eye_after],
     "audio": [t_tempo_truth, t_beat_alignment, t_tempo_alias, t_tempo_without_16ths,

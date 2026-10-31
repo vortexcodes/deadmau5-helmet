@@ -161,6 +161,13 @@ def _read(name):
         return f.read()
 
 
+def _uncommented(js):
+    """js without its whole-line // comments, about 30 kB of the gzipped page.  Only
+    whole lines: one can not be inside a string or a regex, and none of the scripts has
+    a multi-line template string with such a line in it (test_mau5 holds them to that)."""
+    return "\n".join(ln for ln in js.split("\n") if not ln.lstrip().startswith("//"))
+
+
 def _drive_entries():
     try:
         with open(os.path.join(OUT, "drive.json")) as f:
@@ -261,7 +268,7 @@ def build(verbose=True):
     parts = {"DATA": data_js}
     for js in ("engine.js", "guard.js", "wire.js", "audio.js",
                "drive.js", "spotify.js", "show.js", "ui.js"):
-        parts[js.split(".")[0].upper()] = _read(js)
+        parts[js.split(".")[0].upper()] = _uncommented(_read(js))
     missing = [k for k in re.findall(r"<!--@(\w+)-->", html) if k not in parts]
     if missing:
         raise SystemExit("player.html wants %s and the build has no such part"
