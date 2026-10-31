@@ -535,6 +535,9 @@ def deploy(host=None, gzipped=True, verbose=True):
           % (info.get("name", "?"), info.get("ver", "?"),
              "%d of %d kB used" % (fs.get("u", 0), fs.get("t", 0)) if fs
              else "not reported"))
+    # The page replaces the one already there, so that one's room counts as free.
+    if free is not None:
+        free += _listing(w).get(name.lstrip("/"), 0)
     if free is not None and free < len(body) + 8192:
         raise SystemExit("only %.1f kB free on the controller and the page is "
                          "%.1f kB" % (free / 1024.0, len(body) / 1024.0))
