@@ -163,9 +163,24 @@ class Analyser {
       this.db = new Float32Array(this.node.frequencyBinCount);
       this.sfreq = new Uint8Array(this.slow.frequencyBinCount);
       this.time = new Uint8Array(this.node.fftSize);
+      // iOS also stops a context as 'interrupted' (a call, Siri, an alarm), and
+      // only a tap may restart it there, so the next tap anywhere tries.
+      this.ctx.onstatechange = () => {
+        if (this.ctx.state === 'running' || this.ctx.state === 'closed') return;
+        addEventListener('pointerdown', () => this._resume(), { once: true, capture: true });
+      };
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this._resume();
     return this.ctx;
+  }
+
+  _resume() {
+    const s = this.ctx.state;
+    if (s === 'running' || s === 'closed') return;
+    try {
+      const p = this.ctx.resume();
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) {}
   }
 
   static micPossible() {

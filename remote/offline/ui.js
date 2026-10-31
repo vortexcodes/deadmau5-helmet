@@ -148,7 +148,8 @@ if (!POCKET && typeof Worker === 'function') {
       ['onmessage=function(e){setTimeout(function(){postMessage(e.data.seq)},e.data.ms)}'],
       { type: 'text/javascript' })));
     clock.onmessage = (e) => { if (e.data === clockSeq) tick(); };
-    clock.onerror = () => { clock = null; };
+    // A wake-up owed by a worker that died never comes: the timers take over.
+    clock.onerror = () => { clock = null; if (state.running) later(40); };
   } catch (e) { clock = null; }
 }
 
@@ -1836,14 +1837,30 @@ addEventListener('visibilitychange', () => {
 // no song.  The phone may still be finding its Wi-Fi on the way back from
 // whatever hid the page, so a start that cannot reach the helmet is tried
 // again until one can, or somebody presses stop (which clears stopNote).
+// Not while another device streams to the helmet, though: coming back would take it
+// from them mid-song, so it waits until the helmet is free.
 let comeBackTimer = null;
+async function othersLive() {
+  try { return !!(await link.getJSON('/json/info')).live; } catch (e) { return false; }
+}
 function comeBack() {
   clearTimeout(comeBackTimer);
   if (!stopNote || state.running || hiddenStops()) return;
-  start().then(() => {
-    if (stopNote && !state.running) comeBackTimer = setTimeout(comeBack, 3000);
+  othersLive().then((busy) => {
+    if (!stopNote || state.running || hiddenStops()) return;
+    if (busy) { comeBackTimer = setTimeout(comeBack, 3000); return; }
+    start().then(() => {
+      if (stopNote && !state.running) comeBackTimer = setTimeout(comeBack, 3000);
+    });
   });
 }
+
+// A button keeps the focus after a tap, and a space bar then presses it again,
+// which on 'stop' stops the song.  Keyboard presses (detail 0) keep their focus.
+addEventListener('click', (e) => {
+  const b = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (b && e.detail > 0) b.blur();
+});
 addEventListener('resize', () => { dots = null; draw(); });
 
 choose(restore() || 'rainbow', true);

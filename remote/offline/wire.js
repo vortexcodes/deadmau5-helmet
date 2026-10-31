@@ -598,7 +598,9 @@ class Link {
   _setDepth(d) {
     this.depth = d;
     this.pongTimeout = d > 1 ? PONG_TIMEOUT_MS : PONG_TIMEOUT_1_MS;
-    this.owedQuiet = d > 1 ? OWED_QUIET_MS : OWED_QUIET_1_MS;
+    // Binary frames too wait only the short time: the long one after a lost pong
+    // (1 s + 1.5 s) is exactly the controller's 2.5 s realtime timeout.
+    this.owedQuiet = d > 1 && !this.binary ? OWED_QUIET_MS : OWED_QUIET_1_MS;
   }
 
   // A frame is on the strip: messages are handled in order, so the
@@ -645,7 +647,7 @@ class Link {
   // helmet stays dark until somebody presses stop and start.  Sending
   // the layout again is harmless when nothing restarted, so it is sent
   // on every reconnect, with the dead man armed in the same breath.
-  async _relayout() {
+  async _relayout(tries = 3) {
     try {
       await this.postJSON({
         on: true, live: false, bri: this.bri, transition: 0, tt: 0,
@@ -654,7 +656,13 @@ class Link {
       });
       this.relayouts = (this.relayouts || 0) + 1;
       this.dirty();
-    } catch (e) { /* the next reconnect tries again */ }
+    } catch (e) {
+      // The socket is back, so no reconnect is coming to try again, and a
+      // restarted controller would stay dark: so this one tries again.
+      if (tries > 1 && this.streaming) {
+        setTimeout(() => { if (this.streaming) this._relayout(tries - 1); }, 1500);
+      }
+    }
   }
 
   async hello() {
