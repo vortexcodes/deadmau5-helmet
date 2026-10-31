@@ -45,6 +45,28 @@ HOP, N_FFT = 256, 1024
 # Positive moves the detected beat later, towards the real kick.
 ONSET_BIAS_S = 0.0133
 
+# What estimate_tempo scores a tempo at, in multiples of its beat, and how many
+# points its FFT is padded to: at 86 frames a second that is a step of 0.0012
+# BPM.  COMB_CLEAR is how far ahead of the next tempo the winner has to be, as
+# a share of that tempo, before it is taken as clear of it.  The six songs it
+# was tuned on score at least 1.46 times the next, and tracks that drift or hold
+# two tempos about 1.02.
+COMB_HARMONICS = (1, 2, 3, 4)
+COMB_N = 1 << 22
+COMB_CLEAR = 0.4
+
+# The bar line, for downbeat_phase.  A turn is a change in the top TURN_TOP
+# percent of the song's that is also TURN_OVER times its median and over
+# TURN_FLOOR (mean log1p magnitude per band).  A loop changes the same amount
+# on every beat, so the top of its changes is only noise: those six songs'
+# top 5 percent start at 2.2 to 4.2 times the median.  TURNS_FULL is how many
+# it takes to believe where they land.
+TURN_BANDS = 24
+TURN_TOP = 5.0
+TURN_OVER = 1.5
+TURN_FLOOR = 0.1
+TURNS_FULL = 12
+
 
 # --------------------------------------------------------------------------
 # decode + analyse
@@ -174,6 +196,14 @@ def spectrogram(a, sr):
     return mag, freqs, sr / float(HOP), t0
 
 
+def band_flux(mag, freqs, lo, hi):
+    """onset_envelope's flux over one band, for what the broadband one drowns."""
+    logm = np.log1p(mag[:, (freqs >= lo) & (freqs < hi)] * 8.0)
+    f = np.concatenate([[0.0], np.maximum(0.0, np.diff(logm, axis=0)).sum(1)])
+    f -= np.convolve(f, np.ones(41) / 41.0, mode="same")
+    return np.maximum(f, 0.0).astype(np.float64)
+
+
 def band_curves(a, sr, out_fps, duration):
     """Per-band loudness and punch, sampled at the show's frame rate.
 
@@ -300,50 +330,142 @@ def frame_curves(a, sr, env, env_fps, env_t0, out_fps, duration):
     return energy.astype(np.float32), onset.astype(np.float32)
 
 
-def estimate_tempo(env, fps, bpm_lo=70.0, bpm_hi=180.0, t0=0.0):
-    """Coarse autocorrelation, then a fine comb whose phase gives the offset.
+def estimate_tempo(env, fps, bpm_lo=70.0, bpm_hi=180.0, t0=0.0, low=None):
+    """(bpm, first beat, how far to trust them), all from one comb.
 
-    Evaluating sum(env * e^-2*pi*i*f*t) over a fine grid of beat frequencies
-    is exactly "how much onset energy lands on a grid at this tempo", and the
-    phase of the winner is the first beat -- so tempo and downbeat fall out of
-    one calculation.
+    sum(env * e^-2*pi*i*f*t) is exactly "how much onset energy lands on a grid
+    at this rate", and one padded FFT holds it at every rate at once.  Each
+    tempo is scored at its beat, 8th, triplet and 16th together.  This used to
+    score the beat alone, which shipped beneath at 126.42 when it is 126.000,
+    for two reasons:
+
+      * At the true tempo on-beat and off-beat onsets cancel at the beat:
+        0.066 there, against 0.226 at the 8th and 0.377 at the 16th.
+      * Two strong bursts t seconds apart fall back into step 60/t BPM away,
+        as beneath's drops do 141.43 s apart.  A 30 s drop on its own can only
+        tell tempos 2 BPM apart at the beat, so nothing argues; at the 16th it
+        can tell them 0.5 BPM apart.
+
+    The 16th alone fails the other way.  A track with none has nothing there
+    but the kick's harmonics, which sit at every multiple of its beat, so the
+    16th of 96 or of 160 lands on them as squarely as the 16th of 128.  So the
+    harmonics add, and a tempo has to explain all of them.  The triplet is for
+    swing, which otherwise reads as 3:2: a shuffle at 100 as 150.
+
+    `low` is the kick band's flux (band_flux), scored the same way.  It says
+    what hats cannot, having no beat of their own: 12 a bar over a kick at 96
+    read as 144 without it.  It also helps pick which 16th is the beat.
+    Broadband flux is a sum over bins and hats cover most of the bins, so an
+    open hat on the off-beat can outweigh the kick it answers.
+
+    The confidence is on the same 0..1 as mau5show.LOCK_MIN: the strongest
+    harmonic's share of the onsets, scaled down as another tempo comes level.
+    Two tempos nearly level is a track that holds two, or drifts, or has no
+    pulse, and no one grid is right for any of those.  Double and half do not
+    count as another tempo, because they share the same beats.
     """
-    t = t0 + np.arange(len(env)) / fps
-    e = env - env.mean()
-    ac = np.correlate(e, e, "full")[len(e) - 1:]
-    lag = np.arange(len(ac)) / fps
-    band = np.where((lag > 60.0 / bpm_hi) & (lag < 60.0 / bpm_lo))[0]
-    coarse = 60.0 / lag[band[int(np.argmax(ac[band]))]]
+    def comb(e):
+        return np.fft.rfft(e, COMB_N) / max(float(np.sum(e)), 1e-9)
 
-    best = None
-    total = max(env.sum(), 1e-9)
-    for mult in (0.5, 1.0, 2.0):
-        b0 = coarse * mult
-        if not bpm_lo <= b0 <= bpm_hi:
-            continue
-        # one frequency at a time: the full outer product would be a 300 MB
-        # complex matrix, and this is not the slow part
-        for bpm in np.arange(b0 * 0.97, b0 * 1.03, 0.002):
-            w = 2 * math.pi * (bpm / 60.0) * t
-            re, im = float(np.dot(env, np.cos(w))), float(-np.dot(env, np.sin(w)))
-            score = math.hypot(re, im) / total
-            if best is None or score > best[0]:
-                best = (score, float(bpm), math.atan2(im, re))
-    score, bpm, phase = best
+    F = comb(env)
+    df = fps / float(COMB_N)
+    j = np.arange(int(math.ceil(bpm_lo / 60.0 / df)), int(bpm_hi / 60.0 / df) + 1)
+    scores = sum(np.abs(F[h * j]) for h in COMB_HARMONICS)
+    if low is not None:
+        L = comb(low)
+        scores = scores + sum(np.abs(L[h * j]) for h in COMB_HARMONICS)
+    best = int(np.argmax(scores))
+    bpm = float(60.0 * j[best] * df)
     period = 60.0 / bpm
-    offset = (-phase / (2 * math.pi)) * period % period
-    return bpm, offset, score
+
+    # The comb back as a curve over one beat: it crests where the onsets sit.
+    phi = np.arange(512) * period / 512.0
+    crest = np.zeros(512)
+    for h in COMB_HARMONICS:
+        k = h * j[best]
+        crest += np.abs(F[k]) * np.cos(2 * math.pi * k * df * (phi - t0) + np.angle(F[k]))
+    top = phi[int(np.argmax(crest))]
+
+    def fold(e):
+        # the energy within 30 ms of each of the four 16ths, counted from the crest
+        pos = (t0 + np.arange(len(e)) / fps - top) / (period / 4.0)
+        near = np.abs(pos - np.round(pos)) * period / 4.0 <= 0.030
+        got = np.bincount(np.round(pos[near]).astype(int) % 4, e[near], 4)
+        return got / max(float(got.max()), 1e-9)
+
+    votes = fold(env) if low is None else fold(env) + fold(low)
+    beat = top + int(np.argmax(votes)) * period / 4.0
+    near = np.abs((phi - beat + period / 2.0) % period - period / 2.0) <= period / 8.0
+    offset = float(phi[near][int(np.argmax(crest[near]))])
+
+    peaks = np.where((scores[1:-1] > scores[:-2]) & (scores[1:-1] >= scores[2:]))[0] + 1
+    tempos = 60.0 * j[peaks] * df
+    lobe = 60.0 / (max(COMB_HARMONICS) * len(env) / float(fps))     # what the 16th can tell apart
+    others = peaks[(np.abs(tempos - bpm) > lobe) & (np.abs(tempos - 2.0 * bpm) > 2.0 * lobe)
+                   & (np.abs(tempos - bpm / 2.0) > lobe)]
+    level = float(scores[others].max()) / float(scores[best]) if len(others) else 0.0
+    clear = min(1.0, (1.0 / max(level, 1e-9) - 1.0) / COMB_CLEAR)
+    return bpm, offset, max(float(np.abs(F[h * j[best]])) for h in COMB_HARMONICS) * clear
 
 
 def beat_grid(bpm, offset, duration):
     return offset + (60.0 / bpm) * np.arange(int((duration - offset) / (60.0 / bpm)) + 1)
 
 
-def downbeat_phase(env, fps, beats, per_bar=4):
-    """Which of the 4 beats carries the most weight -- that is beat one."""
-    idx = np.clip((beats * fps).astype(int), 0, len(env) - 1)
-    peak = np.array([env[max(0, i - 2):i + 3].max() for i in idx])
-    return int(np.argmax([peak[p::per_bar].mean() for p in range(per_bar)]))
+def log_bands(mag, freqs):
+    """The spectrum in TURN_BANDS log-spaced bands, 40 Hz to 10 kHz, per frame.
+
+    Log-spaced so that a phrase turning in the bass counts for as much as one
+    turning in the hats, which have most of the bins.
+    """
+    per = np.round(np.geomspace(40.0, 10000.0, TURN_BANDS + 1) / (freqs[1] - freqs[0]))
+    per = np.unique(np.minimum(per.astype(int), mag.shape[1]))
+    m = np.log1p(mag * 8.0)
+    return np.stack([m[:, a:b].mean(1) for a, b in zip(per[:-1], per[1:])], axis=1)
+
+
+def downbeat_phase(low, bands, fps, beats, per_bar=4):
+    """(which of the 4 beats is beat one, how far ahead of the others it came).
+
+    This used to take the beat with the most flux.  That is the snare in
+    half-time music, half a bar out, as it was on Ghosts n Stuff.
+    Two things do say where a bar starts, added as shares so that neither wins
+    for being measured in larger numbers:
+
+      * The kick, from the low band's flux on each beat.  A half-time bar has
+        it on one, and four on the floor has it everywhere, so this settles
+        the first kind and leaves the second to:
+      * Where the music turns.  Phrases change on bar lines, so this compares
+        the spectrum over the two beats either side of every beat and adds up
+        the biggest changes by the beat they land on.  A track that hardly
+        turns says little (TURNS_FULL).
+
+    `beats` count from the first frame of `low` and `bands`.  The second value
+    is how far the winner is ahead of the next, as a share of the winner: under
+    mau5show.BAR_LOCK_MIN there is little to choose between them.
+    """
+    idx = np.clip((np.asarray(beats, float) * fps).astype(int), 0, len(low) - 1)
+    peak = np.array([low[max(0, i - 2):i + 3].max() for i in idx])
+    kick = np.array([peak[p::per_bar].mean() if p < len(peak) else 0.0
+                     for p in range(per_bar)])
+
+    ends = np.append(idx[1:], idx[-1] + (idx[-1] - idx[-2] if len(idx) > 1 else 1))
+    each = np.array([bands[i:max(i + 1, e)].mean(0) for i, e in zip(idx, ends)])
+    change = np.zeros(len(each))
+    for i in range(2, len(each) - 1):
+        change[i] = np.abs(each[i:i + 2].mean(0) - each[i - 2:i].mean(0)).mean()
+    floor = TURN_FLOOR
+    if len(each) > 3:
+        floor = max(floor, TURN_OVER * float(np.median(change[2:-1])),
+                    float(np.percentile(change[2:-1], 100.0 - TURN_TOP)))
+    turns = np.where((change[1:-1] >= change[:-2]) & (change[1:-1] > change[2:])
+                     & (change[1:-1] > floor))[0] + 1
+    turned = np.bincount(turns % per_bar, change[turns] - floor, per_bar)
+    sure = min(1.0, len(turns) / float(TURNS_FULL)) if turned.sum() > 0 else 0.0
+    votes = (kick / max(float(kick.sum()), 1e-9)
+             + sure * turned / max(float(turned.sum()), 1e-9) + (1.0 - sure) / per_bar)
+    order = np.argsort(-votes)
+    return int(order[0]), float((votes[order[0]] - votes[order[1]]) / votes[order[0]])
 
 
 def _rank(x):
@@ -579,6 +701,8 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
                          "%.2f s, and a show wants several bars"
                          % (path, dur, (N_FFT + 40 * HOP) / float(sr)))
     env, fps, env_t0 = onset_envelope(a, sr)
+    mag, freqs, _, _ = spectrogram(a, sr)
+    low = band_flux(mag, freqs, BANDS[0][1], BANDS[0][2])
 
     if beats_file:
         beats = mau5fx.Beats.from_file(beats_file).times
@@ -586,7 +710,7 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
         conf = float("nan")
     else:
         if bpm is None:
-            bpm, off, conf = estimate_tempo(env, fps, t0=env_t0)
+            bpm, off, conf = estimate_tempo(env, fps, t0=env_t0, low=low)
             offset = off if offset is None else offset
         else:
             conf = float("nan")
@@ -597,7 +721,7 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
                 offset = float(grid[int(np.argmax(env[idx].sum(1)))])
         beats = beat_grid(bpm, offset, dur)
 
-    ph = downbeat_phase(env, fps, beats - env_t0)
+    ph, bar_conf = downbeat_phase(low, log_bands(mag, freqs), fps, beats - env_t0)
     bars = beats[ph::4]
     if len(bars) < 4:                     # three whole bars, see above
         raise ValueError("%s is %.1f s long and holds %d downbeat%s at "
@@ -611,11 +735,12 @@ def analyse(path, bpm=None, offset=None, beats_file=None, verbose=True):
         print("  %.1f s  %.3f bpm  first beat %.3f s  beat lock %s"
               % (dur, bpm, beats[0],
                  "n/a" if conf != conf else "%.2f" % conf))
-        print("  %d beats, %d bars, downbeat on beat %d of 4"
-              % (len(beats), len(bars), ph + 1))
+        print("  %d beats, %d bars, downbeat on beat %d of 4  bar lock %s"
+              % (len(beats), len(bars), ph + 1,
+                 "n/a" if bar_conf != bar_conf else "%.2f" % bar_conf))
     return dict(duration=dur, bpm=bpm, beats=beats, bars=bars, energy=energy,
                 levels=levels, audio=a, sr=sr, env=env, env_fps=fps,
-                env_t0=env_t0, lock=conf)
+                env_t0=env_t0, lock=conf, bar_lock=bar_conf)
 
 
 def main(argv=None):

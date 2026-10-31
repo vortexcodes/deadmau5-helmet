@@ -61,6 +61,7 @@ SCENES = os.path.join(SHOWS, "scenes")
 # gate, spark and blade is seen at its full height on either device
 # before it decays.  Imported rather than copied, so they cannot part.
 from mau5show import PULSE_HOLD_S  # noqa: E402
+from mau5show import BAR_LOCK_MIN, LOCK_MIN  # noqa: E402
 
 CELL = 16.7                 # mm per glyph column, TextScroll's default
 LINEAR_TOL_S = 0.005        # a grid this far from straight is refused
@@ -157,6 +158,30 @@ def grid_of(music):
         raise TreatmentError("the beat grid is %.1f ms from linear; scenes need "
                              "a steady grid" % (worst * 1000))
     return {"t0": t0, "spb": spb}, int(len(bars))
+
+
+def grid_doubts(music):
+    """What the analysis itself doubts about the grid, in words.
+
+    grid_of can only say a grid is straight.  A straight grid at the wrong
+    tempo or on the wrong bar line compiles just as cleanly, and every mark
+    on it looks fine as a number; beneath shipped that way with a lock of
+    0.119.  NaN is a grid nothing estimated, measured by hand, so there is
+    nothing to doubt, and an analysis from before bar_lock has no opinion
+    on its bar line.
+    """
+    out = []
+    lock = float(getattr(music, "lock_conf", float("nan")))
+    if lock == lock and lock < LOCK_MIN:
+        out.append("the tempo estimate is low confidence (lock %.3f, under %g), "
+                   "so marks may slip off the music: measure the grid against "
+                   "the audio before trusting it" % (lock, LOCK_MIN))
+    bar = float(getattr(music, "bar_conf", float("nan")))
+    if bar == bar and bar < BAR_LOCK_MIN:
+        out.append("the bar line is low confidence (bar lock %.3f, under %g), "
+                   "so bar 0 may not be a downbeat: check that a drop's first "
+                   "kick lands on a bar" % (bar, BAR_LOCK_MIN))
+    return out
 
 
 def src_of(base):
@@ -613,6 +638,7 @@ def lint(spec, h=None, music=None):
         if (g["t0"] != spec["grid"]["t0"] or g["spb"] != spec["grid"]["spb"]
                 or n != nb):
             errs.append("the compiled grid is not the analysis' grid")
+        warns.extend(grid_doubts(music))
 
     def layer_checks(L, what, span):
         if L["fx"] not in FX:
