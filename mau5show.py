@@ -109,6 +109,7 @@ class Music:
                 self.onset = z["onset"]
                 self.sections = [tuple(int(v) for v in r) for r in z["sections"]]
                 self.lock_conf = float(z["lock"]) if "lock" in z else float("nan")
+                self.bar_conf = float(z["bar_lock"]) if "bar_lock" in z else float("nan")
                 self.band = {k: (z["b_%s_e" % k], z["b_%s_p" % k])
                              for k, _, _ in mau5song.BANDS}
                 self.chroma = z["chroma"]
@@ -145,6 +146,7 @@ class Music:
         # where the beats are is worse than letting it run free: the
         # effect then lands wrong on purpose rather than at random.
         self.lock_conf = float(an.get("lock", float("nan")))
+        self.bar_conf = float(an.get("bar_lock", float("nan")))
         self.band = mau5song.band_curves(an["audio"], an["sr"], fps, self.duration)
         self.chroma = mau5song.chroma(an["audio"], an["sr"], self.bars)
         self.shape = mau5song.shape_of(self._bar_levels())
@@ -158,7 +160,8 @@ class Music:
                 beats=self.beats, bars=self.bars, levels=self.levels,
                 energy=self.energy, onset=self.onset,
                 sections=np.array(self.sections, int),
-                lock=self.lock_conf, v=CACHE_V, chroma=self.chroma,
+                lock=self.lock_conf, bar_lock=self.bar_conf, v=CACHE_V,
+                chroma=self.chroma,
                 shape=np.array(self.shape, dtype="U6"),
                 src=np.array(stamp or mau5song.track_stamp(path) or ""),
                 **{("b_%s_%s" % (k, w)): self.band[k][i]
@@ -575,10 +578,25 @@ def build(track, fps=40, out=None, seed=None, verbose=False):
 # scoring 0.119.  The threshold sits in the gap.  Five tracks is not
 # many, so this is a sensible place to start rather than a constant
 # anyone should trust to three figures.
+#
+# Those scores were the comb at the beat alone, and the shipped analyses
+# keep them.  mau5song.estimate_tempo now scores differently, so a new
+# analysis is read against the same line on different evidence: the six
+# songs it was tuned on score 0.38 to 0.85 on their right tempos, and tracks
+# with no one steady pulse (noise, drifting, two tempos) under 0.05.
 LOCK_MIN = 0.18
 
+# The same for the bar line, on downbeat_phase's second value.  Those six
+# songs score 0.30 to 0.78 and are all right.  Over 750 excerpts
+# of them, 35 percent of the bar lines under this were wrong against 3
+# percent over it.  Only an analysis made since it was added has one.
+BAR_LOCK_MIN = 0.25
+
 # Bump when the analysis gains a field, so old caches are rebuilt
-# rather than loaded with half the curves missing.
+# rather than loaded with half the curves missing.  Not for bar_lock,
+# which is optional: a bump would analyse every shipped song again, onto
+# a grid its marks were not written against.  The marks at .25 in
+# Strobe (Dimension Remix) and leavemealone make up for bars a beat off.
 CACHE_V = 2
 
 # How long the beat pulse holds its peak before it decays, in seconds.

@@ -846,6 +846,304 @@ def t_beat_alignment():
         os.rmdir(d)
 
 
+FOUR, OFF, BACK = "x...x...x...x...", "..x...x...x...x.", "....x.......x..."
+ONE, THREE = "x...............", "........x......."
+
+
+def _drums(bpm, parts, offset=0.0, tail=1.0, seed=5):
+    """A drum track of known tempo and bar line, as load_wav would read it.
+
+    `parts` is [(bars, {voice: one bar's pattern}, {voice: gain}), ...], and
+    any character but a dot plays.  A pattern can be any length, so triplets
+    can be written out.  Voices: kick, snare, clap, hat, open hat.
+    """
+    import math
+    sr = 22050
+    rng = np.random.default_rng(seed)
+
+    def noise(secs, tau, diffs):
+        n = int(secs * sr)
+        x = np.diff(rng.normal(0, 1, n + diffs), n=diffs)
+        return x / np.abs(x).max() * np.exp(-np.arange(n) / (tau * sr))
+
+    def sound(v):
+        t = np.arange(int(0.18 * sr)) / sr
+        if v == "k":
+            pitch = 50 + 90 * np.exp(-t / 0.018)
+            return 0.9 * np.exp(-t / 0.05) * np.sin(2 * math.pi * np.cumsum(pitch) / sr)
+        if v == "s":
+            return 0.5 * noise(0.18, 0.05, 1) + 0.5 * np.exp(-t / 0.04) * np.sin(2 * math.pi * 190 * t)
+        if v == "c":
+            return 0.7 * noise(0.10, 0.025, 1)
+        return 0.5 * noise(0.05, 0.012, 2) if v == "h" else 0.7 * noise(0.14, 0.05, 2)
+
+    spb = 60.0 / bpm
+    a = rng.normal(0, 0.002, int((offset + 4 * spb * sum(p[0] for p in parts) + tail) * sr))
+    bar = 0
+    for part in parts:
+        for b in range(part[0]):
+            for v, pat in part[1].items():
+                for i, ch in enumerate(pat):
+                    if ch != ".":
+                        p = int((offset + (bar + b + i / float(len(pat))) * 4 * spb) * sr)
+                        x = sound(v) * (part[2].get(v, 1.0) if len(part) > 2 else 1.0)
+                        q = min(len(a), p + len(x))
+                        a[p:q] += x[:q - p]
+        bar += part[0]
+    return np.clip(a, -1, 1)
+
+
+def _analysed(a):
+    """mau5song.analyse on samples, by way of a wav it can read."""
+    import tempfile, wave, shutil, mau5song
+    d = tempfile.mkdtemp(prefix="mau5grid")
+    try:
+        p = os.path.join(d, "track.wav")
+        with wave.open(p, "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
+            w.writeframes((a * 32000).astype("<i2").tobytes())
+        return mau5song.analyse(p, verbose=False)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _at_beat(an, bpm):
+    """The comb at the beat alone at this tempo, which is all there used to be."""
+    t = an["env_t0"] + np.arange(len(an["env"])) / an["env_fps"]
+    return abs(np.dot(an["env"], np.exp(-2j * math.pi * bpm / 60.0 * t))) / an["env"].sum()
+
+
+def t_tempo_alias():
+    """Two drops and a groove that cancels at the beat must not move the tempo.
+
+    beneath in small, which shipped at 126.42 when it is 126.000.  At the beat
+    the groove's off-beats cancel its on-beats and most of the drops as well,
+    so the true tempo scores less than where the drops fall back into step.
+    """
+    import mau5show
+    gap = 141.43
+
+    def bars(s):
+        return int(round(s * 126.0 / 240.0))
+    groove = ({"h": FOUR, "o": OFF}, {"h": 0.85})
+    drop = ({"k": FOUR, "c": FOUR, "h": FOUR}, {})
+    an = _analysed(_drums(126.0, [(bars(40), ) + groove, (bars(30), ) + drop,
+                                  (bars(gap - 30), ) + groove, (bars(30), ) + drop,
+                                  (bars(20), ) + groove], offset=0.32))
+    # the track really is the trap, or this test passes for nothing
+    ok(_at_beat(an, 126.0) < _at_beat(an, 126.0 - 60.0 / gap) / 2.0,
+       "the beat should score the true tempo under the alias: %.3f, %.3f"
+       % (_at_beat(an, 126.0), _at_beat(an, 126.0 - 60.0 / gap)))
+    ok(abs(an["bpm"] - 126.0) < 0.02, "came back %.3f, wanted 126.000" % an["bpm"])
+    ok(an["lock"] >= mau5show.LOCK_MIN, "a clear tempo locked at only %.3f" % an["lock"])
+    kicks = 0.32 + (60.0 / 126.0) * bars(40) * 4
+    ok(np.abs(an["beats"] - kicks).min() < 0.010, "the first drop's kick is off the grid")
+
+
+def t_tempo_without_16ths():
+    """Tempo holds with nothing at the 16th, and with nothing but.
+
+    Scoring the 16th alone would fix beneath and break these: a bare kick has
+    as much at the 16th of 96 or 160 as at the 16th of 128.  The old beat-only
+    comb read house as 84, the triplet hats as 72 and the last as 84.
+    """
+    import mau5show
+    for label, bpm, part in (
+            ("a bare kick", 128.0, {"k": FOUR}),
+            ("a kick and 8th hats", 128.0, {"k": FOUR, "h": OFF}),
+            ("house", 124.0, {"k": FOUR, "c": BACK, "h": OFF}),
+            ("half time", 140.0, {"k": ONE, "s": THREE, "h": "x.x." * 4}),
+            ("a shuffle", 100.0, {"k": "x..x..x..x..", "h": "x.xx.xx.xx.x"}),
+            ("triplet hats", 96.0, {"k": FOUR, "h": "x" * 12}),
+            ("16ths and a kick", 130.0, {"k": FOUR, "h": "x" * 16})):
+        an = _analysed(_drums(bpm, [(36, part)], offset=0.2))
+        ok(abs(an["bpm"] - bpm) < 0.02, "%s: came back %.3f, wanted %.3f"
+           % (label, an["bpm"], bpm))
+        ok(an["lock"] >= mau5show.LOCK_MIN, "%s: a clear tempo locked at only %.3f"
+           % (label, an["lock"]))
+
+
+def t_tempo_says_when_there_is_none():
+    """No one grid fits these, and the confidence has to say so.
+
+    The old score was happy with both of the last two, at 0.32 and 0.35: it
+    only asked how much landed on the winner, not whether anything else did.
+    """
+    import mau5show
+    part = {"k": FOUR, "h": OFF}
+    rng = np.random.default_rng(3)
+    for label, a in (
+            ("noise", rng.normal(0, 0.1, 60 * 22050)),
+            ("two tempos", np.concatenate([_drums(120.0, [(24, part)], tail=0.0),
+                                           _drums(125.0, [(24, part)], tail=0.0)])),
+            ("a slow drift", np.concatenate([_drums(b, [(2, part)], tail=0.0)
+                                             for b in np.linspace(124.0, 128.0, 24)]))):
+        an = _analysed(a)
+        ok(an["lock"] < mau5show.LOCK_MIN, "%s locked at %.3f" % (label, an["lock"]))
+
+
+def t_beat_is_the_kick():
+    """An open hat louder than the kick must not take the beat from it."""
+    an = _analysed(_drums(128.0, [(36, {"k": FOUR, "o": OFF}, {"o": 1.5})], offset=0.31))
+    spb = 60.0 / 128.0
+    t = an["env_t0"] + np.arange(len(an["env"])) / an["env_fps"]
+    pos = ((t - 0.31) / (spb / 2.0)).round().astype(int) % 2
+    near = np.abs((t - 0.31) / (spb / 2.0) - np.round((t - 0.31) / (spb / 2.0))) < 0.1
+    flux = np.bincount(pos[near], an["env"][near], 2)
+    ok(flux[1] > 2.0 * flux[0], "the off-beat should have the most flux: %s" % flux)
+    wrong = np.abs((an["beats"] - 0.31 + spb / 2.0) % spb - spb / 2.0).max()
+    ok(wrong < 0.010, "the grid is %.0f ms off the kicks" % (wrong * 1000))
+
+
+def _bar_line_off(an, t, bpm):
+    """How far bar 0 is from a true bar line at t, in seconds, wrapped to the bar."""
+    bar = 240.0 / bpm
+    return (an["bars"][0] - t + bar / 2.0) % bar - bar / 2.0
+
+
+def t_downbeat_half_time():
+    """Beat one is the kick, not the snare with the most flux.
+
+    Ghosts n Stuff shipped half a bar out this way.  Every bar line comes
+    round, by cutting the start off the track, so no silence before the music
+    can give it away and the loop never turns.
+    """
+    spb = 60.0 / 140.0
+    loop = _drums(140.0, [(36, {"k": ONE, "s": THREE, "h": "x.x." * 4}, {"s": 1.6})], tail=0.0)
+    for k in range(4):
+        an = _analysed(loop[int((4 - k) * spb * 22050):])
+        idx = ((an["beats"] - an["env_t0"]) * an["env_fps"]).astype(int)
+        peak = [an["env"][max(i - 2, 0):i + 3].max() for i in idx]
+        most = int(np.argmax([np.mean(peak[p::4]) for p in range(4)]))
+        snare = int(round((k * spb + 2 * spb - an["beats"][0]) / spb)) % 4
+        eq(most, snare, "the snare should have the most flux, or this tests nothing")
+        off = _bar_line_off(an, k * spb, 140.0)
+        ok(abs(off) < 0.020, "%d beats in, bar 0 is %.0f ms from a bar line" % (k, off * 1000))
+
+
+def t_downbeat_four_on_the_floor():
+    """With the kick on every beat, the bar line is where the music turns."""
+    import mau5show
+    spb = 60.0 / 128.0
+    groove = {"k": FOUR, "h": OFF}
+    full = {"k": FOUR, "c": BACK, "h": "x" * 16}
+    bare = {"k": FOUR}
+    track = _drums(128.0, [(8, groove), (8, full), (4, bare), (8, full), (8, groove),
+                           (8, full), (4, bare), (8, full)], tail=0.0)
+    for k in range(4):
+        an = _analysed(track[int((4 - k) * spb * 22050):])
+        off = _bar_line_off(an, k * spb, 128.0)
+        ok(abs(off) < 0.020, "%d beats in, bar 0 is %.0f ms from a bar line" % (k, off * 1000))
+        ok(an["bar_lock"] >= mau5show.BAR_LOCK_MIN,
+           "bar lock %.2f with the bar line plain in every turn" % an["bar_lock"])
+
+
+def t_downbeat_says_when_it_cannot_tell():
+    """A loop that never turns, with a kick on every beat, has no bar line to find."""
+    import mau5show
+    an = _analysed(_drums(128.0, [(36, {"k": FOUR, "c": FOUR, "h": OFF})], tail=0.0))
+    ok(an["bar_lock"] < mau5show.BAR_LOCK_MIN, "sure of a bar line at %.2f with "
+       "nothing to go on" % an["bar_lock"])
+
+
+def t_compile_says_when_the_grid_is_in_doubt():
+    """mau5scene.py compile prints what the analysis doubts, and only that.
+
+    beneath compiled without a word at a lock of 0.119, on a grid 0.33 percent
+    out, because grid_of only asks whether a grid is straight.
+    """
+    import contextlib, io
+    import mau5scene
+
+    class Music:
+        lock_conf = bar_conf = float("nan")
+
+    eq(mau5scene.grid_doubts(Music()), [], "a grid measured by hand")
+    eq(mau5scene.grid_doubts(object()), [], "an analysis with no scores at all")
+    for lock, bar, says in ((0.119, 0.5, ["lock 0.119"]), (0.5, 0.1, ["bar lock 0.100"]),
+                            (0.119, 0.1, ["lock 0.119", "bar lock 0.100"]),
+                            (0.18, 0.25, [])):
+        m = Music()
+        m.lock_conf, m.bar_conf = lock, bar
+        got = mau5scene.grid_doubts(m)
+        eq(len(got), len(says), "doubts at lock %g, bar %g" % (lock, bar))
+        for line, word in zip(got, says):
+            ok(word in line and "low confidence" in line, "%r in %r" % (word, line))
+
+    # And through the compile itself, which writes nothing until attach.
+    bases = sorted(f[:-len(".scene.json")] for f in os.listdir(mau5scene.SCENES)
+                   if f.endswith(".scene.json"))
+    real = mau5scene._show_and_music
+
+    def doubtful(base):
+        show, music, path = real(base)
+        music.lock_conf, music.bar_conf = 0.119, 0.1
+        return show, music, path
+
+    def sure(base):
+        show, music, path = real(base)
+        music.lock_conf, music.bar_conf = 0.5, 0.5
+        return show, music, path
+
+    def printed(fake):
+        out = io.StringIO()
+        mau5scene._show_and_music = fake
+        try:
+            with contextlib.redirect_stdout(out):
+                mau5scene.compile_show(bases[0], verbose=True)
+        finally:
+            mau5scene._show_and_music = real
+        return out.getvalue()
+
+    ok("warning: the tempo estimate is low confidence" in printed(doubtful),
+       "compile said nothing about a low lock")
+    ok("warning: the bar line is low confidence" in printed(doubtful),
+       "compile said nothing about a low bar lock")
+    ok("low confidence" not in printed(sure), "compile doubted a good grid")
+
+
+def t_shipped_grids_stay_where_they_are():
+    """A better estimator must not move a grid that has marks written against it.
+
+    Their marks at .25 make Strobe (Dimension Remix) and leavemealone land on
+    bars a beat off, so analysing them again would break them.  A bump of
+    CACHE_V would do exactly that, and so would a cache without bar_lock being
+    taken for stale.
+    """
+    import glob, mau5show, mau5song
+    real = mau5song.analyse
+
+    def refuse(path, *a, **kw):
+        raise AssertionError("analysed %s again" % path)
+
+    mau5song.analyse = refuse
+    try:
+        for cache in glob.glob(os.path.join(mau5show.SHOWS, "*.analysis.npz")):
+            z = np.load(cache)
+            m = mau5show.Music("", fps=int(z["fps"]), cache=cache)
+            eq(m.bpm, float(z["bpm"]), "%s: the bpm" % os.path.basename(cache))
+            ok(np.array_equal(m.bars, z["bars"]), "%s: the bars" % os.path.basename(cache))
+            ok(m.bar_conf != m.bar_conf or "bar_lock" in z,
+               "%s: a bar lock from nowhere" % os.path.basename(cache))
+    finally:
+        mau5song.analyse = real
+
+
+def t_bar_lock_survives_the_cache():
+    """What the analysis measured about its bar line comes back from its cache."""
+    import tempfile, shutil, mau5show
+    d = tempfile.mkdtemp(prefix="mau5barlock")
+    try:
+        track = _click_wav(os.path.join(d, "song.wav"), 128.0, seconds=20.0)
+        cache = os.path.join(d, "song.analysis.npz")
+        a = mau5show.Music(track, cache=cache)
+        ok(a.bar_conf == a.bar_conf, "the analysis has no bar lock")
+        b = mau5show.Music(track, cache=cache)
+        eq(b.bar_conf, a.bar_conf, "the bar lock through the cache")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 
 def t_thermal():
     """Brightness must be rationed over time, not only per frame.
@@ -1487,7 +1785,11 @@ GROUPS = {
                 t_offline_page_is_self_contained,
                 t_offline_limiter_matches_the_budget],
     "camera": [t_eye_after],
-    "audio": [t_tempo_truth, t_beat_alignment],
+    "audio": [t_tempo_truth, t_beat_alignment, t_tempo_alias, t_tempo_without_16ths,
+              t_tempo_says_when_there_is_none, t_beat_is_the_kick, t_downbeat_half_time,
+              t_downbeat_four_on_the_floor, t_downbeat_says_when_it_cannot_tell,
+              t_compile_says_when_the_grid_is_in_doubt, t_shipped_grids_stay_where_they_are,
+              t_bar_lock_survives_the_cache],
 }
 
 # More tests can live in tests_more/<name>.py, each defining GROUP, a
