@@ -184,7 +184,9 @@ def grid_of(music):
     grid = {"t0": t0, "spb": spb}
     seams = np.flatnonzero(late)
     if len(seams):
-        grid["holds"] = [[float(k + 1 - first), float(late[k] / spb)] for k in seams]
+        # Six places of a beat is half a microsecond; the page carries every hold, and the
+        # sixteen digits after that do not compress (an accelerando holds every beat).
+        grid["holds"] = [[float(k + 1 - first), round(float(late[k] / spb), 6)] for k in seams]
     return grid, int(len(bars))
 
 
