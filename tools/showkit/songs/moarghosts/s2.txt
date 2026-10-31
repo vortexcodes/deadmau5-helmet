@@ -1,0 +1,58 @@
+bar 66.05   cut            shell max 212 mean   7.8   ears max 171 mean  17.4   intermission
+bar 67                     shell max 230 mean  32.8   ears max 204 mean  20.8   intermission
+bar 68.27                  shell max 230 mean  50.9   ears max 204 mean  56.7   intermission
+bar 70                     shell max 230 mean  55.3   ears max 204 mean  20.8   intermission
+bar 71.5                   shell max 230 mean  36.7   ears max 204 mean  20.8   intermission
+bar 72.6                   shell max 213 mean  26.6   ears max  69 mean   7.0   intermission
+bar 74.5    stop           shell max 128 mean  16.8   ears max 127 mean   9.1   stop
+bar 75.5                   shell max 179 mean  26.7   ears max 127 mean  45.2   stop
+bar 75.8                   shell max   0 mean   0.0   ears max 204 mean  23.5   stop · NOISE 75.75
+bar 76      drop2          shell max 195 mean  66.4   ears max 255 mean 149.0   bigfright · POWER 2 · HUNT 76
+bar 76.27                  shell max 255 mean 128.6   ears max 255 mean 139.7   bigfright · POWER 2 · HUNT 76
+bar 78.3                   shell max 191 mean  66.1   ears max 255 mean  62.0   bigfright · HUNT 76
+bar 80.6                   shell max 191 mean  66.1   ears max 208 mean  26.8   bigfright · HUNT 76
+bar 84.1                   shell max 244 mean 108.5   ears max 208 mean  26.8   bigflick · HUNT 76
+bar 88.1                   shell max 234 mean 100.4   ears max 208 mean  26.8   bigflick2 · HUNT 76
+bar 90.6                   shell max 203 mean  75.8   ears max 208 mean  26.8   bigflick3 · HUNT 76
+bar 91.9                   shell max 191 mean  66.1   ears max 191 mean  18.0   bigflick3 · HUNT 76
+bar 92.1    eaten          shell max 208 mean   6.3   ears max   0 mean   0.0   eaten
+bar 93                     shell max 128 mean   3.8   ears max   0 mean   0.0   eaten
+bar 94      boo            shell max 204 mean  67.3   ears max 255 mean  59.2   lone · BOO
+bar 94.27                  shell max 204 mean  63.9   ears max 238 mean  49.7   lone · BOO
+bar 95                     shell max 204 mean  55.0   ears max 131 mean  24.3   lone · BOO
+bar 96                     shell max  64 mean   5.7   ears max 106 mean   6.5   lone
+bar 97                     shell max  96 mean   7.9   ears max 105 mean   7.3   lone
+bar 100                    shell max 128 mean  20.1   ears max 155 mean   8.5   lone2
+bar 104                    shell max 143 mean  15.3   ears max  66 mean  16.1   lone3
+bar 108                    shell max 157 mean  30.0   ears max 191 mean  24.1   lone4
+bar 111.5                  shell max 153 mean  17.5   ears max 191 mean  33.6   swell
+bar 112.5                  shell max 128 mean  20.1   ears max 127 mean   9.1   pellet3
+bar 113.5                  shell max 180 mean  28.5   ears max 127 mean  45.2   pellet3
+bar 113.8                  shell max   0 mean   0.0   ears max 204 mean  31.6   pellet3 · NOISE 113.75
+bar 114     drop3          shell max 208 mean  39.0   ears max 255 mean 144.2   blinky · POWER 3
+bar 114.27                 shell max 255 mean 101.6   ears max 255 mean 136.7   blinky · POWER 3
+bar 116.6                  shell max 191 mean  38.6   ears max 200 mean  15.4   blinky
+bar 118.05                 shell max 247 mean  56.4   ears max 255 mean 104.8   pinky · NEXT pinky
+bar 119                    shell max 191 mean  53.7   ears max 204 mean  29.8   pinky
+bar 122.27                 shell max 238 mean  73.0   ears max 255 mean 109.0   inky · NEXT inky
+bar 124.6                  shell max 191 mean  52.5   ears max 200 mean  15.4   inky
+bar 126.27                 shell max 238 mean  61.3   ears max 255 mean  89.5   clyde · NEXT clyde
+bar 128.5                  shell max 128 mean  18.4   ears max 127 mean   9.1   stop3
+bar 129.5                  shell max 180 mean  29.5   ears max 127 mean  45.2   stop3
+bar 129.8                  shell max   0 mean   0.0   ears max 204 mean  28.2   stop3 · NOISE 129.75
+bar 130     final          shell max 255 mean 105.4   ears max 255 mean 133.6   final · WHITE · HUNT 130
+bar 130.27                 shell max 255 mean 118.3   ears max 255 mean 124.3   final · WHITE · HUNT 130
+bar 132.6                  shell max 255 mean  51.9   ears max 215 mean  19.1   final · HUNT 130
+bar 135.27                 shell max 255 mean  53.9   ears max 244 mean  36.8   final · HUNT 130
+bar 137.6                  shell max 255 mean  51.9   ears max 215 mean  25.1   final · HUNT 130 · RUN 137
+bar 138.1                  shell max 207 mean  59.9   ears max 154 mean  25.9   trap · WAKA 138 · FLASH 138
+bar 139.5                  shell max 191 mean  29.4   ears max 229 mean  18.7   trap · WAKA 138
+bar 141                    shell max 191 mean  43.6   ears max 152 mean  22.8   trap · WAKA 138
+bar 142                    shell max 191 mean  52.8   ears max 152 mean  22.8   trap · WAKA 138
+bar 142.9                  shell max 191 mean  67.4   ears max 218 mean   4.2   trap · WAKA 138
+bar 143.05  die            shell max 153 mean  73.9   ears max 121 mean  74.4   die
+bar 143.3                  shell max 153 mean  53.4   ears max  89 mean  54.8   die
+bar 143.55                 shell max 153 mean  19.8   ears max  57 mean  35.2   die
+bar 143.8                  shell max 153 mean   2.8   ears max  25 mean  15.7   die
+bar 143.95                 shell max 153 mean   0.9   ears max   6 mean   3.9   die
+/private/tmp/claude-501/-Users-jones-deadmau5-app/208332e7-8c9f-4c25-bc21-e9a9df98fa1f/scratchpad/kit/work/moarghosts/s2.png (1800, 2450)

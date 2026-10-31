@@ -58,6 +58,9 @@ and power with `power.py`. Generators are in `tools/showkit/songs/<short>/`; edi
 hand-patching, and write the scene JSON with `python3 mau5scene.py compile "<song>"`. Some generators
 may name old scratch paths or read scratch files that were not copied.
 
+Each builder's commands and results are in `tools/showkit/notes/<short>.md`: grid measurements, song maps,
+power runs. The short names are the folders in `tools/showkit/songs/`.
+
 ## Other open items, most important first
 
 1. **Test on a real phone:** Play Music past the first song, with sound, on iPhone or Pixel. Reusing one

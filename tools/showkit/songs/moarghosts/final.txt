@@ -1,0 +1,77 @@
+bar 0.06    flash      sent  669 mA  shell max  40 mean   9.5  ears max 144 mean  22.9  attract · WAKA 0 · FLASH 0
+bar 1.3     attract    sent  971 mA  shell max   3 mean   1.2  ears max 181 mean  55.2  attract · WAKA 0 · CHIN 0.75
+bar 2.6     gap        sent  457 mA  shell max  28 mean   8.8  ears max 132 mean  11.5  attract · WAKA 0 · CHIN 0.75
+bar 3.8     drain      sent   95 mA  shell max  18 mean   3.2  ears max   0 mean   0.0  drain
+bar 7       Clyde      sent  490 mA  shell max  36 mean   9.8  ears max 231 mean  11.3  afterdark
+bar 8.5     moon       sent  390 mA  shell max  46 mean   9.9  ears max 108 mean   5.3  afterdark
+bar 11                 sent  490 mA  shell max  37 mean   9.9  ears max 232 mean  11.3  afterdark
+bar 14.1    voice      sent   55 mA  shell max   0 mean   0.0  ears max  76 mean   3.3  voice
+bar 16.3    look       sent  377 mA  shell max  29 mean   9.8  ears max  76 mean   4.5  voice
+bar 18.6    look       sent  544 mA  shell max  28 mean   9.9  ears max  89 mean  14.5  voice
+bar 21      title      sent  334 mA  shell max  38 mean   9.8  ears max 118 mean   2.0  banner · TITLE
+bar 23                 sent  475 mA  shell max  32 mean   9.8  ears max 144 mean  10.4  banner · TITLE
+bar 25      Pac        sent  609 mA  shell max  38 mean   9.9  ears max 145 mean  18.3  banner
+bar 26.03   drums      sent  686 mA  shell max  42 mean  10.0  ears max 152 mean  23.0  game · WAKA 26 · FLASH 26
+bar 28.3    clap       sent  971 mA  shell max   5 mean   1.5  ears max 181 mean  54.8  game · WAKA 26 · CHIN 26.5
+bar 31      gap        sent  758 mA  shell max  22 mean   9.7  ears max 156 mean  27.3  game · WAKA 26 · CHIN 26.5
+bar 36      back       sent  721 mA  shell max  23 mean   9.8  ears max 152 mean  25.1  gameback · WAKA 26 · CHIN 34.25
+bar 40.5    pellet     sent  252 mA  shell max  50 mean   3.1  ears max 127 mean   9.0  pellet
+bar 41.5    swell      sent  940 mA  shell max  60 mean   6.0  ears max 127 mean  44.7  pellet
+bar 41.8    noise      sent  533 mA  shell max   0 mean   0.0  ears max 203 mean  31.9  pellet · NOISE 41.75
+bar 42.02   DROP       sent 1000 mA  shell max   3 mean   1.5  ears max 106 mean  56.3  fright · POWER · HUNT 42
+bar 42.3    blast      sent  971 mA  shell max   2 mean   1.3  ears max 152 mean  54.2  fright · POWER · HUNT 42
+bar 44.5    hunt       sent  614 mA  shell max  36 mean   9.7  ears max 145 mean  18.4  fright · HUNT 42
+bar 46.3    right      sent  971 mA  shell max  34 mean   9.4  ears max 156 mean  40.7  fright · HUNT 42
+bar 46.8    left       sent  971 mA  shell max  32 mean   9.5  ears max 156 mean  40.7  fright · HUNT 42
+bar 49.5    run        sent  616 mA  shell max  21 mean  10.0  ears max 145 mean  18.5  fright · HUNT 42 · RUN 49
+bar 56.3    warn       sent  971 mA  shell max  19 mean   9.4  ears max 156 mean  40.7  warning · HUNT 42
+bar 58.03   recover    sent  686 mA  shell max  42 mean   9.7  ears max 152 mean  23.0  recover · WAKA 58 · FLASH 58
+bar 61      chase      sent  679 mA  shell max  26 mean   9.7  ears max 152 mean  22.6  recover · WAKA 58 · CHIN 58.5
+bar 64                 sent  679 mA  shell max  27 mean   9.8  ears max 152 mean  22.6  recover · WAKA 58 · CHIN 58.5
+bar 67      bigPac     sent  584 mA  shell max  41 mean   9.9  ears max 157 mean  17.1  intermission
+bar 70                 sent  584 mA  shell max  43 mean   9.8  ears max 157 mean  17.1  intermission
+bar 71.6    bigPac     sent  368 mA  shell max  43 mean   8.7  ears max  60 mean   6.1  intermission
+bar 74.5    stop       sent  380 mA  shell max  53 mean   7.4  ears max 127 mean   9.0  stop
+bar 75.6    pellet     sent 1000 mA  shell max  34 mean   6.9  ears max 107 mean  46.9  stop
+bar 76.02   DROP2      sent 1000 mA  shell max   3 mean   0.8  ears max 107 mean  57.4  bigfright · POWER 2 · HUNT 76
+bar 76.3    blast      sent  971 mA  shell max   2 mean   1.3  ears max 152 mean  54.3  bigfright · POWER 2 · HUNT 76
+bar 78.3    face       sent  971 mA  shell max  21 mean   9.3  ears max 156 mean  40.7  bigfright · HUNT 76
+bar 78.8    face       sent  971 mA  shell max  21 mean   9.3  ears max 156 mean  40.7  bigfright · HUNT 76
+bar 84.1    flick      sent  540 mA  shell max  12 mean   8.5  ears max 134 mean  16.1  bigflick · HUNT 76
+bar 90.6    flick      sent  540 mA  shell max  17 mean   8.5  ears max 134 mean  16.1  bigflick3 · HUNT 76
+bar 92.2    eaten      sent   64 mA  shell max  61 mean   2.1  ears max   0 mean   0.0  eaten
+bar 93.5    home       sent   45 mA  shell max  46 mean   1.5  ears max   0 mean   0.0  eaten
+bar 94.02   BOO        sent 1000 mA  shell max   7 mean   2.8  ears max 152 mean  54.1  lone · BOO
+bar 94.6    BOO        sent  911 mA  shell max  28 mean  10.0  ears max 162 mean  36.4  lone · BOO
+bar 96      lone       sent  259 mA  shell max  60 mean   4.9  ears max 105 mean   6.4  lone
+bar 99                 sent  375 mA  shell max  60 mean   7.9  ears max 120 mean   8.0  lone2
+bar 103                sent  522 mA  shell max  47 mean  10.0  ears max  66 mean  13.0  lone3
+bar 107     two        sent  709 mA  shell max  54 mean   9.9  ears max 131 mean  24.1  lone4 · RIMS 106
+bar 111     four       sent  834 mA  shell max  24 mean   9.7  ears max 136 mean  31.6  swell · SWELL
+bar 113     pellet     sent  689 mA  shell max  55 mean   9.9  ears max 127 mean  23.1  pellet3
+bar 113.8   noise      sent  520 mA  shell max   0 mean   0.0  ears max 203 mean  31.1  pellet3 · NOISE 113.75
+bar 114.02  DROP3      sent 1000 mA  shell max   3 mean   1.1  ears max 108 mean  57.6  blinky · POWER 3
+bar 116.6   stare      sent  612 mA  shell max  28 mean   8.6  ears max  68 mean  20.7  blinky stare
+bar 117.9   black      sent    0 mA  shell max   0 mean   0.0  ears max   0 mean   0.0  blinky stare
+bar 118.1   pink       sent  881 mA  shell max   2 mean   1.3  ears max 138 mean  49.4  pinky · NEXT pinky
+bar 120.5   stare      sent 1000 mA  shell max  11 mean   5.7  ears max 123 mean  48.6  pinky stare
+bar 122.3   cyan       sent  971 mA  shell max   2 mean   1.3  ears max 126 mean  54.7  inky · NEXT inky
+bar 124.5   stare      sent 1000 mA  shell max  14 mean   6.8  ears max 132 mean  47.0  inky stare
+bar 126.3   orange     sent  971 mA  shell max   2 mean   1.0  ears max 160 mean  55.2  clyde · NEXT clyde
+bar 129     stop       sent  689 mA  shell max  57 mean   9.8  ears max 127 mean  23.1  stop3
+bar 130.02  WHITE      sent 1000 mA  shell max   3 mean   1.5  ears max  74 mean  56.3  final · WHITE · HUNT 130
+bar 130.3   blast      sent  971 mA  shell max   2 mean   1.9  ears max 114 mean  53.4  final · WHITE · HUNT 130
+bar 131.3   hunt       sent  971 mA  shell max  33 mean   9.1  ears max 155 mean  40.7  final · HUNT 130
+bar 133     held       sent  866 mA  shell max  18 mean   9.9  ears max 145 mean  33.4  final chord · HUNT 132
+bar 133.9   black      sent  414 mA  shell max   0 mean   0.0  ears max 131 mean  24.7  final chord · HUNT 132
+bar 135                sent  617 mA  shell max  19 mean   9.8  ears max 145 mean  18.6  final b · HUNT 134 · RUN 135
+bar 137                sent  866 mA  shell max  18 mean   9.9  ears max 145 mean  33.4  final chord 2 · HUNT 136
+bar 138.1   trap       sent  643 mA  shell max  27 mean   8.6  ears max 135 mean  22.6  trap · WAKA 138 · FLASH 138
+bar 139.5              sent  753 mA  shell max  35 mean   9.8  ears max 228 mean  27.1  trap · WAKA 138 · CHIN 138.5
+bar 141     closing    sent 1000 mA  shell max  28 mean   8.4  ears max 144 mean  44.6  trap · CHIN 138.5 · CLOSING
+bar 142.9   caught     sent  390 mA  shell max  19 mean   8.2  ears max 181 mean   8.4  trap · CHIN 138.5 · WAKA 142
+bar 143.1   die        sent 1000 mA  shell max   6 mean   2.9  ears max  94 mean  54.5  die
+bar 143.4              sent 1000 mA  shell max  33 mean   8.3  ears max  74 mean  44.8  die
+bar 143.7              sent  504 mA  shell max  58 mean   3.8  ears max  38 mean  23.3  die
+bar 143.95             sent   76 mA  shell max  58 mean   0.4  ears max   6 mean   3.7  die
+/private/tmp/claude-501/-Users-jones-deadmau5-app/208332e7-8c9f-4c25-bc21-e9a9df98fa1f/scratchpad/kit/work/moarghosts/final.png (1800, 3185)
