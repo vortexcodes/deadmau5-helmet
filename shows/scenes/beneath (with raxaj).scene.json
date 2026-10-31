@@ -1,11 +1,11 @@
 {
  "v": 1,
  "show": "beneath (with raxaj)",
- "about": "Bars of the analysis grid: bar b starts at 1.856 + 1.898 b seconds (126.4 BPM), 144 bars. The light lives beneath: a pool of magma in the jaw that throbs on every kick, while the ears surge up from their base on the off-beat bass, the way the sidechain pumps. The pool rises through each build until the whole face is molten, drains in the breakdown and is gone in the four silent bars, and wells back up with the sub at bar 67. The grooves are a tide: the left half and ear 1 fill while the right half and ear 2 drain, then they answer. Both builds send a seam of light up the face from the chin, faster each phrase. The song goes silent for three beats at bar 48 and drops on 49; the riser drains everything back down before drop 2 lands on 123. Warm only: ember, magma, obsidian for the cooled breakdown, and white once, on drop 2. The shell tops out on its own 300 mA budget, so the grooves are kept well under it and only the ends of the builds and the drops reach it; the ears in the drops stay inside what the shell leaves, so the governor only grazes the downbeat hits. Nothing on the shell turns on and off faster than once a beat (the pool's throb never goes below 40%); the only sixteenths are the ears' roll in the last bar before drop 2.",
+ "about": "Bars of the measured grid in the .beats beside this file: bar b starts at 1.275 + 1.905 b seconds (126.0 BPM), 144 bars, and from bar 133.25 the outro slows to 122.0 BPM. The light lives beneath: a pool of magma in the jaw that throbs on every kick, while the ears surge up from their base on the off-beat bass, the way the sidechain pumps. The pool rises through each build until the whole face is molten, drains in the breakdown and is gone in the four silent bars, and wells back up with the sub at bar 67. The grooves are a tide: the left half and ear 1 fill while the right half and ear 2 drain, then they answer. Both builds send a seam of light up the face from the chin, faster each phrase. The song goes silent for three and a half beats at bar 48 and drops on 49; the riser drains everything back down before drop 2 lands on 123. Warm only: ember, magma, obsidian for the cooled breakdown, and white once, on drop 2. The shell tops out on its own 300 mA budget, so the grooves are kept well under it and only the ends of the builds and the drops reach it; the ears in the drops stay inside what the shell leaves, so the governor only grazes the downbeat hits. Nothing on the shell turns on and off faster than once a beat (the pool's throb never goes below 40%); the only sixteenths are the ears' roll in the last bar before drop 2.",
  "lead": 0,
  "marks": {
   "ash": 8, "pads": 16, "tide": 32, "build": 40, "faster": 44, "fastest": 46,
-  "gap": 48, "pickup": 48.75, "drop1": 49, "drop1B": 53, "cool": 57, "title": 60,
+  "gap": 48, "pickup": 48.875, "drop1": 49, "drop1B": 53, "cool": 57, "title": 60,
   "void": 64, "upwell": 67, "mids": 74, "groove2": 80, "groove2B": 88,
   "press": 96, "press2": 104, "press3": 112, "push": 116, "sink": 120,
   "drop2": 123, "drop2B": 127, "drain": 131, "silence": 132, "outro": 133,
@@ -178,7 +178,7 @@
   {"name": "surface", "at": "pads", "beats": 2, "layers": [
     {"fx": "fill", "on": "ears", "pal": "ember", "c": 0.9, "gain": [0.3, 0]},
     {"use": "geyser", "pal": "ember", "c": 0.9, "gain": 0.7}]},
-  {"name": "pickup", "at": "pickup", "beats": 1, "layers": [
+  {"name": "pickup", "at": "pickup", "beats": 0.5, "layers": [
     {"fx": "sweep", "on": "ears", "axis": "al", "shape": "p", "mode": "fill",
      "from": -0.2, "to": 1.2, "soft": 0.2, "pal": "core", "c": 0.3, "gain": 0.25},
     {"use": "seam", "on": "shell", "shape": "p", "c": 0.3, "gain": 0.8}]},

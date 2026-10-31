@@ -14,6 +14,11 @@ filesystem: the envelopes resampled to 20 Hz and quantised to a byte,
 the beat and bar grids as they are, and a chroma vector per bar.  All
 five tracks come to about 230 kB gzipped.
 
+Sixteen songs at that rate would fill the controller, so any song after
+the first six is written at half of it, keeping each punch's peak.  The
+six keep their rate and their file names, so a deploy does not have to
+push them through the file manager again for nothing.
+
 Twenty hertz and eight bits are not a compromise anybody will see.
 The curves are loudness envelopes with a 25 ms window behind them;
 the fastest thing in them is a kick transient, which 50 ms resolves,
@@ -40,6 +45,10 @@ OUT = os.path.join(HERE, "data", "offline")
 
 MAGIC = b"MAU5DRV1"
 FPS = 20                      # samples per second in the written curves
+FPS_LIGHT = 10                # the same, for every song but these six
+FULL_RATE = ("Fred again.. & Baby Keem - leavemealone", "TIKI TIKI - Slowed",
+             "beneath (with raxaj)", "deadmau5 - Ghosts n Stuff (Nero Remix)",
+             "deadmau5 - Strobe (Dimension Remix)", "deadmau5 - Strobe")
 
 # The curves a show asks for, in the order they are written.  `e` is
 # the band's energy and `p` its punch -- how fast that energy just
@@ -48,17 +57,25 @@ CURVES = ("energy", "b_bass_e", "b_bass_p", "b_mid_e", "b_mid_p",
           "b_high_e", "b_high_p")
 
 
-def _resample(a, fps_in, n_out):
+def _resample(a, fps_in, n_out, fps=FPS, peak=False):
     a = np.asarray(a, float)
     if not len(a):
         return np.zeros(n_out, np.uint8)
-    t = np.arange(n_out) / float(FPS)
+    if peak and fps < FPS:
+        # A kick's punch lasts a sample or two at the analysis' rate, and
+        # sampling it every 100 ms would keep it only by luck.
+        each = fps_in / float(fps)
+        at = (np.arange(n_out + 1) * each).astype(int)
+        v = np.array([a[at[k]:max(at[k + 1], at[k] + 1)].max() if at[k] < len(a) else a[-1]
+                      for k in range(n_out)])
+        return np.clip(v * 255.0, 0, 255).astype(np.uint8)
+    t = np.arange(n_out) / float(fps)
     et = np.arange(len(a)) / float(fps_in)
     v = np.interp(t, et, a, left=float(a[0]), right=float(a[-1]))
     return np.clip(v * 255.0, 0, 255).astype(np.uint8)
 
 
-def pack(npz_path):
+def pack(npz_path, fps=FPS):
     """One track's drive, as bytes.
 
     Each band is normalised against its own maximum before quantising.
@@ -69,7 +86,7 @@ def pack(npz_path):
     z = np.load(npz_path, allow_pickle=True)
     fps_in = float(z["fps"])
     dur = float(z["duration"])
-    n = max(1, int(dur * FPS))
+    n = max(1, int(dur * fps))
 
     blobs = []
     for name in CURVES:
@@ -80,7 +97,7 @@ def pack(npz_path):
             v = v / max(float(v.max()), 1e-9)
         else:
             v = np.zeros(1)
-        blobs.append(_resample(v, fps_in, n))
+        blobs.append(_resample(v, fps_in, n, fps, peak=name.endswith("_p")))
 
     beats = np.asarray(z["beats"], np.float32)
     bars = np.asarray(z["bars"], np.float32)
@@ -93,7 +110,7 @@ def pack(npz_path):
     if len(ch) != len(bars):                 # keep the two in step
         ch = np.zeros((len(bars), 12), np.uint8)
 
-    head = MAGIC + struct.pack("<HIBIId", FPS, n, len(CURVES),
+    head = MAGIC + struct.pack("<HIBIId", fps, n, len(CURVES),
                                len(beats), len(bars), dur)
     names = b"".join(nm.encode().ljust(12, b"\0") for nm in CURVES)
     return (head + names + b"".join(b.tobytes() for b in blobs)
@@ -103,6 +120,14 @@ def pack(npz_path):
 
 def build(verbose=True):
     os.makedirs(OUT, exist_ok=True)
+    # A song keeps its file: names handed out by position would all move up
+    # one when a new song sorted in among them.
+    try:
+        with open(os.path.join(OUT, "drive.json")) as f:
+            old = json.load(f)
+    except (OSError, ValueError):
+        old = {}
+    taken = {v["file"] for v in old.values()}
     made = {}
     for fn in sorted(os.listdir(SHOWS)):
         if not fn.endswith(".json"):
@@ -115,9 +140,15 @@ def build(verbose=True):
             if verbose:
                 print("  %-44s no analysis, skipped" % fn[:-5][:44])
             continue
-        raw = pack(path)
+        raw = pack(path, FPS if fn[:-5] in FULL_RATE else FPS_LIGHT)
         gz = gzip.compress(raw, 9)
-        name = "d%d.bin" % (len(made) + 1)
+        name = (old.get(fn[:-5]) or {}).get("file")
+        if not name:
+            k = 1
+            while "d%d.bin" % k in taken:
+                k += 1
+            name = "d%d.bin" % k
+            taken.add(name)
         with open(os.path.join(OUT, name), "wb") as f:
             f.write(raw)
         with open(os.path.join(OUT, name + ".gz"), "wb") as f:

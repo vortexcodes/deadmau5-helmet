@@ -205,12 +205,30 @@ python3 mau5scene.py check   "deadmau5 - Strobe"           # every scene through
 python3 mau5show.py preview "shows/deadmau5 - Strobe.json" --start 395 --seconds 25
 ```
 
+Before writing a treatment, check the grid against the audio. The tempo
+estimate can be slightly out, and the bar line can sit away from where the
+phrases turn. `shows/scenes/<song>.beats` replaces the estimate with a measured
+grid, one time per line, first beat on a downbeat. Delete the song's
+`.analysis.npz` after changing one. A beat that comes late is read as a seam,
+for a track edited so the music comes back late, and the grid holds still for
+it; TIKI TIKI has one at bar 119.5.
+
+A song can bring its own artwork: `shows/scenes/<song>.sprites.json` is
+`{"<song>_<thing>": ["rows", ...]}`, every row one length, `.` off and anything
+else lit. About 17 by 17 cells over the whole shell (`y_lo` -108, `y_hi` 166,
+`x_half` 171) is the most it resolves, and it has no LEDs across the middle of
+the face. A sprite can move (`dx`, `dy`, `vx`, `vy`, and `wx`, `wy`, `wf` round
+an ellipse) and flip (`"a|b|c"` at `rate` frames a second). `orb` is a soft disc
+on the flat front view, in mm, across shell and ears; `twinkle` puts every LED
+on its own sine, for stars, film grain or radio static. The regions `jaw`,
+`rim1`, `rim2`, `tubes1` and `tubes2` join the rest.
+
 Laptop and phone play the scenes wherever a show has them, and render
 the same frame to a hundredth of a count. The cue list comes back
 with `MAU5_CUES=1` (laptop), `?cues` on the page's address (phone),
 `"mode": "cues"` in the show, or by itself if the scenes ever throw.
 None of this has been seen on the helmet yet: watch Strobe from 6:41
-(bar 213 into the drop at 217) and Ghosts from 1:45 (bar 61 into 63)
+(bar 213 into the drop at 217) and Ghosts from 1:45 (bar 61 into 64)
 from the side as well as the front.
 
 ## Reading the strip back
@@ -343,11 +361,32 @@ Verified end to end from the school network: 403 with no token, 403
 with a wrong one, 200 with the right one, certificate verified
 without `-k`.
 
+## Play Music
+
+The big button at the top of the page plays every song this device has, each
+with its own show, one after another and round again, with skip buttons and a
+shuffle. `shows/scenes/playlist.json` is the running order, and a show it leaves
+out goes on the end. It runs on one audio element, because a phone only lets an
+element start by itself once a tap has started it. A song that will not play is
+skipped, and a song still on its way from the laptop joins the set when it lands.
+
+On a laptop the helmet carries on when the window is covered or the tab changed:
+a small worker keeps the time, since a hidden page's own timers run about once a
+second. A phone that hides still stops the lights and starts them again when it
+comes back, because its timers really do stop, and the song carries on if the
+phone lets it.
+
+The controller has no gyroscope (it has a microphone and a relay) and a page on
+plain http gets no motion data from a phone either, so on the `eyes` preset a
+finger on the preview steers the eyes instead.
+
 ## Keeping it as an app, and what happens when you close it
 
 The page carries a manifest and icons drawn from the LED map itself,
 so "Add to Home screen" gives a real icon and a window with no
-address bar rather than a bookmark.
+address bar rather than a bookmark. The icon opens the address it was
+added from, and each address keeps its own songs, so for a show away
+from home add it while on the helmet's Wi-Fi, at 4.3.2.1.
 
 It is not a full PWA and cannot be while the controller serves it: an
 installable app needs a service worker, a service worker needs a
@@ -362,11 +401,15 @@ dark a minute after the phone stops talking.
 
 Now it hands back instead:
 
+On the page, tap **set up** next to "standby glow". It measures pacifica on
+the helmet and turns it down until it fits what the helmet can sustain.
+From the laptop, without the measuring:
+
 ```bash
-python3 mau5offline.py standby --host X --fx pacifica --bri 96 --apply
+python3 mau5offline.py standby --host X --fx pacifica --bri 32 --apply
 ```
 
-That saves a WLED preset, with its brightness, and makes it the boot
+Either way that saves a WLED preset, with its brightness, and makes it the boot
 preset. Let go of the page — close it, lock the phone, walk off — and
 the controller picks up one of its own effects and keeps running with
 no phone, no laptop and no network. A screen that times out counts as
@@ -379,6 +422,9 @@ route, not this one. The hand-back is the page's **keep glowing** switch,
 on by default; turn it off for the old behaviour, where the helmet goes
 dark instead.
 
+[`firmware/`](firmware/README.md) has the patched WLED build that stops the
+access point dropping phones every 5 minutes when home Wi-Fi is out of range.
+
 The page only hands back to a preset the controller actually has. WLED
 ignores a request for a missing one, and the helmet then stayed lit in
 whatever its segment last held: on 2026-10-29 the controller had no
@@ -390,7 +436,7 @@ so on screen.
 
 At a show there is no house WiFi worth trusting and no reason to be carrying
 the laptop. The helmet brings up its own access point, the phone joins it,
-opens one page, and all 38 animations and the five shows run with nothing else
+opens one page, and all 38 animations and the six shows run with nothing else
 involved.
 
 ```bash
@@ -426,7 +472,7 @@ phone with the lights no longer following it. So, before a show:
   the old timeout
 * do not press the power button mid-set, because that is a stop
 
-**The songs.** The controller has under a megabyte free and the five songs are
+**The songs.** The controller has under a megabyte free and the six songs are
 61 MB, and they are commercial tracks, so they cannot go anywhere public either.
 `songs` serves them from the laptop and leaves a pointer on the controller;
 any phone that opens the page on the same network fetches whatever it is

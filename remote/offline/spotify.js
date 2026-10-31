@@ -204,7 +204,17 @@ function showForFile(filename, shows) {
     const T = words(n);
     return [...F].every(w => T.has(w));
   });
-  return all.length === 1 ? all[0] : '';
+  if (all.length === 1) return all[0];
+  // Or the other way round, for a long download name around a short title:
+  // the title with the most words that is wholly in the name, if one is.
+  let most = 0, hits = [];
+  for (const n of Object.keys(shows || {})) {
+    const T = [...words(n)];
+    if (T.length < 2 || !T.every(w => F.has(w))) continue;
+    if (T.length > most) { most = T.length; hits = [n]; }
+    else if (T.length === most) hits.push(n);
+  }
+  return hits.length === 1 ? hits[0] : '';
 }
 
 const api = { Spotify, bestShow, overlap, showForFile };

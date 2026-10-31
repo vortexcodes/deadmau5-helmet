@@ -454,19 +454,30 @@ def('text', { text: 'DEADMAU5', color: [255, 160, 0], bg: [0, 0, 0],
     }
   });
 
+// mau5engine.SpriteShow says what dx, dy, vx, vy, wx, wy, wf and rate do.
 def('sprite', { sprite: 'smile', color: [0, 255, 255], bg: [0, 0, 0],
-                y_lo: 20.0, y_hi: 160.0, x_half: 150.0, blink: 0.0 },
+                y_lo: 20.0, y_hi: 160.0, x_half: 150.0, blink: 0.0,
+                dx: 0.0, dy: 0.0, vx: 0.0, vy: 0.0,
+                wx: 0.0, wy: 0.0, wf: 0.0, rate: 0.0 },
   function (h, t, music, out) {
-    const bm = spriteBitmap(this.fonts, this.p.sprite);
+    const names = String(this.p.sprite).split('|');
+    const at = this.p.rate > 0 ? pmod(Math.floor(t * this.p.rate), names.length) : 0;
+    const bm = spriteBitmap(this.fonts, names[at]);
     fill(out, h.n, this.p.bg);
     if (this.p.blink && fract(t * this.p.blink) > 0.5) return;
     const hi = this.p.y_hi, lo = this.p.y_lo, xh = this.p.x_half;
+    let ox = this.p.dx + this.p.vx * t, oy = this.p.dy + this.p.vy * t;
+    if (this.p.wf) {
+      ox = ox + this.p.wx * Math.sin(2 * Math.PI * this.p.wf * t);
+      oy = oy + this.p.wy * Math.cos(2 * Math.PI * this.p.wf * t);
+    }
     const ry = new Float64Array(h.n), rx = new Float64Array(h.n);
     const mask = new Uint8Array(h.n);
     for (let i = 0; i < h.n; i++) {
-      ry[i] = (hi - h.py[i]) / Math.max(hi - lo, 1e-6) * bm.rows;
-      rx[i] = (h.px[i] + xh) / (2 * xh) * bm.cols;
-      mask[i] = h.shell[i] && h.py[i] > 0 ? 1 : 0;
+      ry[i] = (hi - h.py[i] + oy) / Math.max(hi - lo, 1e-6) * bm.rows;
+      rx[i] = (h.px[i] - ox + xh) / (2 * xh) * bm.cols;
+      // The top half, unless y_lo asks for the jaw as well.
+      mask[i] = h.shell[i] && h.py[i] > Math.min(0, lo) ? 1 : 0;
     }
     const lit = paint(bm, ry, rx, mask, h.n, 0);
     const c = this.p.color;
@@ -479,12 +490,12 @@ def('sprite', { sprite: 'smile', color: [0, 255, 255], bg: [0, 0, 0],
 const EYE_EDGE = 12.0;
 
 def('eyes', { color: [0, 255, 255], period: 5.0, size: 58.0, y: 95.0,
-              spread: 78.0, blink_every: 4.0 },
+              spread: 78.0, blink_every: 4.0, auto: 1.0, lx: 0.0, ly: 0.0 },
   function (h, t, music, out) {
     zero(out);
-    const look = Math.sin(2 * Math.PI * t / this.p.period) * 30.0;
+    const look = Math.sin(2 * Math.PI * t / this.p.period) * 30.0 * this.p.auto + this.p.lx;
     const blink = pmod(t, this.p.blink_every) < 0.18;
-    const c = this.p.color, size = this.p.size, yy = this.p.y;
+    const c = this.p.color, size = this.p.size, yy = this.p.y + this.p.ly;
     for (const side of [-1, 1]) {
       const cx = side * this.p.spread + look;
       for (let i = 0; i < h.n; i++) {

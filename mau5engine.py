@@ -276,6 +276,8 @@ class Preset:
         """Describe the parameters so a UI can build controls for them."""
         out = []
         for k, v in cls.params.items():
+            if k in getattr(cls, "hidden", ()):
+                continue
             if isinstance(v, (tuple, list)) and len(v) == 3 and all(
                     isinstance(c, (int, float)) for c in v):
                 out.append({"name": k, "kind": "color", "value": list(v)})
@@ -700,21 +702,40 @@ class TextScroll(Preset):
 
 
 class SpriteShow(Preset):
-    """One of the built-in faces, held on the front of the helmet."""
+    """One of the built-in faces, held on the front of the helmet.
+
+    `sprite` may be several names joined by |, shown in turn `rate` times a
+    second, as a flip book.  dx and dy move it in mm, vx and vy in mm a
+    second, and wx and wy swing it round an ellipse wf times a second.  All
+    of it is a function of t, so a moving sprite is still a pure function
+    of the time and the phone and the laptop still agree.
+    """
     name = "sprite"
     params = {"sprite": "smile", "color": (0, 255, 255), "bg": (0, 0, 0),
-              "y_lo": 20.0, "y_hi": 160.0, "x_half": 150.0, "blink": 0.0}
+              "y_lo": 20.0, "y_hi": 160.0, "x_half": 150.0, "blink": 0.0,
+              "dx": 0.0, "dy": 0.0, "vx": 0.0, "vy": 0.0,
+              "wx": 0.0, "wy": 0.0, "wf": 0.0, "rate": 0.0}
+    # for treatments: a slider from 0 to 1 mm is no use to anybody on the page
+    hidden = ("dx", "dy", "vx", "vy", "wx", "wy", "wf", "rate")
 
     def render(self, h, t, music=None):
-        bm = _sprite_bitmap(self.p["sprite"])
+        names = self.p["sprite"].split("|")
+        at = int(math.floor(t * self.p["rate"])) % len(names) if self.p["rate"] > 0 else 0
+        bm = _sprite_bitmap(names[at])
         rows, w = bm.shape
         out = np.tile(np.array(self.p["bg"], float), (h.n, 1))
         if self.p["blink"] and ((t * self.p["blink"]) % 1.0) > 0.5:
             return out
         lo, hi = self.p["y_lo"], self.p["y_hi"]
-        ry = (hi - h.py) / max(hi - lo, 1e-6) * rows
-        rx = (h.px + self.p["x_half"]) / (2 * self.p["x_half"]) * w
-        lit = paint(bm, ry, rx, h.shell & (h.py > 0))
+        ox = self.p["dx"] + self.p["vx"] * t
+        oy = self.p["dy"] + self.p["vy"] * t
+        if self.p["wf"]:
+            ox = ox + self.p["wx"] * math.sin(2 * math.pi * self.p["wf"] * t)
+            oy = oy + self.p["wy"] * math.cos(2 * math.pi * self.p["wf"] * t)
+        ry = (hi - h.py + oy) / max(hi - lo, 1e-6) * rows
+        rx = (h.px - ox + self.p["x_half"]) / (2 * self.p["x_half"]) * w
+        # The top half, unless y_lo asks for the jaw as well.
+        lit = paint(bm, ry, rx, h.shell & (h.py > min(0.0, lo)))
         out[lit] = self.p["color"]
         return out
 
@@ -723,7 +744,12 @@ class Eyes(Preset):
     """Two eyes that track left and right, with the odd blink."""
     name = "eyes"
     params = {"color": (0, 255, 255), "period": 5.0, "size": 58.0,
-              "y": 95.0, "spread": 78.0, "blink_every": 4.0}
+              "y": 95.0, "spread": 78.0, "blink_every": 4.0,
+              "auto": 1.0, "lx": 0.0, "ly": 0.0}
+    # Where a finger on the page's preview is pointing them, in mm, and how
+    # much of their own looking about is left: the helmet has no motion sensor
+    # for them to follow, so the person holding the phone does it.
+    hidden = ("auto", "lx", "ly")
     # How far inside its edge an eye fades in, in mm: about one LED
     # pitch (9 mm to the nearest neighbour across the eye area, 12-15
     # between strips).  The 0.6 power alone is vertical at the edge, so
@@ -735,15 +761,16 @@ class Eyes(Preset):
 
     def render(self, h, t, music=None):
         out = np.zeros((h.n, 3))
-        look = math.sin(2 * math.pi * t / self.p["period"]) * 30.0
+        look = math.sin(2 * math.pi * t / self.p["period"]) * 30.0 * self.p["auto"] + self.p["lx"]
         blink = (t % self.p["blink_every"]) < 0.18
+        yy = self.p["y"] + self.p["ly"]
         for side in (-1, 1):
             cx = side * self.p["spread"] + look
-            d = np.hypot(h.px - cx, (h.py - self.p["y"]) * 1.25)
+            d = np.hypot(h.px - cx, (h.py - yy) * 1.25)
             e = np.clip((self.p["size"] - d) / self.EDGE, 0, 1)
             k = np.clip(1 - d / self.p["size"], 0, 1) ** 0.6 * e * e * (3 - 2 * e)
             if blink:
-                k *= np.clip(1 - np.abs(h.py - self.p["y"]) / 10.0, 0, 1)
+                k *= np.clip(1 - np.abs(h.py - yy) / 10.0, 0, 1)
             out += k[:, None] * np.array(self.p["color"])
         out[~h.shell] = 0
         return np.clip(out, 0, 255)

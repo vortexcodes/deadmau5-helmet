@@ -258,6 +258,8 @@ class PowerGuard {
       budget_ma: budget,
       thermal: this.thermal ? {
         level_j: this.thermal.level, burst_j: this.thermal.burst_j,
+        top_w: this.thermal.max_w ? this.thermal.max_w - this.thermal.standby_w
+                                  : this.thermal.sustained_w - this.thermal.standby_w,
         full_pct: 100.0 * this.thermal.level / Math.max(this.thermal.burst_j, 1e-6),
         allowance_w: this.thermal.allowanceW(),
       } : null,

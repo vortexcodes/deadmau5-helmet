@@ -123,7 +123,13 @@ class Music:
                 print("  %s has changed since it was analysed: analysing it "
                       "again, and its show wants rebuilding"
                       % os.path.basename(path))
-        an = mau5song.analyse(path, verbose=verbose)
+        # A hand-measured grid beside the treatment, first beat on a downbeat,
+        # for a track the tempo estimate cannot follow.  Delete the .analysis.npz
+        # after changing one.
+        beats = os.path.join(HERE, "shows", "scenes",
+                             os.path.splitext(os.path.basename(path))[0] + ".beats")
+        an = (mau5song.analyse(path, beats_file=beats, downbeat=0, verbose=verbose)
+              if os.path.exists(beats) else mau5song.analyse(path, verbose=verbose))
         self.duration = an["duration"]
         self.bpm = an["bpm"]
         self.beats = an["beats"]

@@ -285,6 +285,8 @@ const FX_VALUES = {
   sparks: ['rate', 'life', 'spread', 'nbr'],
   blades: ['step', 'rise', 'keep', 'ctip', 'rim'],
   preset: [],
+  orb: ['x', 'y', 'rad', 'soft', 'wx', 'wy', 'xf', 'yf', 'xp', 'yp', 'cgrad'],
+  twinkle: ['rate', 'sharp', 'spread', 'dens'],
 };
 
 function sclamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -355,6 +357,11 @@ function regionMask(h, on) {
         case 'left': v = h.shell[i] && h.fa[i] < 0; break;
         case 'right': v = h.shell[i] && h.fa[i] >= 0; break;
         case 'face': v = h.shell[i] && h.py[i] > 28; break;
+        case 'jaw': v = h.shell[i] && h.py[i] <= 28; break;
+        case 'rim1': v = h.rims[i] && h.ear1[i]; break;
+        case 'rim2': v = h.rims[i] && h.ear2[i]; break;
+        case 'tubes1': v = h.tubes[i] && h.ear1[i]; break;
+        case 'tubes2': v = h.tubes[i] && h.ear2[i]; break;
         default: throw new Error('no region ' + nm);
       }
       if (v) m[i] = 1;
@@ -379,6 +386,7 @@ class Scenes {
     this.t0 = spec.grid.t0;
     this.spb = spec.grid.spb;
     this.lead = spec.grid.lead || 0;
+    this.holds = spec.grid.holds || [];
     this.nbars = spec.bars;
     this.HB = PULSE_HOLD_S / this.spb;
     this.gain = 1.0;
@@ -450,6 +458,13 @@ class Scenes {
       P.full = L.seq.map(x => x.length === 3 && x.indexOf(0) >= 0
                          && x.indexOf(1) >= 0 && x.indexOf(2) >= 0);
       P.side = SIDES[L.side];
+    } else if (L.fx === 'twinkle') {
+      const seed = L.seed, each = (k) => {
+        const a = new Float64Array(idx.length);
+        for (let m = 0; m < idx.length; m++) a[m] = shash(m * k + seed);
+        return a;
+      };
+      P.h1 = each(12.9898); P.h2 = each(78.233); P.h3 = each(37.719); P.h4 = each(91.7);
     } else if (L.fx === 'preset') {
       if (!SCENE_PRESETS[L.name]) throw new Error('no scene preset ' + L.name);
       P.inst = M.make(L.name, L.params, h, this.fonts);
@@ -625,6 +640,41 @@ class Scenes {
         }
         break;
       }
+      case 'orb': {
+        let x0 = valAt(P.x, p, bar, music, tt), y0 = valAt(P.y, p, bar, music, tt);
+        const wx = valAt(P.wx, p, bar, music, tt), wy = valAt(P.wy, p, bar, music, tt);
+        if (wx !== 0) {
+          x0 = x0 + wx * Math.sin(2 * Math.PI * (B * valAt(P.xf, p, bar, music, tt)
+                                                 + valAt(P.xp, p, bar, music, tt)));
+        }
+        if (wy !== 0) {
+          y0 = y0 + wy * Math.sin(2 * Math.PI * (B * valAt(P.yf, p, bar, music, tt)
+                                                 + valAt(P.yp, p, bar, music, tt)));
+        }
+        const rad = valAt(P.rad, p, bar, music, tt), soft = valAt(P.soft, p, bar, music, tt);
+        const cgrad = valAt(P.cgrad, p, bar, music, tt);
+        const PX = this.h.px, PY = this.h.py;
+        for (let m = 0; m < nm; m++) {
+          const i = idx[m];
+          const d = Math.hypot(PX[i] - x0, PY[i] - y0);
+          const e = sclamp((rad - d) / soft, 0, 1);
+          this._pal(P, c0 + cgrad * d / rad);
+          this._put(mix, i, G * (e * e * (3 - 2 * e)));
+        }
+        break;
+      }
+      case 'twinkle': {
+        const rate = valAt(P.rate, p, bar, music, tt), sharp = valAt(P.sharp, p, bar, music, tt);
+        const spread = valAt(P.spread, p, bar, music, tt), dens = valAt(P.dens, p, bar, music, tt);
+        for (let m = 0; m < nm; m++) {
+          if (!(P.h4[m] < dens)) continue;
+          const s = Math.sin(2 * Math.PI * (B * rate * (0.5 + P.h2[m]) + P.h1[m]));
+          if (!(s > 0)) continue;
+          this._pal(P, c0 + spread * P.h3[m]);
+          this._put(mix, idx[m], G * Math.pow(s, sharp));
+        }
+        break;
+      }
       case 'preset': {
         const sc = this.scratch;
         sc.fill(0);
@@ -655,9 +705,18 @@ class Scenes {
     return -1;
   }
 
+  // The beat at a time: the straight grid, stopped at each seam.
+  beat(tt) {
+    let B = (tt - this.t0) / this.spb;
+    for (const [at, beats] of this.holds) {
+      if (B > at) B = Math.max(at, B - beats);
+    }
+    return B;
+  }
+
   frame(t, music, out) {
     const tt = t + this.lead;
-    const B = (tt - this.t0) / this.spb;
+    const B = this.beat(tt);
     const bar = B / 4;
     const acc = this.acc;
     this.gain = 1.0;

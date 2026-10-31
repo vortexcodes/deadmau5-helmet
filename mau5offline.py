@@ -99,7 +99,8 @@ def bundle():
         "strips": json.load(open(os.path.join(CAL, "strips.json")))["strips"],
         "presets": _preset_specs(),
         "shows": _shows(),
-        "drive": _drive_index(),
+        "drive": {k: "%s?v=%d" % (v["file"], v.get("gz", 0)) for k, v in _drive_entries().items()},
+        "playlist": _playlist(),
         "lock": {"presets": {k: list(v) for k, v in E.LOCKABLE.items()},
                  "divisions": list(E.DIVISIONS)},
         "standby": STANDBY_SLOT,
@@ -158,6 +159,23 @@ def _preset_specs():
 def _read(name):
     with open(os.path.join(SRC, name)) as f:
         return f.read()
+
+
+def _drive_entries():
+    try:
+        with open(os.path.join(OUT, "drive.json")) as f:
+            return json.load(f)
+    except (ValueError, OSError):
+        return {}
+
+
+def _playlist():
+    """The set 'Play Music' runs through; shows it leaves out go on the end."""
+    try:
+        with open(os.path.join(HERE, "shows", "scenes", "playlist.json")) as f:
+            return json.load(f)
+    except (ValueError, OSError):
+        return []
 
 
 def _drive_index():
@@ -352,11 +370,13 @@ def songs(host=None, port=SONGS_PORT, dirs=None):
     network.  Any phone, no files needed on it first.
 
     The phone has to be on the same network as this machine, and the
-    copies are kept per address: a phone that will use the helmet's own
-    Wi-Fi at a show wants this run with the laptop on that Wi-Fi too.
+    copies are kept per address.  A phone that will use the helmet's own
+    Wi-Fi at a show saves them as files from the page at the house, and
+    loads those on the helmet's Wi-Fi; the page offers both.
     """
     import http.server
     import socketserver
+    import threading
     import mau5wled
 
     files = _song_files(dirs)
@@ -424,8 +444,25 @@ def songs(host=None, port=SONGS_PORT, dirs=None):
         daemon_threads = True
         allow_reuse_address = True
 
+    def keep_pointing():
+        # A laptop's address changes under a server left running, and the
+        # pointer then sends every phone to where it used to be.
+        while True:
+            time.sleep(30)
+            try:
+                here = "http://%s:%d" % (_address_towards(w), port)
+                if here != pointer["from"]:
+                    moved = dict(pointer, **{"from": here})
+                    _upload(w, SONGS_POINTER, json.dumps(moved).encode(),
+                            "application/json")
+                    pointer["from"] = here
+                    print("  this machine moved: the songs are now at %s" % here)
+            except (OSError, SystemExit):
+                pass                # out of the controller's reach for now
+
     srv = Server(("0.0.0.0", port), H)
     _upload(w, SONGS_POINTER, json.dumps(pointer).encode(), "application/json")
+    threading.Thread(target=keep_pointing, daemon=True).start()
     total = sum(v["bytes"] for v in pointer["songs"].values()) / 1e6
     print("  serving %d songs, %.0f MB, from %s" % (len(names), total, pointer["from"]))
     for n in names:
@@ -789,6 +826,9 @@ def _listing(w):
         return {}
 
 
+DRIVE_RESERVE = 64 * 1024       # left free for settings and presets
+
+
 def deploy_drives(w, verbose=True):
     """Put the per-track analyses beside the page.
 
@@ -803,6 +843,11 @@ def deploy_drives(w, verbose=True):
         return 0
     have = _listing(w)
     sent = skipped = 0
+    # A filesystem that fills up truncates whatever is written next, and the
+    # next thing could be the controller's own settings.  A song without its
+    # analysis still plays, off what the page hears.
+    fs = w.info(True).get("fs") or {}
+    room = (fs.get("t", 0) - fs.get("u", 0)) * 1024 - DRIVE_RESERVE if fs else None
     for show, fn in sorted(idx.items()):
         gz = os.path.join(OUT, fn + ".gz")
         if not os.path.exists(gz):
@@ -812,6 +857,13 @@ def deploy_drives(w, verbose=True):
         if have.get(fn + ".gz") == len(blob):
             skipped += 1
             continue
+        grows = len(blob) - have.get(fn + ".gz", 0)
+        if room is not None and grows > room:
+            print("  no room for the analysis of %s: it would run off what the "
+                  "page hears" % show)
+            continue
+        if room is not None:
+            room -= grows
         _upload(w, "/" + fn + ".gz", blob, "application/octet-stream")
         sent += len(blob)
         time.sleep(1.0)                 # let the board breathe
@@ -832,8 +884,12 @@ STANDBY_FX = {"pacifica": 101, "aurora": 38, "pride": 63,
 STANDBY_SLOT = 1
 
 
-def standby(host=None, fx="pacifica", bri=96, boot=True, apply=False):
+def standby(host=None, fx="pacifica", bri=32, boot=True, apply=False):
     """Give the helmet something to do when nobody is driving it.
+
+    The brightness here is not measured.  32 is a cautious guess at what
+    fits the sustained budget; the page's "set up" button next to standby
+    glow measures the same effect on the helmet and is the better way.
 
     The complaint this answers: close the page and the lights stop.
     They did, by design -- a frozen segment holds the last frame for
@@ -883,7 +939,7 @@ def standby(host=None, fx="pacifica", bri=96, boot=True, apply=False):
     # WLED's presets.cpp), which is why WLED's own UI always sends both.
     # Without ib the hand-back -- {ps: 1}, with no brightness of its own
     # -- runs at whatever brightness the phone left, 255 by default,
-    # instead of the 96 asked for here.  Not yet read back from this controller:
+    # instead of the brightness asked for here.  Not yet read back from this controller:
     # preset 1 in /presets.json should now carry "bri".
     w._post("/json/state", {"psave": STANDBY_SLOT, "n": "mau5 standby",
                             "ib": True, "sb": True})
@@ -1012,7 +1068,7 @@ def main(argv=None):
     s.add_argument("--host", default=None)
     s.add_argument("--fx", default="pacifica",
                    help="one of: " + ", ".join(sorted(STANDBY_FX)))
-    s.add_argument("--bri", type=int, default=96)
+    s.add_argument("--bri", type=int, default=32)
     s.add_argument("--no-boot", dest="boot", action="store_false", default=True)
     s.add_argument("--apply", action="store_true")
 

@@ -21,8 +21,9 @@ throw.
 
 Every frame is a pure function of the time, plus optionally the band
 curves, on the analysis' beat grid -- which is exactly linear for every
-shipped song (the spread of beat intervals is about 2e-14 s).  That one
-decision buys three things.  The phone and the laptop can agree to the
+shipped song (the spread of beat intervals is about 2e-14 s), apart from
+any seam where the track was edited and the music comes back late, which
+the grid holds still for (grid_of).  That one decision buys three things.  The phone and the laptop can agree to the
 last bit, because there is no state for them to disagree about.  Seeking
 and pausing cost nothing.  And the show stays in sync from the audio
 element's own clock whether or not the phone ever fetched a drive file.
@@ -65,14 +66,15 @@ from mau5show import PULSE_HOLD_S  # noqa: E402
 CELL = 16.7                 # mm per glyph column, TextScroll's default
 LINEAR_TOL_S = 0.005        # a grid this far from straight is refused
 
-FX = ("fill", "grad", "sweep", "sparks", "blades", "preset")
+FX = ("fill", "grad", "sweep", "sparks", "blades", "preset", "orb", "twinkle")
 MIX = ("add", "max", "over")
 # Only the presets that are stateless and already parity-tested between
 # the two languages may be layers: a stateful one would remember a frame
 # the other player never rendered.
 PRESETS = ("text", "sprite", "eyes")
 REGIONS = ("all", "shell", "ears", "ear1", "ear2", "tubes", "rims",
-           "tube0", "tube1", "tube2", "left", "right", "face")
+           "tube0", "tube1", "tube2", "left", "right", "face", "jaw",
+           "rim1", "rim2", "tubes1", "tubes2")
 AXES = ("x", "y", "r", "a", "al", "u")
 WAVES = ("tri", "saw")
 SHAPES = ("p", "saw", "tri")
@@ -85,7 +87,8 @@ SIDES = ("both", "alt", "ear1", "ear2")
 COMMON = {"on": None, "mix": "add", "pal": None, "gain": 1.0, "c": 0.5,
           "gate": None, "env": None}
 DEFAULT_ON = {"fill": "all", "grad": "shell", "sweep": "shell",
-              "sparks": "shell", "blades": "ears", "preset": "face"}
+              "sparks": "shell", "blades": "ears", "preset": "face",
+              "orb": "shell", "twinkle": "shell"}
 FX_VALUES = {
     "fill": {},
     "grad": {"scale": 1.0, "speed": 0.0, "ofs": 0.0, "warp": 0.0,
@@ -95,6 +98,15 @@ FX_VALUES = {
     "sparks": {"rate": 1.0, "life": 1.0, "spread": 0.0, "nbr": 0.4},
     "blades": {"step": 1.0, "rise": 0.35, "keep": 0.15, "ctip": 1.0, "rim": 0.0},
     "preset": {},
+    # A soft disc on the helmet's flat front view: x and y in mm (px, py), rad
+    # and its soft edge in mm, wx and wy swinging it xf and yf times a beat with
+    # phases xp and yp, cgrad moving the colour from middle to edge.
+    "orb": {"x": 0.0, "y": 95.0, "rad": 50.0, "soft": 14.0, "wx": 0.0, "wy": 0.0,
+            "xf": 0.125, "yf": 0.125, "xp": 0.0, "yp": 0.25, "cgrad": 0.0},
+    # Every LED on its own slow sine: rate times a beat on average, sharp the
+    # power that turns the crest into a glint, dens the share of LEDs that take
+    # part, spread how far each LED's colour wanders from c.
+    "twinkle": {"rate": 0.25, "sharp": 4.0, "spread": 0.0, "dens": 1.0},
 }
 FX_STATIC = {
     "fill": {},
@@ -103,6 +115,8 @@ FX_STATIC = {
     "sparks": {"loop": 0, "seed": 0.0},
     "blades": {"seq": ["0", "1", "2", "012"], "side": "both"},
     "preset": {"name": None, "params": None, "fit": False},
+    "orb": {},
+    "twinkle": {"seed": 0.0},
 }
 
 MAX_SCENE_LAYERS, MAX_HIT_LAYERS, MAX_HITS_AT_ONCE = 6, 3, 2
@@ -142,21 +156,35 @@ def grid_of(music):
     every beat and every bar against the line and refuses to compile if
     any is more than 5 ms off -- a drifting track would need the measured
     beats, and this format does not carry them.
+
+    A seam it can carry: a track edited so that the music comes back late,
+    at the same tempo.  One beat that long is a hold, [beat, beats held],
+    and the line carries on from the far side of it.  A beat that came
+    early would have to run time backwards, so that is refused as drift.
     """
     beats = np.asarray(music.beats, float)
     bars = np.asarray(music.bars, float)
     if len(beats) < 8 or len(bars) < 2:
         raise TreatmentError("the analysis has too few beats for a scene grid")
-    spb = float((beats[-1] - beats[0]) / (len(beats) - 1))
+    late = np.diff(beats) - np.median(np.diff(beats))
+    late[late <= LINEAR_TOL_S] = 0.0
+    held = np.concatenate(([0.0], np.cumsum(late)))
+    spb = float((beats[-1] - beats[0] - held[-1]) / (len(beats) - 1))
     t0 = float(bars[0])
-    off = np.abs(beats - (beats[0] + spb * np.arange(len(beats)))).max()
-    boff = np.abs(bars - (t0 + 4.0 * spb * np.arange(len(bars)))).max()
+    first = int(np.abs(beats - t0).argmin())
+    off = np.abs(beats - held - (beats[0] + spb * np.arange(len(beats)))).max()
+    barheld = held[first::4][:len(bars)] - held[first]
+    boff = np.abs(bars - barheld - (t0 + 4.0 * spb * np.arange(len(bars)))).max()
     onbeat = np.abs(beats - t0).min()
     worst = max(float(off), float(boff), float(onbeat))
     if worst > LINEAR_TOL_S:
         raise TreatmentError("the beat grid is %.1f ms from linear; scenes need "
                              "a steady grid" % (worst * 1000))
-    return {"t0": t0, "spb": spb}, int(len(bars))
+    grid = {"t0": t0, "spb": spb}
+    seams = np.flatnonzero(late)
+    if len(seams):
+        grid["holds"] = [[float(k + 1 - first), float(late[k] / spb)] for k in seams]
+    return grid, int(len(bars))
 
 
 def src_of(base):
@@ -321,6 +349,8 @@ class _Compiler:
         if fx == "sparks":
             out["loop"] = int(out["loop"])
             out["seed"] = float(out["seed"])
+        if fx == "twinkle":
+            out["seed"] = float(out["seed"])
         if fx == "blades":
             seq = out["seq"]
             if isinstance(seq, str):
@@ -480,10 +510,13 @@ class _Compiler:
         hits.sort(key=lambda x: x["at"])
         for s in tiled:
             s.pop("_pal", None)
+        grid = {"t0": self.grid["t0"], "spb": self.grid["spb"],
+                "lead": float(tr.get("lead", 0.0))}
+        if self.grid.get("holds"):
+            grid["holds"] = self.grid["holds"]
         return {"v": 1, "src": "", "treatment": tr.get("_sha", ""),
-                "grid": {"t0": self.grid["t0"], "spb": self.grid["spb"],
-                         "lead": float(tr.get("lead", 0.0))},
-                "bars": nb, "pal": self.pal, "scenes": tiled, "hits": hits}
+                "grid": grid, "bars": nb, "pal": self.pal,
+                "scenes": tiled, "hits": hits}
 
 
 def _merge(a, b):
@@ -576,6 +609,12 @@ def _region_mask(h, on):
             m |= np.asarray(h.shell, bool) & (np.asarray(h.fa) >= 0)
         elif nm == "face":
             m |= np.asarray(h.shell, bool) & (np.asarray(h.py) > 28)
+        elif nm == "jaw":
+            m |= np.asarray(h.shell, bool) & (np.asarray(h.py) <= 28)
+        elif nm in ("rim1", "rim2"):
+            m |= np.asarray(h.rims, bool) & np.asarray(getattr(h, "ear" + nm[-1]), bool)
+        elif nm in ("tubes1", "tubes2"):
+            m |= np.asarray(h.tubes, bool) & np.asarray(getattr(h, "ear" + nm[-1]), bool)
         else:
             raise TreatmentError("no region %r (have %s)" % (nm, ", ".join(REGIONS)))
     return m
@@ -611,7 +650,7 @@ def lint(spec, h=None, music=None):
     if music is not None:
         g, n = grid_of(music)
         if (g["t0"] != spec["grid"]["t0"] or g["spb"] != spec["grid"]["spb"]
-                or n != nb):
+                or g.get("holds") != spec["grid"].get("holds") or n != nb):
             errs.append("the compiled grid is not the analysis' grid")
 
     def layer_checks(L, what, span):
@@ -652,6 +691,21 @@ def lint(spec, h=None, music=None):
             if max(rates or [0]) * max(lifes) > 8:
                 warns.append("%s: life x rate = %.1f, above the 8 sparks drawn"
                              % (what, max(rates) * max(lifes)))
+        if L["fx"] == "twinkle":
+            if "n" not in L["rate"] and "keys" not in L["rate"]:
+                errs.append("%s: a twinkle rate is a number or keys, so the LEDs "
+                            "never jump" % what)
+            if "n" in L["sharp"] and L["sharp"]["n"] <= 0:
+                errs.append("%s: sharp must be above zero" % what)
+        if L["fx"] == "orb":
+            for k in ("xf", "yf"):
+                if "n" not in L[k] and "keys" not in L[k]:
+                    errs.append("%s: %s is a number or keys, so the orb never "
+                                "jumps" % (what, k))
+            for k in ("rad", "soft"):
+                ends = (L[k].get("ramp") or [L[k].get("n", 1.0)])
+                if min(ends) <= 0:
+                    errs.append("%s: %s must be above zero" % (what, k))
         if L["fx"] == "blades":
             if L["side"] not in SIDES:
                 errs.append("%s: no side %s" % (what, L["side"]))
@@ -668,8 +722,9 @@ def lint(spec, h=None, music=None):
                 errs.append("%s: preset %s is not one of %s" % (what, L["name"], PRESETS))
             elif L["name"] == "sprite":
                 sp = L["params"].get("sprite", E.REGISTRY["sprite"].params["sprite"])
-                if sp not in SPRITES:
-                    errs.append("%s: no sprite %s" % (what, sp))
+                for one in str(sp).split("|"):
+                    if one not in SPRITES:
+                        errs.append("%s: no sprite %s" % (what, one))
         g = L.get("gate")
         if g and shell and span > 4.0 + 1e-9:
             gap = _min_gap_beats(g["pat"], g["step"])
@@ -853,6 +908,7 @@ class Scenes:
         g = spec["grid"]
         self.t0, self.spb = float(g["t0"]), float(g["spb"])
         self.lead = float(g.get("lead", 0.0))
+        self.holds = [(float(at), float(beats)) for at, beats in g.get("holds", ())]
         self.nbars = float(spec["bars"])
         self.HB = PULSE_HOLD_S / self.spb
         self.h = h = _h32(helmet)
@@ -901,6 +957,13 @@ class Scenes:
         elif fx == "sparks":
             P["loop"], P["seed"] = int(L["loop"]), float(L["seed"])
             P["nm"] = len(idx)
+        elif fx == "orb":
+            P["px"], P["py"] = h.px[idx], h.py[idx]
+        elif fx == "twinkle":
+            seed = float(L["seed"])
+            P["h1"], P["h2"], P["h3"], P["h4"] = (
+                np.array([_hash_sin(m * k + seed) for m in range(len(idx))])
+                for k in (12.9898, 78.233, 37.719, 91.7))
         elif fx == "blades":
             tube = np.asarray(h.tube)
             P["tubes"] = [[idx[(tube[idx] == t) & ear[idx]] for t in range(3)]
@@ -1046,6 +1109,28 @@ class Scenes:
                         rgb = pal_lookup(*P["pal"][:2], c0)
                         w = G * k
                         self._mix(P, ii, np.broadcast_to(w * rgb, (len(ii), 3)))
+        elif fx == "orb":
+            x0, y0 = val("x"), val("y")
+            wx, wy = val("wx"), val("wy")
+            if wx != 0:
+                x0 = x0 + wx * math.sin(2 * math.pi * (B * val("xf") + val("xp")))
+            if wy != 0:
+                y0 = y0 + wy * math.sin(2 * math.pi * (B * val("yf") + val("yp")))
+            rad, soft, cgrad = val("rad"), val("soft"), val("cgrad")
+            d = np.hypot(P["px"] - x0, P["py"] - y0)
+            e = np.clip((rad - d) / soft, 0.0, 1.0)
+            k = e * e * (3 - 2 * e)
+            rgb = _pal_vec(P["pal"], c0 + cgrad * d / rad)
+            w = G * k
+            self._mix(P, idx, w[:, None] * rgb)
+        elif fx == "twinkle":
+            rate, sharp = val("rate"), val("sharp")
+            spread, dens = val("spread"), val("dens")
+            s = np.sin(2 * math.pi * (B * rate * (0.5 + P["h2"]) + P["h1"]))
+            k = np.where((P["h4"] < dens) & (s > 0), np.maximum(s, 0.0) ** sharp, 0.0)
+            rgb = _pal_vec(P["pal"], c0 + spread * P["h3"])
+            w = G * k
+            self._mix(P, idx, w[:, None] * rgb)
         elif fx == "preset":
             tl = lb * self.spb + P["tofs"]
             sc = np.asarray(P["inst"].render(self.h, tl, None), float)
@@ -1058,9 +1143,17 @@ class Scenes:
                 return s
         return None
 
+    def beat(self, tt):
+        """The beat at a time: the straight grid, stopped at each seam."""
+        B = (tt - self.t0) / self.spb
+        for at, beats in self.holds:
+            if B > at:
+                B = max(at, B - beats)
+        return B
+
     def frame(self, t, music=None):
         tt = t + self.lead
-        B = (tt - self.t0) / self.spb
+        B = self.beat(tt)
         bar = B / 4
         acc = self.acc
         acc[:] = 0.0
@@ -1224,8 +1317,8 @@ def main(argv=None):
 
     def names(given):
         if given:
-            return [os.path.splitext(os.path.basename(g))[0].replace(".scene", "")
-                    for g in given]
+            # not splitext: "Kaskade feat. deadmau5 - I Remember" is all one name
+            return [re.sub(r"(\.scene)?(\.json)?$", "", os.path.basename(g)) for g in given]
         return sorted(f[:-len(".scene.json")] for f in os.listdir(SCENES)
                       if f.endswith(".scene.json"))
 

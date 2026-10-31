@@ -55,6 +55,15 @@ footer{position:fixed;left:0;right:0;bottom:0;background:#0b0b10f2;
 #go{width:100%;border:0;border-radius:12px;background:var(--go);color:#fff;
   font:600 17px/1 inherit;padding:18px;font-family:inherit}
 #go.stop{background:var(--stop)}
+#playall{flex:1;min-height:58px;border:0;border-radius:12px;background:var(--go);color:#fff;
+  font:700 19px/1 inherit;font-family:inherit}
+#playall.on{background:var(--stop)}
+#listbox{margin:8px 0 10px}
+#listbox .row{gap:8px;padding:0}
+#listbox .skip{flex:0 0 58px;min-height:58px;border-radius:12px;border:1px solid var(--line);
+  background:var(--panel);color:var(--ink);font-size:20px;font-family:inherit}
+#listbox .skip[disabled]{opacity:.35}
+#listat{min-height:18px}
 .note{color:var(--dim);font-size:12px;padding:4px 2px 20px}
 #audio .row{gap:8px;flex-wrap:wrap}
 #audio button{flex:1;min-width:120px;min-height:46px;border-radius:10px;
@@ -90,6 +99,27 @@ button.reactive::after{content:"\00a0♪";opacity:.75}
 <h1>mau5head <small>— offline</small></h1>
 <div id="conn">starting…</div>
 <div id="warn"></div>
+<div id="offbox" style="display:none;margin:8px 12px;padding:12px 14px;border-radius:12px;
+  background:#10213f;border:1px solid #1b4fd8;font-size:14px;line-height:1.4">
+  <div id="offat"></div>
+  <div class="row" style="margin-top:10px;gap:8px">
+    <button id="offsave" style="flex:2;min-height:46px;border-radius:10px;border:none;
+      background:#1b4fd8;color:#fff;font-weight:700">save the songs to this phone</button>
+    <button id="offlater" style="flex:1;min-height:46px;border-radius:10px;
+      border:1px solid #2a2a35;background:#20202a;color:#e8e8ef">later</button>
+  </div>
+</div>
+
+<div id="listbox">
+  <div class="row">
+    <button id="listprev" class="skip" disabled aria-label="previous song">&#9198;</button>
+    <button id="playall">&#9654; Play Music</button>
+    <button id="listnext" class="skip" disabled aria-label="next song">&#9197;</button>
+  </div>
+  <div id="listat" class="dimline"></div>
+  <label class="dimline" style="display:flex;gap:6px;align-items:center;padding-top:2px">
+    <input id="listshuffle" type="checkbox" style="width:18px;height:18px"> shuffle</label>
+</div>
 
 <canvas id="view"></canvas>
 <div id="meter"><div id="bar"></div></div>
@@ -158,6 +188,10 @@ button.reactive::after{content:"\00a0♪";opacity:.75}
     <label style="margin-left:auto;display:flex;gap:6px;align-items:center">
       <input id="hand" type="checkbox" checked style="width:22px;height:22px">
       <span class="dim" style="font-size:12px">keep glowing</span></label></div>
+  <div class="row"><span>standby glow</span>
+    <button id="standbysetup" style="margin-left:auto;min-height:40px;border-radius:10px;
+      border:1px solid #2a2a35;background:#20202a;color:#e8e8ef;padding:0 12px">set up</button></div>
+  <div id="standbyat" class="dimline" style="font-size:12px"></div>
   <div class="row"><span>cycle</span>
     <select id="cycle">
       <option value="0">off</option>

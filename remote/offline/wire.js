@@ -188,6 +188,20 @@ const OWED_QUIET_1_MS = 300;
 const POST_TIMEOUT_MS = 2500;
 const REOPEN_MS = 3000;
 
+// How long a new socket gets to connect while a show is waiting for one.  It
+// was 1.5 s, and on a poor link, where connecting takes longer than that, every
+// try was given up on just before it landed, for good: the helmet stayed dark
+// until a reload, which connects with nothing else going on.
+const REOPEN_WAIT_MS = 6000;
+
+// A socket that has answered nothing for this long, with frames waiting on it,
+// is treated as gone.  When the link dies without the socket being told, which
+// is what the helmet dropping off the Wi-Fi looks like from here, TCP backs its
+// retries off further and further: after half a minute out, the old socket can
+// sit silent for as long again with the link already back and the helmet dark.
+// A new one connects at once.
+const SOCKET_QUIET_MS = 6000;
+
 // The same for the requests that set the helmet up and arm the dead
 // man.  They had no limit at all, so a controller that took the
 // connection and never answered hung start() for good -- with the
@@ -201,6 +215,8 @@ const REQ_TIMEOUT_MS = 5000;
 // gets through is also what turns the helmet back on (armDeadman).
 const DEADMAN_EVERY_MS = 20000;
 const DEADMAN_RETRY_MS = 3000;
+// How often a page streaming binary frames checks the helmet is still on.
+const ON_CHECK_MS = 5000;
 
 // Binary frames, for firmware that takes them.  WLED 16 accepts DDP over
 // this socket -- a first byte of 2, then the same packet the laptop sends
@@ -435,6 +451,8 @@ class Link {
     // timer tick.
     this.onready = opts.onready || function () {};
     this._opened = 0;
+    this._heard = 0;
+    this.quietCloses = 0;
     this._tmp = new Uint8Array(this.count * 3);
   }
 
@@ -484,6 +502,16 @@ class Link {
       headers: this.hdrs({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(obj),
     }, 'state', r => r.text());
+  }
+
+  // A settings write, for the one thing the page sets up itself: the
+  // standby preset as the boot preset.
+  async postCfg(obj) {
+    return this._req('/json/cfg', {
+      method: 'POST',
+      headers: this.hdrs({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(obj),
+    }, 'cfg', r => r.text());
   }
 
   // The brightness slider.  Remembered, because it is what the dead
@@ -546,6 +574,7 @@ class Link {
         // that segment shows, so everything goes again.
         ws.onmessage = (e) => {
           this.messages++;
+          this._heard = performance.now();
           if (e.data === 'pong') {
             if (this.ackDelay) setTimeout(() => this._pong(), this.ackDelay);
             else this._pong();
@@ -603,7 +632,7 @@ class Link {
     if (!this.streaming || this._opening || now < this._reopenAt) return;
     this._reopenAt = now + REOPEN_MS;
     this._opening = true;
-    this.openSocket(1500).then((ok) => {
+    this.openSocket(REOPEN_WAIT_MS).then((ok) => {
       this._opening = false;
       if (ok && this.streaming) this._relayout();
     }, () => { this._opening = false; });
@@ -620,8 +649,7 @@ class Link {
     try {
       await this.postJSON({
         on: true, live: false, bri: this.bri, transition: 0, tt: 0,
-        nl: this.deadmanMins
-          ? { on: true, mode: 0, dur: this.deadmanMins, tbri: 0 } : undefined,
+        nl: this._nl(),
         seg: this.segLayout(),
       });
       this.relayouts = (this.relayouts || 0) + 1;
@@ -694,8 +722,7 @@ class Link {
       // A nightlight that is already running is not restarted by this
       // (WLED only reads the duration when one starts), which is why
       // armDeadman(true) still follows.
-      nl: this.deadmanMins
-        ? { on: true, mode: 0, dur: this.deadmanMins, tbri: 0 } : undefined,
+      nl: this._nl(),
       seg: this.segLayout(ids),
     });
     await this.armDeadman(true);
@@ -713,6 +740,8 @@ class Link {
       this.frozen = false;
     }
     this.streaming = true;
+    // or the first frame after an idle page reads as a socket gone silent
+    this._heard = performance.now();
     this.dirty();
     return this.frozen;
   }
@@ -739,8 +768,43 @@ class Link {
   // no-op) and the running effect would paint over the frames; and the
   // next frame goes whole.  In normal running arms come every 20 s and
   // this is never sent.
+  //
+  // Binary frames are another matter: they put WLED 16 in its realtime mode,
+  // where its loop does not run the nightlight at all.  A re-arm then changes
+  // nothing and the timer sits overdue, and the first time frames stop for
+  // 2.5 s it fires, sets the brightness to 0, and the next request applies
+  // that to the frames still arriving: a dark helmet under a page counting a
+  // healthy frame rate.  Nor is it needed there.  Frames stopping is the end
+  // of realtime mode, and that goes dark by itself.  So on this path the
+  // nightlight is kept off, and the page checks the helmet is still on.
+  _nl() {
+    if (this.binary) return { on: false };
+    return this.deadmanMins
+      ? { on: true, mode: 0, dur: this.deadmanMins, tbri: 0 } : undefined;
+  }
+
+  async _keepOn() {
+    const now = Date.now();
+    if (this._arming || !this.streaming || now - this._lastDeadman < ON_CHECK_MS) return;
+    this._lastDeadman = now;
+    this._arming = true;
+    const session = this._session;
+    try {
+      const st = await this.getJSON('/json/state');
+      if (session === this._session && this.streaming && (st.on === false || st.bri === 0)) {
+        await this.postJSON({ on: true, bri: this.bri, nl: { on: false } });
+        this.revived++;
+      }
+    } catch (e) {
+      // no answer: the socket's own reconnect is what deals with that
+    } finally {
+      this._arming = false;
+    }
+  }
+
   async armDeadman(force) {
     if (!this.deadmanMins) return;
+    if (this.binary) return this._keepOn();
     const now = Date.now();
     const every = this._armFailed ? DEADMAN_RETRY_MS : DEADMAN_EVERY_MS;
     if (!force && (this._arming || now - this._lastDeadman < every)) return;
@@ -869,6 +933,17 @@ class Link {
   // stalled is not helped by more frames anyway.
   busy(now) {
     if (this.ws && this.ws.readyState === 1) {
+      if (this.streaming && (this.unacked.length || this.owed)
+          && now - Math.max(this._heard, this._opened) > SOCKET_QUIET_MS) {
+        const dead = this.ws;
+        this.ws = null;
+        this.unacked = [];
+        this.owed = 0;
+        this.dirty();
+        this.quietCloses++;
+        try { dead.close(); } catch (e) {}
+        return false;
+      }
       if (this.unacked.length && now - this.unacked[0] > this.pongTimeout) {
         this.lost += this.unacked.length;
         this.owed += this.unacked.length;
@@ -889,9 +964,10 @@ class Link {
   // the controller was still busy and the frame was skipped.
   send(frame) {
     const now = performance.now();
-    const ws = this.ws && this.ws.readyState === 1 ? this.ws : null;
+    let ws = this.ws && this.ws.readyState === 1 ? this.ws : null;
     if (!ws) this.reopen(now);
     if (this.busy(now)) { this.failed++; return -1; }
+    if (ws && this.ws !== ws) ws = null;   // busy() just gave up on it
 
     if (ws && this.binary) {
       const n = this.count, perm = this.perm, tmp = this._tmp;
@@ -943,6 +1019,11 @@ class Link {
       this.armDeadman(false);
       return bytes;
     }
+
+    // Between sockets on WLED 16 there is nothing to gain from this: a few
+    // seconds of whole frames as JSON, on a link already in trouble, is what
+    // the new socket then has to get past to connect.
+    if (this.binary && this._opened) { this.failed++; return -1; }
 
     // No socket.  One POST with every segment in it: two requests in
     // flight can land out of order, and a delta that overtook the
