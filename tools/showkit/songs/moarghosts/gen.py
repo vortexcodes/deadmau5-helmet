@@ -131,7 +131,7 @@ def jawpac(gain, speed=0.25, gate=None):
     return L
 
 
-CHEW = {"pat": "x.", "step": 0.5, "decay": 0.4, "floor": 0.45}
+CHEW = {"pat": "x.", "step": 0.5, "decay": 0.4, "floor": 0.3}
 
 
 def clapcol(bars, pal="ghosts", gain=0.5, rise=0.14, rim=0.0, seq=("012",)):
@@ -142,32 +142,32 @@ def clapcol(bars, pal="ghosts", gain=0.5, rise=0.14, rim=0.0, seq=("012",)):
             "ctip": keys, "pal": pal, "gain": gain, "rim": rim, "gate": {"pat": ".x.x", "step": 1, "decay": 0.75}}
 
 
-def clap_side(ear, pat, pal="blues", c=0.6, ctip=1, gain=0.6):
+def clap_side(ear, pat, pal="blues", c=0.6, ctip=1, gain=0.36):
     return {"fx": "blades", "on": ear, "side": "ear1" if ear == "ear1" else "ear2", "seq": ["012"], "step": 1,
             "rise": 0.14, "keep": 0, "c": c, "ctip": ctip, "pal": pal, "gain": gain,
             "gate": {"pat": pat, "step": 1, "decay": 0.8}}
 
 
-def kick(on="rims", pal="blues", c=0.75, gain=0.8):
+def kick(on="rims", pal="blues", c=0.75, gain=0.5):
     return {"fx": "fill", "on": on, "pal": pal, "c": c, "gain": gain, "gate": {"pat": "x", "step": 1, "decay": 0.6}}
 
 
-def waka(at, to, pal="ghosts", dots=0.6, pacg=0.9, clap=0.5):
+def waka(at, to, pal="ghosts", dots=0.2, pacg=0.5, clap=0.28):
     "The ears' whole game: a corridor of dots eaten down the tubes and the clap up them, in a ghost's colour."
     return {"name": "WAKA %g" % at, "at": at, "beats": (to - at) * 4, "layers": [
         tubedots(dots), tubepac(pacg, gate=CHEW), clapcol((at, to), pal=pal, gain=clap)]}
 
 
-def chin(at, to, dots=0.6, pacg=0.85, extra=None):
+def chin(at, to, dots=0.25, pacg=0.45, extra=None):
     "The same game on the chin, where it can be seen from the front, and round the rims."
-    return {"name": "CHIN %g" % at, "at": at, "beats": (to - at) * 4, "layers": [jawdots(dots), jawpac(pacg, gate=CHEW), extra or rimdots(0.8)]}
+    return {"name": "CHIN %g" % at, "at": at, "beats": (to - at) * 4, "layers": [jawdots(dots), jawpac(pacg, gate=CHEW), extra or rimdots(0.35)]}
 
 
-def hunt(at, to, base=0.2, rim=0.8):
+def hunt(at, to, base=0.05, rim=0.42):
     "Frightened ears: blue tubes, the hunter going round the rims twice as fast."
     return {"name": "HUNT %g" % at, "at": at, "beats": (to - at) * 4, "layers": [
         {"fx": "fill", "on": "tubes", "pal": "blues", "c": 0.4, "gain": base},
-        rimdots(0.6, speed=0.5), rimpac(rim, speed=0.5)]}
+        rimdots(0.3, speed=0.5), rimpac(rim, speed=0.5)]}
 
 
 def flash(at, color="maze@1", beats=2, gain=0.8):
@@ -213,7 +213,7 @@ H = tr["hits"].append
 
 # ---------------------------------------------------------------- attract: the first notes, all four, then lights out
 S({"name": "attract", "from": "attract", "to": "drain", "pal": "maze", "pump": PUMP, "layers":
-   [maze(0.3)] + train(3.5, True)})
+   [maze(0.12)] + train(3.5, True)})
 H(waka(0, 3.5))
 H(flash(0, beats=3))
 H(chin(0.75, 3.5))
@@ -225,7 +225,7 @@ S({"name": "afterdark", "from": "dark", "to": "voice", "pal": "maze", "layers": 
     sprite(names("gR_a", "gR_b"), COL["orange"], [0.4, 0.5], SMALL, rate=F8 / 2, dx=-240, vx=round(480 / (10 * BAR), 3), wy=6, wf=round(HZ_BAR / 2, 6)),
     sprite("moar_ewR", WHITE, [0.5, 0.7], SMALL, rate=0, dx=-240, vx=round(480 / (10 * BAR), 3), wy=6, wf=round(HZ_BAR / 2, 6)),
     rimdots(0.22, shape="p", frm=1.05, to=1.05),
-    {"fx": "twinkle", "on": "tubes", "rate": 0.125, "sharp": 6, "dens": 0.5, "pal": "stars", "c": 1, "gain": 0.5, "seed": 5}]})
+    {"fx": "twinkle", "on": "tubes", "rate": 0.125, "sharp": 6, "dens": 0.5, "pal": "stars", "c": 1, "gain": 0.4, "seed": 5}]})
 # ---------------------------------------------------------------- the voice: the helmet itself wakes up as a ghost
 LOOK = names("G_R_a", "G_R_b", times=4) + "|" + names("G_L_a", "G_L_b", times=4)
 LOOKW = names("Gw_R", times=8) + "|" + names("Gw_L", times=8)
@@ -233,8 +233,8 @@ S({"name": "voice", "from": "voice", "to": "title", "pal": "maze", "layers": [
     sprite(LOOK, COL["orange"], {"band": "mid", "lo": -0.2, "hi": 0.3}, GIANT, env={"in": 6}),
     sprite(LOOKW, WHITE, {"band": "mid", "lo": -0.6, "hi": 0.7}, GIANT, env={"in": 4}),
     {"fx": "sweep", "on": "tubes", "axis": "al", "shape": "p", "mode": "fill", "soft": 0.2,
-     "from": {"band": "mid", "lo": -1.5, "hi": 1.0}, "to": {"band": "mid", "lo": -1.5, "hi": 1.0}, "pal": "ghosts", "c": 0.75, "gain": 0.35},
-    rimdots(0.3, shape="p", frm=1.05, to=1.05)]})
+     "from": {"band": "mid", "lo": -1.5, "hi": 1.0}, "to": {"band": "mid", "lo": -1.5, "hi": 1.0}, "pal": "ghosts", "c": 0.75, "gain": 0.16},
+    rimdots(0.2, shape="p", frm=1.05, to=1.05)]})
 # ---------------------------------------------------------------- the title, chased; the dots laid out for the game
 TEXT = "MOAR GHOSTS"
 tw = 6 * len(TEXT)
@@ -246,14 +246,14 @@ S({"name": "banner", "from": "title", "to": "game", "pal": "maze", "out": 0.5, "
     maze([0.04, 0.16]),
     sprite(names("gL_a", "gL_b"), COL["orange"], 0.55, SMALL, dx=round(171 - 90, 1), vx=round(-tspeed, 3)),
     sprite(names("pacL_o", "pacL_h", "pacL_c", "pacL_h"), YELLOW, 0.6, SMALL, dx=round(171 + tw * CELL + 90, 1), vx=round(-tspeed, 3)),
-    rimdots(0.6, shape="p", frm=-0.05, to=1.05),
-    tubedots(0.35, shape="p", frm=-0.05, to=1.05),
+    rimdots(0.4, shape="p", frm=-0.05, to=1.05),
+    tubedots(0.25, shape="p", frm=-0.05, to=1.05),
     jawdots(0.5, shape="p", frm=-0.05, to=1.05)]})
 H({"name": "TITLE", "at": "title", "beats": TBEATS, "layers": [
-    {"fx": "preset", "name": "text", "on": "face", "fit": True, "mix": "over", "params": dict(TEXTBAND, text=TEXT, color="dots@1"), "gain": 0.62}]})
+    {"fx": "preset", "name": "text", "on": "face", "fit": True, "mix": "over", "params": dict(TEXTBAND, text=TEXT, color="dots@1"), "gain": 0.45}]})
 # ---------------------------------------------------------------- the game: four ghosts, one way and back
-S({"name": "game", "from": "game", "to": "back", "pal": "maze", "pump": PUMP, "layers": [maze(0.28)] + train(8, True)})
-S({"name": "gameback", "from": "back", "to": "pellet", "pal": "maze", "pump": PUMP, "layers": [maze(0.28)] + train(6, False)})
+S({"name": "game", "from": "game", "to": "back", "pal": "maze", "pump": PUMP, "layers": [maze(0.12)] + train(8, True)})
+S({"name": "gameback", "from": "back", "to": "pellet", "pal": "maze", "pump": PUMP, "layers": [maze(0.12)] + train(6, False)})
 H(waka(26, 40))
 H(flash(26))
 H(chin(26.5, 34))
@@ -263,8 +263,8 @@ H(chin(34.25, 40))
 def pellet_scene(name, frm, to, r0=12, r1=64, m=0.1, watch=0.0):
     L = [maze([m, 0.02]),
          pellet([r0, r1], [0.4, 0.8], gate={"pat": "x.", "step": 0.5, "decay": 0.5, "floor": 0.4}),
-         {"fx": "sweep", "on": "tubes", "axis": "al", "shape": "p", "mode": "fill", "from": -0.1, "to": 1.05, "soft": 0.2, "pal": "dots", "c": 1, "gain": [0.1, 0.4]},
-         rimdots(0.5, shape="p", frm=1.05, to=1.05)]
+         {"fx": "sweep", "on": "tubes", "axis": "al", "shape": "p", "mode": "fill", "from": -0.1, "to": 1.05, "soft": 0.2, "pal": "dots", "c": 1, "gain": [0.04, 0.22]},
+         rimdots(0.25, shape="p", frm=1.05, to=1.05)]
     if watch:
         L.append(sprite("moar_watch", WHITE, watch, dict(y_lo=48, y_hi=170, x_half=140), rate=0))
     return {"name": name, "from": frm, "to": to, "pal": "maze", "out": 1, "layers": L}
@@ -291,7 +291,7 @@ def rowface(gain, wx=70.0, wf=HZ_BAR, **kw):
     return sprite(names("rowface_a", "rowface_b"), "dots@1", gain, ROW, wx=wx, wf=wf, **kw)
 
 
-def fright(name, frm, to, gain=0.9, wx=70.0, jaw=0.9, white=None, flick=RIFF, face=0.7):
+def fright(name, frm, to, gain=0.6, wx=70.0, jaw=0.5, white=None, flick=RIFF, face=0.55):
     L = [jawrun(jaw), row(BLUE, gain, wx=wx), rowface(face, wx=wx)]
     if white:
         L.append(row(WHITE, white, wx=wx, gate=flick, mix="add"))
@@ -305,7 +305,7 @@ H(runfill(49, pal="blues", c=0.6))
 # ---------------------------------------------------------------- they recover: the chase is on, him in front
 V = round((2 * EDGE + 4 * GAP) / (8 * BAR), 3)
 S({"name": "recover", "from": "recover", "to": "cutscene", "pal": "maze", "pump": PUMP, "layers": [
-    maze(0.26),
+    maze(0.12),
     sprite(names("pacL_o", "pacL_h", "pacL_c", "pacL_h"), YELLOW, 0.66, SMALL, dx=EDGE, vx=-V)] +
    [sprite(names("gL_a", "gL_b"), COL[c], 0.66, SMALL, dx=EDGE + (i + 1) * GAP, vx=-V) for i, c in enumerate(ORDER)]})
 H(waka(58, 66))
@@ -320,7 +320,7 @@ S({"name": "intermission", "from": "cutscene", "to": "stop", "pal": "maze", "pum
     sprite(names("row_a", "row_b"), BLUE, 0.9, ROW, dx=-369, vx=VB),
     sprite(names("rowface_a", "rowface_b"), "dots@1", 0.7, ROW, dx=-369, vx=VB),
     sprite(names("bpR_o", "bpR_h", "bpR_c", "bpR_h"), YELLOW, 0.5, BIGPAC, dx=-915, vx=VB),
-    kick(pal="yellow", c=1, gain=0.8),
+    kick(pal="yellow", c=1, gain=0.5),
     clapcol((66, 74), pal="yellowclap", gain=0.5)]})
 H(runfill(73, pal="yellow", c=0.6))
 # ---------------------------------------------------------------- stop: the pads alone, eyes watching the next pellet
@@ -331,10 +331,10 @@ H(power_hit("POWER 2", "drop2"))
 GF = names("F_a", "F_b")
 GFF = names("Fface_a", "Fface_b")
 def bigf(name, frm, to, white=0, flick=None):
-    L = [sprite(GF, BLUE, 0.7, GIANT)]
+    L = [sprite(GF, BLUE, 0.45, GIANT)]
     if white:
         L.append(sprite(GF, WHITE, white, GIANT, mix="add", gate=flick))
-    L += [sprite(GFF, "dots@1", 0.8, GIANT, wx=44, wf=HZ_BAR), clap_side("ear2", ".x.."), clap_side("ear1", "...x")]
+    L += [sprite(GFF, "dots@1", 0.6, GIANT, wx=44, wf=HZ_BAR), clap_side("ear2", ".x.."), clap_side("ear1", "...x")]
     return {"name": name, "from": frm, "to": to, "pal": "blues", "pump": PUMP, "layers": L}
 S(bigf("bigfright", "drop2", "flick"))
 S(bigf("bigflick", "flick", "flick2", white=0.3, flick={"pat": "x...............", "step": 0.5, "decay": 1.5}))
@@ -360,12 +360,12 @@ def lone(name, frm, to, g, mz, right, bars, mx0, mx1, mg, y=128, rad=66):
         sprite("moar_ewR" if right else "moar_ewL", WHITE, 0.7, SMALL, rate=0, dx=-s * 240, vx=round(s * 480 / (bars * BAR), 3), wy=6, wf=round(HZ_BAR / 2, 6)),
         rimdots({"band": "high", "lo": 0.06, "hi": 1.1}, shape="p", frm=1.05, to=1.05),
         {"fx": "sweep", "on": "tubes", "axis": "al", "shape": "p", "mode": "fill", "soft": 0.2,
-         "from": {"band": "mid", "lo": -0.07, "hi": 1.27}, "to": {"band": "mid", "lo": -0.07, "hi": 1.27}, "pal": "maze", "c": 0.8, "gain": 0.4}]}
+         "from": {"band": "mid", "lo": -0.07, "hi": 1.27}, "to": {"band": "mid", "lo": -0.07, "hi": 1.27}, "pal": "maze", "c": 0.8, "gain": 0.24}]}
 S(lone("lone", "boo", "cyc2", [0.0, 0.5], 0.03, True, 4, -340, -210, 0.42))
 S(lone("lone2", "cyc2", "cyc3", 0.5, 0.05, False, 4, -210, -80, 0.46))
 S(lone("lone3", "cyc3", "cyc4", 0.54, [0.05, 0.1], True, 4, -80, 50, 0.5))
 VU = {"fx": "sweep", "on": "tubes", "axis": "al", "shape": "p", "mode": "fill", "soft": 0.2,
-      "from": {"band": "mid", "lo": -0.07, "hi": 1.27}, "to": {"band": "mid", "lo": -0.07, "hi": 1.27}, "pal": "maze", "c": 0.8, "gain": 0.4}
+      "from": {"band": "mid", "lo": -0.07, "hi": 1.27}, "to": {"band": "mid", "lo": -0.07, "hi": 1.27}, "pal": "maze", "c": 0.8, "gain": 0.24}
 L4 = lone("lone4", "cyc4", "swell", 0.58, [0.1, 0.16], False, 4, 50, 180, 0.5)
 rim106 = L4["layers"].pop(4)
 L4["layers"].insert(3, sprite(names("gL_a", "gL_b"), COL["pink"], 0.5, SMALL, rate=F8 / 2, dx=240 + GAP, vx=round(-(480 + GAP) / (4 * BAR), 3), wy=6, wf=round(HZ_BAR / 2, 6)))
@@ -375,7 +375,7 @@ S({"name": "swell", "from": "swell", "to": "pellet3", "pal": "maze", "layers": [
 H({"name": "SWELL", "at": "swell", "beats": 8, "layers": [
     VU,
     rimdots({"band": "high", "lo": 0.06, "hi": 1.1}, shape="p", frm=1.05, to=1.05),
-    {"fx": "twinkle", "on": "tubes", "rate": 2, "sharp": 4, "dens": 0.6, "pal": "dots", "c": 1, "gain": [0.0, 0.5]}]})
+    {"fx": "twinkle", "on": "tubes", "rate": 2, "sharp": 4, "dens": 0.6, "pal": "dots", "c": 1, "gain": [0.0, 0.35]}]})
 S(pellet_scene("pellet3", "pellet3", "drop3", r0=14, r1=72, m=0.18, watch=0.34))
 H(noise_hit(113.75))
 H(power_hit("POWER 3", "drop3"))
@@ -383,13 +383,13 @@ H(power_hit("POWER 3", "drop3"))
 def close(name, frm, to, col, ear_c):
     return {"name": name, "from": frm, "to": to, "pal": "ghosts", "pump": PUMP, "layers": [
         sprite(LOOK, COL[col], 0.26, GIANT), sprite(LOOKW, WHITE, 0.75, GIANT),
-        rimdots(0.8), tubedots(0.55), tubepac(0.9, gate=CHEW),
-        {"fx": "blades", "on": "tubes", "seq": ["012"], "step": 1, "rise": 0.14, "keep": 0, "c": ear_c, "ctip": ear_c, "pal": "ghosts", "gain": 0.55, "gate": {"pat": ".x.x", "step": 1, "decay": 0.75}}]}
+        rimdots(0.35), tubedots(0.22), tubepac(0.5, gate=CHEW),
+        {"fx": "blades", "on": "tubes", "seq": ["012"], "step": 1, "rise": 0.14, "keep": 0, "c": ear_c, "ctip": ear_c, "pal": "ghosts", "gain": 0.36, "gate": {"pat": ".x.x", "step": 1, "decay": 0.75}}]}
 def stare(name, frm, to, col, ear_c, out=0.5):
     return {"name": name, "from": frm, "to": to, "pal": "ghosts", "pump": PUMP, "out": out, "layers": [
         sprite(names("G_F_a", "G_F_b"), COL[col], 0.36, GIANT), sprite("moar_Gw_F", WHITE, 0.85, GIANT, rate=0),
-        {"fx": "fill", "on": "tubes", "pal": "ghosts", "c": ear_c, "gain": [0.22, 0.4]},
-        {"fx": "fill", "on": "rims", "pal": "ghosts", "c": ear_c, "gain": 0.9, "gate": {"pat": "x", "step": 1, "decay": 0.6}}]}
+        {"fx": "fill", "on": "tubes", "pal": "ghosts", "c": ear_c, "gain": [0.08, 0.18]},
+        {"fx": "fill", "on": "rims", "pal": "ghosts", "c": ear_c, "gain": 0.45, "gate": {"pat": "x", "step": 1, "decay": 0.6}}]}
 S(close("blinky", "drop3", "116", "red", 0))
 S(stare("blinky stare", "116", "pinky", "red", 0))
 S(close("pinky", "pinky", "120", "pink", 0.25))
@@ -406,17 +406,17 @@ H(noise_hit(129.75))
 H(power_hit("WHITE", "final", white=True))
 # ---------------------------------------------------------------- everything, blue
 def held(name, frm, to, out=0.5):
-    L = fright(name, frm, to, wx=0, white=0.4, flick={"pat": "x", "step": 1, "decay": 0.7}, gain=1.0)
+    L = fright(name, frm, to, wx=0, white=0.4, flick={"pat": "x", "step": 1, "decay": 0.7}, gain=0.7)
     L["out"] = out
     return L
-S(fright("final", "final", "132", wx=120, white={"final": 0.55, "131": 0.3}, gain=1.0))
+S(fright("final", "final", "132", wx=120, white={"final": 0.55, "131": 0.3}, gain=0.7))
 S(held("final chord", "132", "134"))
-S(fright("final b", "134", "136", wx=120, white=0.3, gain=1.0))
+S(fright("final b", "134", "136", wx=120, white=0.3, gain=0.7))
 S(held("final chord 2", "136", "trap"))
-H(hunt(130, 132, rim=1.0))
-H(hunt(132, 134, base=0.45, rim=1.0))
-H(hunt(134, 136, rim=1.0))
-H(hunt(136, 138, base=0.45, rim=1.0))
+H(hunt(130, 132, rim=0.55))
+H(hunt(132, 134, base=0.12, rim=0.55))
+H(hunt(134, 136, rim=0.55))
+H(hunt(136, 138, base=0.12, rim=0.55))
 H(runfill(135, pal="blues", c=0.6))
 # ---------------------------------------------------------------- the trap: him in the middle, two from each side, closing
 CHOMP = names("pacR_o", "pacR_c", "pacL_o", "pacL_c", "pacL_o", "pacL_c", "pacR_o", "pacR_c")
@@ -424,7 +424,7 @@ T5 = 5 * BAR
 def closing(c, x0, x1, look):
     return sprite(names(look + "_a", look + "_b"), COL[c], 0.7, SMALL, dx=x0, vx=round((x1 - x0) / T5, 3), wy=8, wf=HZ_BAR)
 S({"name": "trap", "from": "trap", "to": "die", "pal": "maze", "pump": PUMP, "layers": [
-    maze(0.26),
+    maze(0.12),
     closing("orange", 440, 165, "gL"), closing("pink", -440, -165, "gR"),
     closing("cyan", 300, 96, "gL"), closing("red", -300, -96, "gR"),
     sprite(CHOMP, YELLOW, 0.75, SMALL, wx=34, wf=HZ_BAR)]})
@@ -432,14 +432,14 @@ H(waka(138, 140))
 H(flash(138))
 H(chin(138.5, 143))
 H({"name": "CLOSING", "at": 140, "beats": 7.5, "layers": [
-    {"fx": "fill", "on": "tube0", "pal": "ghosts", "c": 0, "gain": [0.2, 0.5]},
-    {"fx": "fill", "on": "tube1", "pal": "ghosts", "c": 0.25, "gain": [0.2, 0.5]},
-    {"fx": "fill", "on": "tube2", "pal": "ghosts", "c": 0.5, "gain": [0.2, 0.5]}]})
+    {"fx": "fill", "on": "tube0", "pal": "ghosts", "c": 0, "gain": [0.1, 0.3]},
+    {"fx": "fill", "on": "tube1", "pal": "ghosts", "c": 0.25, "gain": [0.1, 0.3]},
+    {"fx": "fill", "on": "tube2", "pal": "ghosts", "c": 0.5, "gain": [0.1, 0.3]}]})
 H(waka(142, 143))
 # ---------------------------------------------------------------- caught: his death takes the whole helmet, and the track cuts
 S({"name": "die", "from": "die", "to": "end", "pal": "yellow", "layers": [
     sprite(names(*["die%d" % i for i in range(8)]), YELLOW, 0.6, GIANT),
-    {"fx": "fill", "on": "ears", "pal": "yellow", "c": 1, "gain": [0.5, 0.0]}]})
+    {"fx": "fill", "on": "ears", "pal": "yellow", "c": 1, "gain": [0.35, 0.0]}]})
 
 tr["palettes"]["yellowclap"] = {"stops": [[255, 215, 0], [255, 215, 0]], "wrap": True}
 
@@ -454,4 +454,41 @@ tr["about"] = ("Bars of a measured grid, shows/scenes/deadmau5 - Moar Ghosts n S
     "The long breakdown is a dark maze, a lone red ghost pacing back and forth and the moon crossing from ear to ear, with the ears filling only as the track's own filter opens; a second ghost joins at bar 106 and all four at 110. "
     "The third drop gives each ghost its close-up, the whole helmet in its colour: on the two bars of riff its eyes go side to side and the dots get eaten, on the two bars of held chord it stares straight at you and the tubes hold, and the half beat of nothing before the riff comes back is black. "
     "White once, on the last pellet; the blue hunts on the riff and holds on the chord. And at the end the ghosts finally get him: he is trapped in the middle of the dome with two closing from each side, and on the last bar his death takes the whole helmet, a wedge opening from the top until nothing is left, exactly as the track cuts off.")
+# ---------------------------------------------------------------- the shell's budget
+# The guard caps the shell near 300 mA, so a shell asked for far more than that is thrown away and costs the
+# whole song's budget. Each scene's shell layers are scaled so it asks for about what the guard would send,
+# measured per scene before the guard; the ears and the hits are left as written.
+SHELL_ON = {"shell", "face", "jaw", "left", "right"}
+
+
+def scaled(v, k):
+    if isinstance(v, (int, float)):
+        return round(v * k, 4)
+    if isinstance(v, list):
+        return [scaled(x, k) for x in v]
+    if isinstance(v, dict) and "band" in v:
+        return dict(v, lo=scaled(v.get("lo", 0.0), k), hi=scaled(v.get("hi", 1.0), k))
+    if isinstance(v, dict):
+        return {b: scaled(x, k) for b, x in v.items()}
+    return v
+
+
+def fit_shell(scenes, ks):
+    for sc in scenes:
+        k = ks.get(sc["name"])
+        if k is None:
+            continue
+        for L in sc["layers"]:
+            if (L.get("on") or "shell") in SHELL_ON:
+                L["gain"] = scaled(L.get("gain", 1.0), k)
+
+
+SHELL_ASK = 4.8
+SHELL_IN = {"attract": 43.5, "afterdark": 18.2, "voice": 32.7, "banner": 28.8, "game": 41.9, "gameback": 41.3,
+            "fright": 43.0, "fright b": 37.8, "warning": 55.2, "recover": 40.8, "intermission": 35.4, "stop": 11.8,
+            "bigfright": 48.9, "bigflick": 50.5, "bigflick2": 60.8, "bigflick3": 64.1, "lone": 23.8, "lone2": 16.7,
+            "lone3": 23.9, "lone4": 28.8, "swell": 35.7, "pellet3": 13.9, "blinky": 49.9, "blinky stare": 43.2,
+            "pinky": 57.3, "pinky stare": 63.0, "inky": 55.9, "inky stare": 61.4, "clyde": 48.2, "stop3": 13.2,
+            "final": 69.9, "final chord": 54.4, "final b": 49.3, "final chord 2": 54.4, "trap": 41.8, "die": 35.3}
+fit_shell(tr["scenes"], {n: min(1.0, SHELL_ASK / v) for n, v in SHELL_IN.items()})
 save(tr, "shows/scenes/%s.scene.json" % BASE)
