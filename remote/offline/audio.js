@@ -628,7 +628,13 @@ class TrackCache {
       }
       const req = indexedDB.open(this.name, 1);
       req.onupgradeneeded = () => req.result.createObjectStore('tracks');
-      req.onsuccess = () => { this.db = req.result; res(this.db); };
+      req.onsuccess = () => {
+        this.db = req.result;
+        // The browser can close it under us (iOS does, storage pressure does):
+        // the next use opens it again rather than failing until a reload.
+        this.db.onclose = () => { this.db = null; };
+        res(this.db);
+      };
       req.onerror = () => rej(req.error);
     });
   }
@@ -636,7 +642,8 @@ class TrackCache {
   async _tx(mode, fn) {
     const db = await this._open();
     return new Promise((res, rej) => {
-      const tx = db.transaction('tracks', mode);
+      let tx;
+      try { tx = db.transaction('tracks', mode); } catch (e) { this.db = null; throw e; }
       const out = fn(tx.objectStore('tracks'));
       tx.oncomplete = () => res(out && 'result' in out ? out.result : undefined);
       tx.onerror = () => rej(tx.error);
