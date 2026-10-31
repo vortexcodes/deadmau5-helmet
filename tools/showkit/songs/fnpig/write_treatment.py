@@ -292,4 +292,15 @@ H({"name": "FURY", "at": "fury", "beats": 2.5, "pal": "white", "layers": [
    {"fx": "fill", "on": "shell", "c": 1.0, "gain": [0.34, 0.0]},
    {"fx": "sweep", "on": "shell", "axis": "r", "shape": "p", "mode": "band", "from": 0.0, "to": 1.2, "width": 0.25, "c": 0.6, "gain": 0.7}]})
 
+# The long set's budget: each scene's shell asks for about what the guard sends (levels measured before the
+# guard, as written above), the ears a little dimmer all song.
+from budget import fit
+SHELL_IN = {"rouse": 21.9, "lights": 31.8, "wash": 23.6, "hold breath": 14.2, "snorts": 9.8, "hazard": 13.9, "waking": 17.6,
+            "wake3": 23.5, "pacing": 10.8, "inhale1": 13.6, "raw": 21.1, "raw in": 22.3, "root": 19.8, "root in": 24.1, "cold": 31.1,
+            "cold in": 40.3, "flush": 21.8, "flush in": 29.0, "flush2": 30.6, "flush2 in": 32.1, "pacing2": 16.9, "inhale2": 19.3,
+            "slam2": 14.0, "neon": 30.9, "neon in": 38.5, "grinder": 30.4, "grinder in": 38.1, "xray": 23.3, "xray in": 35.3,
+            "neon4": 36.4, "neon4 in": 50.2, "hush": 14.6, "snorts2": 13.9, "rebuild": 16.6, "rebuild2": 25.4, "rebuild3": 36.3,
+            "fury": 43.1, "fury in": 43.6, "fury2": 47.2, "fury2 in": 52.1, "shake": 37.7, "shake in": 43.6, "squeal": 46.4,
+            "squeal in": 58.2, "tiring": 15.7}
+fit(tr, SHELL_IN, ask=7.2, ears=0.85)
 save(tr, "shows/scenes/%s.scene.json" % BASE)
