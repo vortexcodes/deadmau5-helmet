@@ -6,10 +6,10 @@ ready tonight. Everything below is on branch `halloween-handoff`. `main` is unto
 ## Set up
 
 1. Clone, then `git checkout halloween-handoff`.
-2. **Get the MP3s privately from the owner. They are never committed (the repo is public).** Put them in
-   `shows/`, named exactly as the show (`shows/deadmau5 - FN Pig.mp3`). The older six can also sit in
-   the repo root. Compiling, previews and tests work from the committed analyses; measuring a grid and
-   serving songs need the MP3s.
+2. **Get the MP3s from the owner's Mac, which serves them on the home Wi-Fi:**
+   `python3 tools/showkit/get_songs.py http://192.168.10.225:8799`. They land in `shows/`, ignored by
+   git. Never commit or host them, because the repo is public. Compiling, previews and tests work from
+   the committed analyses; measuring a grid and serving songs need the MP3s.
 3. `python3 test_mau5.py`: 131 pass at this commit.
 
 ## What is done

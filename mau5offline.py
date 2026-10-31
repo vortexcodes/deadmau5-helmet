@@ -416,6 +416,16 @@ def songs(host=None, port=SONGS_PORT, dirs=None):
             self.end_headers()
 
         def do_GET(self):
+            if self.path.split("?", 1)[0] == SONGS_POINTER:
+                # So another machine can ask without going through the controller.
+                body = json.dumps(pointer).encode()
+                self.send_response(200)
+                self._cors()
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             p = route.get(self.path.split("?", 1)[0])
             if p is None:
                 self.send_response(404)
