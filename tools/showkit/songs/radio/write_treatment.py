@@ -122,7 +122,7 @@ VU_HIGH = lambda on, gain=EARG, lo=-1.6, hi=1.6: vu(on, band("high", lo, hi), ga
 SHELL_ON = {"shell", "face", "jaw", "left", "right", "shell+rims"}
 def scaled(v, k):
     if isinstance(v, (int, float)):
-        return round(v * k, 4)
+        return round(v * k, 3)
     if isinstance(v, list):
         return [scaled(x, k) for x in v]
     if isinstance(v, dict) and "band" in v:

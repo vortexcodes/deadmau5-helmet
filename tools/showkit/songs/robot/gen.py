@@ -234,7 +234,7 @@ tr["hits"] = [x for x in tr["hits"] if x]
 SHELL_ON = {"shell", "face", "jaw", "left", "right"}
 def scaled(v, k):
     if isinstance(v, (int, float)):
-        return round(v * k, 4)
+        return round(v * k, 3)
     if isinstance(v, list):
         return [scaled(x, k) for x in v]
     if isinstance(v, dict) and "band" in v:

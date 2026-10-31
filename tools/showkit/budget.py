@@ -24,7 +24,7 @@ EARS = {"ears", "ear1", "ear2", "tubes", "rims", "tube0", "tube1", "tube2", "tub
 def scaled(v, k):
     """A layer value times k: a number, a ramp, steps at bars, or a band's lo and hi."""
     if isinstance(v, (int, float)):
-        return round(v * k, 4)
+        return round(v * k, 3)
     if isinstance(v, list):
         return [scaled(x, k) for x in v]
     if isinstance(v, dict) and "band" in v:
@@ -91,3 +91,15 @@ def fit(tr, shell_in, ask=6.0, ears=1.0, keep=None):
             if f != 1.0:
                 L["gain"] = scaled(L.get("gain", 1.0), f)
     return tr
+
+
+def tidy(v, places=4):
+    """Every float in a treatment rounded to `places` decimals. The page carries every show compiled, and a
+    value like 0.4156427751014326 costs it bytes that do not compress; 4 places of a bar is 0.2 ms."""
+    if isinstance(v, float):
+        return round(v, places)
+    if isinstance(v, list):
+        return [tidy(x, places) for x in v]
+    if isinstance(v, dict):
+        return {k: tidy(x, places) for k, x in v.items()}
+    return v
