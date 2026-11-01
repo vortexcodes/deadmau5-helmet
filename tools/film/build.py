@@ -2,9 +2,9 @@
 """build.py -- the website's five videos, finished.
 
 The overview, song-data and live films come out of their own scripts with their
-music already in. This writes music for the other two (mau5film and mau5lapse render
+songs already in. This adds a song to the other two (mau5film and mau5lapse render
 silent), brings all five to the same loudness, and copies them to a site checkout
-with a poster frame each.
+with a poster frame each. The songs come from shows/ and stay out of this repo.
 
     python3 mau5film.py --out /tmp/localisation.mp4
     python3 mau5lapse.py --explain --out /tmp/calibration.mp4
@@ -23,18 +23,19 @@ import re
 import subprocess
 import tempfile
 
-from common import OUT, mux
+import numpy as np
+
+from common import OUT, Song, mux
+from overview import clip
 import score
 
 TARGET_LUFS = -18.0
 
-# start seconds, then bass, mid and high. Follows the film's scenes: no beat until the
-# second camera shows up, most going on while the chain fills in and in the before/after.
-LOCALISATION = dict(bpm=122, root=45, prog="drift", sections=[
-    (0, 0, .35, .1), (9, 0, .45, .2), (15.5, 0, .5, .3), (29.5, 0, .55, .2), (38.5, .6, .5, .3),
-    (46.5, .85, .7, .6), (62.5, .7, .55, .4), (69.5, 0, .45, .3), (79.5, .9, .8, .7), (91.5, 0, .3, 0)])
-CALIBRATION = dict(bpm=126, root=47, prog="lift", sections=[
-    (0, 0, .35, .1), (5, .7, .5, .35), (15, 0, .5, .3), (18, .85, .7, .55), (40.5, 0, .3, 0)])
+# song, the bar its kick comes in, and the second in the film that should land on.
+# Localisation: Strobe's slow build until the second camera shows up, then the beat.
+LOCALISATION = ("deadmau5 - Strobe", 125, 38.5)
+# Calibration: already moving when the helmet starts drawing itself.
+CALIBRATION = ("deadmau5 & Wolfgang Gartner - Animal Rights", 32, 5.0)
 
 # site file, source, second to take the poster from
 FILES = {
@@ -50,8 +51,18 @@ def duration(path):
     return float(r.stdout)
 
 
-def with_music(video, spec, out, tmp, seed):
-    x = score.free(duration(video), spec["bpm"], spec["sections"], root=spec["root"], prog=spec["prog"], seed=seed)
+def with_music(video, spec, out, tmp):
+    base, bar, at = spec
+    dur = duration(video)
+    start = max(Song(base).t_of_bar(bar) - at, 0.0)
+    x = clip(base, start, start + dur)
+    x = x * min(1.0, 0.89 / (abs(x).max() + 1e-9))
+    for n, ramp in ((int(0.8 * score.SR), 1), (int(2.5 * score.SR), -1)):
+        k = np.linspace(0, 1, n)[:, None]
+        if ramp > 0:
+            x[:n] *= k
+        else:
+            x[-n:] *= k[::-1]
     wav = os.path.join(tmp, os.path.basename(out) + ".wav")
     score.write_wav(wav, x)
     mux(video, wav, out)
@@ -84,8 +95,8 @@ def main():
     a = ap.parse_args()
     tmp = tempfile.mkdtemp(prefix="mau5build")
     sources = dict(FILES)
-    sources["localisation"] = (with_music(a.localisation, LOCALISATION, os.path.join(tmp, "loc.mp4"), tmp, 31), 45)
-    sources["calibration"] = (with_music(a.calibration, CALIBRATION, os.path.join(tmp, "cal.mp4"), tmp, 41), 30)
+    sources["localisation"] = (with_music(a.localisation, LOCALISATION, os.path.join(tmp, "loc.mp4"), tmp), 45)
+    sources["calibration"] = (with_music(a.calibration, CALIBRATION, os.path.join(tmp, "cal.mp4"), tmp), 30)
     for name, (src, sec) in sources.items():
         out = os.path.join(a.site, "media", "mau5head-v2-%s.mp4" % name)
         g = level(src, out)
