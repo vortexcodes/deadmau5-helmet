@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """build.py -- the website's five videos, finished.
 
-The show reel, song-data and live films come out of their own scripts with their
+The overview, song-data and live films come out of their own scripts with their
 music already in. This writes music for the other two (mau5film and mau5lapse render
 silent), brings all five to the same loudness, and copies them to a site checkout
 with a poster frame each.
 
     python3 mau5film.py --out /tmp/localisation.mp4
     python3 mau5lapse.py --explain --out /tmp/calibration.mp4
-    python3 tools/film/reel.py
+    python3 tools/film/overview.py
     python3 tools/film/datafilm.py
     python3 tools/film/livefilm.py
     python3 tools/film/build.py --localisation /tmp/localisation.mp4 \\
@@ -38,7 +38,7 @@ CALIBRATION = dict(bpm=126, root=47, prog="lift", sections=[
 
 # site file, source, second to take the poster from
 FILES = {
-    "shows": (os.path.join(OUT, "shows.mp4"), 118),
+    "shows": (os.path.join(OUT, "overview.mp4"), 72),   # tools/film/overview.py, with the real songs
     "song-data": (os.path.join(OUT, "song_data.mp4"), 8),
     "live": (os.path.join(OUT, "live_analysis.mp4"), 45),
 }
