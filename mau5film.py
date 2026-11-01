@@ -304,8 +304,8 @@ def s_slots(M, n):
         label(d, (64, 140), "blue: the 399 on the front, where LEDs went", ACCENT, F_BODY)
         label(d, (64, 170), "grey: the back, still empty", MUTED, F_BODY)
         yield foot(im, "Every LED has a place in the print",
-                   "948 slots in the shell, and three tubes and a rim in each ear. "
-                   "The CAD doesn't say which LED ended up where.")
+                   "The shell has 948 slots, and each ear has three tubes and a rim. "
+                   "The CAD can't tell me which LED ended up in which spot.")
 
 
 def s_wiring(M, n):
@@ -356,8 +356,8 @@ def s_night(M, n):
     # between its title cards at 2.3 s and 10.8 s
     for im in footage(src, 2.6, 10.6, n):
         yield foot(im, "The first night",
-                   "Before any camera, I lit each strip in turn and wrote down its first and "
-                   "last LED: %d sections." % secs)
+                   "Before I had a camera set up, I lit each strip in turn and wrote down its first "
+                   "and last LED: %d sections." % secs)
 
 
 def s_locate(M, n):
@@ -365,7 +365,7 @@ def s_locate(M, n):
     # the dark stretch, up to the next title card at 38 s
     for im in footage(src, 31.8, 37.9, n):
         yield foot(im, "Then one LED at a time",
-                   "Each one lit alone in a dark room while the camera logged the centre of its "
+                   "I lit each one alone in a dark room and had the camera log the centre of its "
                    "glow. Later I did all 622 again from a second spot.")
 
 
@@ -397,8 +397,8 @@ def s_mistake(M, n):
             label(d, (64, 230), "matched the camera it came from to 0.02 px", RED, F_BODY)
             label(d, (64, 260), "the ears came out flat, every LED at the same depth", RED, F_BODY)
         yield foot(im, "It only looked right from the front",
-                   "That's where the camera was. From the side, most LEDs sat between slots, "
-                   "some of them 113 mm off.")
+                   "My camera was in front. From the side, most LEDs sat between slots, "
+                   "and some were 113 mm off.")
 
 
 def s_cameras(M, n):
@@ -443,11 +443,11 @@ def s_cameras(M, n):
             label(d, (x0 + 20, y0 + h - 32), "160 mm", MUTED, F_SMALL)
             label(d, (x0 + w - 20, y0 + h - 32), "190", MUTED, F_SMALL, "ra")
             if t > 0.6:
-                label(d, (x0 + 14, y0 + h + 14), "measured: median %.1f mm, nothing assumed"
+                label(d, (x0 + 14, y0 + h + 14), "measured median: %.1f mm"
                       % np.median(r), INK, F_BODY)
         yield foot(im, "A second camera, 34 degrees away",
-                   "Two views give a point where one only gives a ray. The shell LEDs landed "
-                   "0.3 mm from the CAD's sphere, so the cameras were fine.")
+                   "With two views I can work out where an LED really is in 3D. The shell LEDs came "
+                   "out 0.3 mm from the CAD's sphere, so I could trust the cameras.")
 
 
 def triangulate(M, cams):
@@ -514,8 +514,8 @@ def s_align(M, n):
             for j, s in enumerate(rows):
                 label(d, (x0 + 20, y0 + 20 + j * 44), s, (232, 235, 238, a), F_BODY)
         yield foot(im, "Lining the chain up with the wiring",
-                   "Each LED is the next slot on its strip, or skips an empty one, or starts "
-                   "the next strip from either end. A slot can only be used once.")
+                   "Each LED has to be the next slot on its strip, skip an empty one, or start "
+                   "the next strip from either end. No slot gets used twice.")
 
 
 def s_walk(M, n):
@@ -559,8 +559,8 @@ def s_walk(M, n):
         label(d, (x0, 160), "chain index 0", MUTED, F_SMALL)
         label(d, (x1, 160), "397", MUTED, F_SMALL, "ra")
         yield foot(im, "The notes from the first night had it right",
-                   "Shell ends at 397, one strip has 11 LEDs, the mount strips run out of order. "
-                   "My first map had replaced all three with the CAD's numbers.")
+                   "The shell ends at 397, one strip has 11 LEDs, and the mount strips run out of order. "
+                   "My first map had overwritten all three with the CAD's numbers.")
 
 
 def s_ears(M, n):
@@ -612,10 +612,9 @@ def s_ears(M, n):
             label(d, (64, 122), "blue: out and back along three tubes  ·  orange: the rim",
                   (200, 205, 210), F_BODY)
         yield foot(im, "The ears stay where the CAD has them",
-                   ("The outline lands on the real ears, so the cameras only pick where along "
-                    "which tube each LED sits. They can measure that much.") if photo is not None else
-                   ("The cameras only pick where along which tube each LED sits. "
-                    "They can measure that much."))
+                   ("The outline lands on the real ears, so all I need from the cameras is where "
+                    "along each tube an LED sits.") if photo is not None else
+                   ("All I need from the cameras is where along each tube an LED sits."))
 
 
 def s_compare(M, n):
@@ -643,7 +642,7 @@ def s_compare(M, n):
                 cols.append(tuple(c * k for c in base))
             im = glow(im, v(X), cols, r=2.4, blur=3.0, gain=0.8)
         yield foot(im, "Before and after, all the way round",
-                   "Left is the first map, with flat ears and LEDs between slots. Right is the "
+                   "Left is my first map, with flat ears and LEDs between slots. Right is the "
                    "final one, with every LED in a slot or a tube.")
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """livefilm.py -- the live analyser working something out as a track plays.
 
-The track is one of ours from score.py. Its spectra get computed the way the Web
+The track is a stretch of a real song. Its spectra get computed the way the Web
 Audio spec says an AnalyserNode does it, then live_trace.js feeds them to the real
 audio.js and engine.js. So the numbers on screen, the BPM included, and the helmet
 are what the page would give on this track, and any wrong guesses are its own.
@@ -20,9 +20,11 @@ import numpy as np
 
 from common import E, F, FPS, H, HERE, HelmetView, OUT, Image, ImageDraw, W, encoder, send, strip
 import mau5offline
+from overview import clip
 import score
 
-BPM = 124.0
+TRACK, START = "deadmau5 - Harder Better Faster Stronger", 71.3
+BPM = 128.0
 SECONDS = 62.0
 TICK = 0.02
 FAST, SLOW = 1024, 8192
@@ -40,19 +42,19 @@ ROWS = {"spec": (8, 118), "level": (132, 82), "bands": (220, 134), "flux": (360,
 
 CAPTIONS = [
     (0, "spec", "No analysis file here",
-     "This is what the page gets for a song it has never seen: the last 23 ms of sound, 50 times a second."),
+     "The page knows nothing about this song ahead of time. All it gets is the last 23 ms of sound, 50 times a second."),
     (10, "bands", "The same three bands as a show, worked out on the spot",
-     "It can't scale them against the whole song because it hasn't heard the whole song, only what has played so far."),
+     "It can't scale them against the whole song, because it has only heard what's played so far."),
     (17, "level", "Loudness with no reference",
-     "It keeps a running quiet mark and loud mark, and places the current reading between them. Works at any volume."),
+     "It keeps a running quiet mark and loud mark and places the current reading between them, so it works at any volume."),
     (24, "flux", "A beat is a jump well above the recent average",
-     "The spectrum's rise has to clear the mean plus 1.4 standard deviations of the last 5 seconds, 0.16 s after the last one."),
-    (30, "flux", "When the kick stops, this gets less sure",
-     "Pads and plucks still trip it sometimes. Beat position just free-runs from whatever it last called a beat."),
+     "The spectrum's rise has to clear the mean plus 1.4 standard deviations of the last 5 seconds, at least 0.16 s after the last beat."),
+    (30, "flux", "When the kick stops, it gets less sure",
+     "Voices and synths can still trip it. The beat position just free-runs from whatever it last called a beat."),
     (40, "bpm", "The tempo is the median gap between beats",
-     "It reads 125 on this 124 track because it only looks every 20 ms, so the gaps it measures come in steps."),
+     "It reads 130 on this 128 song because it only looks every 20 ms, so the gaps it measures come in steps."),
     (50, "bpm", "What it doesn't know",
-     "Where bar 1 is, or what's coming. There's no delay correction either. That's why the song shows get measured beforehand."),
+     "Where bar 1 is, or what's coming next. There's no delay correction either. That's why the song shows get measured ahead of time."),
 ]
 
 
@@ -123,8 +125,10 @@ def scroll_line(d, x0, y, w, h, ts, vs, now, color, width=1):
 
 
 def main():
-    # less sustained bass than the other videos, so the bands have room to move
-    x = score.free(SECONDS, BPM, SECTIONS, root=43, prog="night", seed=21, bass=0.35)
+    x = clip(TRACK, START, START + SECONDS)
+    fade = int(0.8 * score.SR)
+    x[:fade] *= np.linspace(0, 1, fade)[:, None]
+    x[-fade:] *= np.linspace(1, 0, fade)[:, None]
     tmp = tempfile.mkdtemp(prefix="mau5live")
     wav = os.path.join(tmp, "a.wav")
     score.write_wav(wav, x)
@@ -202,7 +206,7 @@ def main():
         b = float(A["bpm"][k])
         d.text((x0, y), "TEMPO IT THINKS IT HEARS", font=F.F_SMALL, fill=DIM)
         d.text((x0, y + 22), ("%.1f BPM" % b) if b else "not sure yet", font=F.F_MID, fill=TEXT)
-        d.text((x0 + 360, y + 28), "the track is %.0f" % BPM, font=F.F_BODY, fill=DIM)
+        d.text((x0 + 360, y + 28), "the song is %.0f" % BPM, font=F.F_BODY, fill=DIM)
         ph = float(A["phase"][k])
         d.rectangle([x0 + 360, y + 62, x0 + 360 + 300, y + 74], fill=(44, 50, 57))
         d.rectangle([x0 + 360, y + 62, x0 + 360 + 300 * ph, y + 74], fill=AMBER)

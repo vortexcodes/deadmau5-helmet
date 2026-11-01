@@ -40,7 +40,7 @@ ACTS = [
     ("calibration", os.path.join(CAL, "timelapse", "f*.jpg"),
      "Calibration · the helmet comes up, one strip at a time", 1),
     ("locate", None,                       # filled from the same pool
-     "Localisation · every LED lit alone, centroid measured", 1),
+     "Localisation · every LED lit alone and measured", 1),
     ("baralign", os.path.join(CAL, "baralign", "s*.jpg"),
      "Alignment · a straight bar swept down the map", 3),
     ("review", os.path.join(CAL, "review", "*_[0-9].jpg"),
@@ -272,10 +272,10 @@ def build_explainer(tmp, fps, cal=CAL):
     """
     n = 0
     n = title_card("Where are the LEDs?",
-                   "The CAD has every pocket. It can't say which LED "
+                   "The CAD has every pocket, but it can't tell me which LED "
                    "went in which one.", int(fps * 2.6), tmp, n)
     n = title_card("One at a time",
-                   "622 LEDs, each lit alone in a dark room and measured.",
+                   "I lit all 622 one by one in a dark room and measured each.",
                    int(fps * 2.4), tmp, n)
 
     n, nled = trace_map(tmp, n, fps, cal)
@@ -284,16 +284,16 @@ def build_explainer(tmp, fps, cal=CAL):
     bars = sorted(glob.glob(os.path.join(cal, "baralign", "s*.jpg")))
     if bars:
         n = title_card("Is the map straight?",
-                       "A flat bar sweeps down the helmet. Blur from the shell "
-                       "doesn't matter, only which LEDs light together.", int(fps * 2.4), tmp, n)
+                       "I swept a flat bar down the helmet. If the map is right, "
+                       "the line stays straight.", int(fps * 2.4), tmp, n)
         n, _ = add_frames(bars, "A straight bar swept down the map",
                           3, tmp, n, True, "step %d of %d")
 
     rev = sorted(glob.glob(os.path.join(cal, "review", "*_[0-9].jpg")))
     if rev:
         n = title_card("Then every effect, on the helmet",
-                       "Each one frozen for a photo, with a dark frame "
-                       "subtracted so you only see the LEDs.",
+                       "I froze each one for a photo and subtracted a dark "
+                       "frame, so you only see the LEDs.",
                        int(fps * 2.4), tmp, n)
         if len(rev) > 320:
             step = len(rev) / 320.0

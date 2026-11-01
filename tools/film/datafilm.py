@@ -16,6 +16,7 @@ import tempfile
 import numpy as np
 
 from common import E, F, FPS, H, HelmetView, OUT, Image, ImageDraw, Song, W, encoder, send, strip
+from overview import clip
 import score
 
 BASE = "deadmau5 - The Veldt"
@@ -47,23 +48,23 @@ LABEL = {"show": "SCENES AND HITS, WRITTEN BY HAND IN BARS", "bass": "BASS  30 t
 # from-bar, rows to light up, title, caption
 BEATS = [
     (5, None, "What's stored for one song",
-     "The Veldt, 170 seconds. The analysis file is 185 kB and has no audio in it. This is all of it."),
+     "This is The Veldt, 170 seconds long. The analysis file is 185 kB and holds no audio. Here's everything in it."),
     (9, ("grid",), "The beat grid comes first",
-     "363 beats and 91 bars, as a list of times. Here bar b starts at 0.043 + 1.875 b seconds. It's measured and checked."),
+     "363 beats and 91 bars, as a list of times. In this song bar b starts at 0.043 + 1.875 b seconds. I measured it against the audio."),
     (13, ("bass",), "Three frequency bands, 40 times a second",
-     "The solid shape is how loud the band is against the rest of the song. The bright ticks are how hard it just jumped."),
+     "The solid shape is how loud the band is compared to the rest of the song. The bright ticks show how hard it just jumped."),
     (17, ("mid", "high"), "Mid and high work the same way",
-     "Each band is scaled against itself, or the top end would never register next to the bass."),
+     "Each band is scaled against itself. Otherwise the top end would never register next to the bass."),
     (21, ("energy",), "Loudness and onsets",
-     "Loudness goes on the controller. The onset curve is left over from the tempo search and no show reads it now."),
+     "Loudness goes on the controller. No show reads the onset curve anymore. It's left over from the tempo search."),
     (25, ("chroma",), "Chroma is the harmony",
-     "How much of each of the 12 notes is in each bar. It's what shows the 8-bar chord loop, which is what the ears play."),
+     "How much of each of the 12 notes is in each bar. You can see the 8-bar chord loop, and that's what the ears play."),
     (29, ("levels",), "Levels and sections",
-     "Bars ranked 0 to 3 and grouped into sections. These only get used to write the automatic cue list, the fallback show."),
+     "Each bar gets ranked 0 to 3, then grouped into sections. Only the automatic fallback show uses these."),
     (33, ("show",), "The scene list is what really plays",
      "22 scenes and 88 hits, in bars. A frame only needs the grid, and 5 places in this show also read a band curve."),
     (37, None, "On the helmet this comes to 14 kB",
-     "7 curves as bytes at 10 Hz, plus beats, bars and chroma. The MP3 stays on the phone, and the lights follow its clock."),
+     "7 curves stored as bytes at 10 Hz, plus beats, bars and chroma. The MP3 stays on the phone and the lights follow its clock."),
 ]
 
 
@@ -165,8 +166,10 @@ def main():
     t0, t1 = song.t_of_bar(BAR_FROM), song.t_of_bar(BAR_TO)
     long_im, pad = build_strip(song, t0, t1)
 
-    x = score.follow(t0, t1, song.spb, lambda s: song.t_of_beat(s / 4.0), song.bands(), song.punch(),
-                     song.rate, root=song.root(t0, t1), prog="lift", seed=5)
+    x = clip(BASE, t0, t1)
+    fade = int(0.6 * score.SR)
+    x[:fade] *= np.linspace(0, 1, fade)[:, None]
+    x[-fade:] *= np.linspace(1, 0, fade)[:, None]
     tmp = tempfile.mkdtemp(prefix="mau5data")
     wav = os.path.join(tmp, "a.wav")
     score.write_wav(wav, x)
