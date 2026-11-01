@@ -4,7 +4,7 @@ Software for my deadmau5 helmet: 621 addressable pixels on one chain into a
 WLED controller -- 398 in the slots of a printed PETG shell and 223 in
 the two ears -- driven from a phone with no laptop and no network.
 
-The write-up, with a film of how the LEDs were located, is on
+The write-up, with videos of how the LEDs were found and how the shows work, is on
 [vortex1.dev](https://vortex1.dev/project.html?p=mau5head-v2), and the
 whole effect engine runs in a browser in the
 [simulator](https://vortex1.dev/mau5-simulator.html).
@@ -13,7 +13,7 @@ whole effect engine runs in a browser in the
 
 ```bash
 python3 -m pip install numpy pillow matplotlib
-python3 test_mau5.py                    # about a hundred checks, all offline
+python3 test_mau5.py                    # about 140 checks, all offline
 python3 mau5web.py --serve              # the simulator, on this machine
 python3 mau5offline.py serve            # the phone player, against a fake helmet
 python3 mau5doctor.py --offline         # what is set up and what is not
@@ -60,6 +60,8 @@ from somewhere else
 
 the website
   mau5web.py        builds the simulator for vortex1.dev from remote/web/
+  tools/film/       the videos on the project page, and score.py, which writes
+                    their music, since the songs can't be hosted
 ```
 
 The first version of this suite targeted a different helmet -- 1406

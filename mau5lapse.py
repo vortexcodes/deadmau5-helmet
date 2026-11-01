@@ -251,13 +251,13 @@ def trace_map(tmp, start, fps, cal=CAL, per_frame=2.2, tail=10):
             x, y = cx * sx, cy * sy
             g = int(255 * (1.0 - (shown - 1 - k) / float(tail)))
             fd.ellipse([x-3, y-3, x+3, y+3], fill=(g, g, g))
-        caption(f, "Localisation \u00b7 every LED lit alone, measured, plotted",
-                "%d of %d \u00b7 the line is the wire" % (shown, len(rows)))
+        caption(f, "Each dot is one LED, lit alone and measured",
+                "%d of %d. The faint line between them is the wire." % (shown, len(rows)))
         f.save(os.path.join(tmp, "%06d.jpg" % (start + frames)), quality=90)
         frames += 1
     # hold the finished map
-    caption(canvas, "Localisation \u00b7 every LED lit alone, measured, plotted",
-            "%d positions. This is the map." % len(rows))
+    caption(canvas, "Each dot is one LED, lit alone and measured",
+            "All %d measured." % len(rows))
     for i in range(int(fps * 3.0)):
         canvas.save(os.path.join(tmp, "%06d.jpg" % (start + frames + i)), quality=92)
     return start + frames + int(fps * 3.0), len(rows)
@@ -272,10 +272,10 @@ def build_explainer(tmp, fps, cal=CAL):
     """
     n = 0
     n = title_card("Where are the LEDs?",
-                   "The CAD knows where the pockets are. It does not know "
-                   "where the LEDs ended up.", int(fps * 2.6), tmp, n)
+                   "The CAD has every pocket. It can't say which LED "
+                   "went in which one.", int(fps * 2.6), tmp, n)
     n = title_card("One at a time",
-                   "622 LEDs, each lit alone in a dark room, each measured.",
+                   "622 LEDs, each lit alone in a dark room and measured.",
                    int(fps * 2.4), tmp, n)
 
     n, nled = trace_map(tmp, n, fps, cal)
@@ -284,25 +284,25 @@ def build_explainer(tmp, fps, cal=CAL):
     bars = sorted(glob.glob(os.path.join(cal, "baralign", "s*.jpg")))
     if bars:
         n = title_card("Is the map straight?",
-                       "A flat bar swept down it. Differential, so the "
-                       "diffusion does not matter.", int(fps * 2.4), tmp, n)
-        n, _ = add_frames(bars, "Alignment \u00b7 a straight bar swept down the map",
+                       "A flat bar sweeps down the helmet. Blur from the shell "
+                       "doesn't matter, only which LEDs light together.", int(fps * 2.4), tmp, n)
+        n, _ = add_frames(bars, "A straight bar swept down the map",
                           3, tmp, n, True, "step %d of %d")
 
     rev = sorted(glob.glob(os.path.join(cal, "review", "*_[0-9].jpg")))
     if rev:
         n = title_card("Then every effect, on the helmet",
-                       "Frozen at a chosen moment and differenced against "
-                       "the dark, so only the LEDs remain.",
+                       "Each one frozen for a photo, with a dark frame "
+                       "subtracted so you only see the LEDs.",
                        int(fps * 2.4), tmp, n)
         if len(rev) > 320:
             step = len(rev) / 320.0
             rev = [rev[int(i * step)] for i in range(320)]
-        n, _ = add_frames(rev, "Presets \u00b7 photographed one by one", 4, tmp,
+        n, _ = add_frames(rev, "The presets, photographed one at a time", 4, tmp,
                           n, True, "frame %d of %d")
 
     n = title_card("vortex1.dev/mau5-simulator.html",
-                   "All of it runs in a browser \u00b7 "
+                   "The simulator runs in a browser. Code: "
                    "github.com/vortexcodes/deadmau5-helmet",
                    int(fps * 3.2), tmp, n)
     return n
