@@ -6,8 +6,7 @@ so a change is an edit and a 90-second rerun, not a session of clicking.
 
 - **How it was designed, and why it looks the way it does:** [`docs/cad-design.md`](../docs/cad-design.md)
 - **How it goes together, step by step:** [`docs/build-guide.md`](../docs/build-guide.md)
-- **The film:** `mau5head_cad_tour.mp4`, attached to the GitHub release *CAD v18*
-  (the repo ignores `*.mp4`). GIF excerpts are in `docs/img/cad/`.
+- **The film:** [`docs/img/cad/mau5head_cad_tour.mp4`](../docs/img/cad/mau5head_cad_tour.mp4) (40 s). GIF excerpts are beside it.
 
 ![turntable](../docs/img/cad/turntable.gif)
 
