@@ -6,7 +6,8 @@ so a change is an edit and a 90-second rerun, not a session of clicking.
 
 - **How it was designed, and why it looks the way it does:** [`docs/cad-design.md`](../docs/cad-design.md)
 - **How it goes together, step by step:** [`docs/build-guide.md`](../docs/build-guide.md)
-- **The film:** [`docs/img/cad/mau5head_cad_tour.mp4`](../docs/img/cad/mau5head_cad_tour.mp4) (40 s). GIF excerpts are beside it.
+- **The walkthrough, with the exploded view:** [on the website](https://vortex1.dev/project.html?p=mau5head-v2) (2:06). `render/film.py` builds it.
+- **The older film:** [`docs/img/cad/mau5head_cad_tour.mp4`](../docs/img/cad/mau5head_cad_tour.mp4) (40 s). GIF excerpts are beside it.
 
 ![turntable](../docs/img/cad/turntable.gif)
 

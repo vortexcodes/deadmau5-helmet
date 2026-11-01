@@ -36,6 +36,8 @@ TARGET_LUFS = -18.0
 LOCALISATION = ("deadmau5 - Strobe", 125, 38.5)
 # Calibration: already moving when the helmet starts drawing itself.
 CALIBRATION = ("deadmau5 & Wolfgang Gartner - Animal Rights", 32, 5.0)
+# CAD walkthrough: the song's drop lands where everything starts flying apart.
+CAD = ("deadmau5 - Raise Your Weapon", 130, 82.0)
 
 # site file, source, second to take the poster from
 FILES = {
@@ -89,14 +91,22 @@ def poster(path, sec, out):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--localisation", required=True, help="silent render from mau5film.py")
-    ap.add_argument("--calibration", required=True, help="silent render from mau5lapse.py --explain")
+    ap.add_argument("--localisation", help="silent render from mau5film.py")
+    ap.add_argument("--calibration", help="silent render from mau5lapse.py --explain")
+    ap.add_argument("--cad", help="silent render from cad/render/film.py, kept small enough for the site")
+    ap.add_argument("--only", help="just this one site file, for example cad")
     ap.add_argument("--site", required=True, help="a checkout of the website")
     a = ap.parse_args()
     tmp = tempfile.mkdtemp(prefix="mau5build")
     sources = dict(FILES)
-    sources["localisation"] = (with_music(a.localisation, LOCALISATION, os.path.join(tmp, "loc.mp4"), tmp), 45)
-    sources["calibration"] = (with_music(a.calibration, CALIBRATION, os.path.join(tmp, "cal.mp4"), tmp), 30)
+    if a.localisation:
+        sources["localisation"] = (with_music(a.localisation, LOCALISATION, os.path.join(tmp, "loc.mp4"), tmp), 45)
+    if a.calibration:
+        sources["calibration"] = (with_music(a.calibration, CALIBRATION, os.path.join(tmp, "cal.mp4"), tmp), 30)
+    if a.cad:
+        sources["cad"] = (with_music(a.cad, CAD, os.path.join(tmp, "cad.mp4"), tmp), 100)
+    if a.only:
+        sources = {a.only: sources[a.only]}
     for name, (src, sec) in sources.items():
         out = os.path.join(a.site, "media", "mau5head-v2-%s.mp4" % name)
         g = level(src, out)
