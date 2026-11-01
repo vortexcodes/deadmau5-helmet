@@ -9,6 +9,19 @@ The write-up, with videos of how the LEDs were found and how the shows work, is 
 whole effect engine runs in a browser in the
 [simulator](https://vortex1.dev/mau5-simulator.html).
 
+## The helmet itself: CAD, build guide, wall mount
+
+![mau5head CAD](docs/img/cad/hero.jpg)
+
+The printed parts are parametric CAD in [`cad/`](cad/README.md): one CadQuery script builds
+the shell, ears, internal visor, pivots, hard-hat mount and electronics tray as STEP files,
+and a second builds a **wall mount** that holds the helmet by its rim and from the centre.
+
+- [`cad/README.md`](cad/README.md): what to print, in what orientation, and the hardware
+- [`docs/build-guide.md`](docs/build-guide.md): how it all goes together, step by step
+- [`docs/cad-design.md`](docs/cad-design.md): how it was designed and why, with the mistakes
+- the film, `mau5head_cad_tour.mp4`, on the *CAD v18* release
+
 ## Five minutes, no helmet needed
 
 ```bash

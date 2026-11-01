@@ -1,0 +1,125 @@
+segment_id,chain,band,channel,led_count,cut_length_mm,strip_type
+A01,A,back,0,6,100.0,WS2815 12V 60/m
+A02,A,back,0,6,100.0,WS2815 12V 60/m
+A03,A,back,0,5,83.3,WS2815 12V 60/m
+A04,A,back,1,5,83.3,WS2815 12V 60/m
+A05,A,back,1,7,116.7,WS2815 12V 60/m
+A06,A,back,2,13,216.7,WS2815 12V 60/m
+A07,A,back,2,2,33.3,WS2815 12V 60/m
+A08,A,back,3,11,183.3,WS2815 12V 60/m
+A09,A,back,4,12,200.0,WS2815 12V 60/m
+A10,A,back,4,2,33.3,WS2815 12V 60/m
+A11,A,back,5,12,200.0,WS2815 12V 60/m
+A12,A,back,6,12,200.0,WS2815 12V 60/m
+A13,A,back,6,1,16.7,WS2815 12V 60/m
+A14,A,back,7,13,216.7,WS2815 12V 60/m
+A15,A,back,8,14,233.3,WS2815 12V 60/m
+A16,A,back,9,18,300.0,WS2815 12V 60/m
+A17,A,back,10,20,333.3,WS2815 12V 60/m
+A18,A,back,11,18,300.0,WS2815 12V 60/m
+A19,A,back,12,21,350.0,WS2815 12V 60/m
+A20,A,back,13,18,300.0,WS2815 12V 60/m
+A21,A,back,14,20,333.3,WS2815 12V 60/m
+A22,A,back,15,18,300.0,WS2815 12V 60/m
+A23,A,back,16,22,366.7,WS2815 12V 60/m
+A24,A,back,17,18,300.0,WS2815 12V 60/m
+A25,A,back,18,20,333.3,WS2815 12V 60/m
+A26,A,back,19,18,300.0,WS2815 12V 60/m
+A27,A,back,20,21,350.0,WS2815 12V 60/m
+A28,A,back,21,18,300.0,WS2815 12V 60/m
+A29,A,back,22,20,333.3,WS2815 12V 60/m
+A30,A,back,23,18,300.0,WS2815 12V 60/m
+A31,A,back,24,20,333.3,WS2815 12V 60/m
+A32,A,back,25,14,233.3,WS2815 12V 60/m
+A33,A,back,26,13,216.7,WS2815 12V 60/m
+A34,A,back,27,12,200.0,WS2815 12V 60/m
+A35,A,back,28,12,200.0,WS2815 12V 60/m
+A36,A,back,28,2,33.3,WS2815 12V 60/m
+A37,A,back,29,12,200.0,WS2815 12V 60/m
+A38,A,back,30,11,183.3,WS2815 12V 60/m
+A39,A,back,30,2,33.3,WS2815 12V 60/m
+A40,A,back,31,13,216.7,WS2815 12V 60/m
+A41,A,back,32,7,116.7,WS2815 12V 60/m
+A42,A,back,32,5,83.3,WS2815 12V 60/m
+A43,A,back,32,4,66.7,WS2815 12V 60/m
+A44,A,back,33,1,16.7,WS2815 12V 60/m
+A45,A,back,33,6,100.0,WS2815 12V 60/m
+A46,A,back,33,6,100.0,WS2815 12V 60/m
+B01,B,upper,67,9,150.0,WS2815 12V 60/m
+B02,B,upper,66,12,200.0,WS2815 12V 60/m
+B03,B,upper,65,9,150.0,WS2815 12V 60/m
+B04,B,upper,64,12,200.0,WS2815 12V 60/m
+B05,B,upper,63,9,150.0,WS2815 12V 60/m
+B06,B,upper,62,11,183.3,WS2815 12V 60/m
+B07,B,upper,61,8,133.3,WS2815 12V 60/m
+B08,B,upper,60,10,166.7,WS2815 12V 60/m
+B09,B,upper,59,5,83.3,WS2815 12V 60/m
+B10,B,upper,59,1,16.7,WS2815 12V 60/m
+B11,B,upper,58,3,50.0,WS2815 12V 60/m
+B12,B,upper,58,5,83.3,WS2815 12V 60/m
+B13,B,upper,57,8,133.3,WS2815 12V 60/m
+B14,B,upper,56,9,150.0,WS2815 12V 60/m
+B15,B,upper,55,7,116.7,WS2815 12V 60/m
+B16,B,upper,54,9,150.0,WS2815 12V 60/m
+B17,B,upper,53,7,116.7,WS2815 12V 60/m
+B18,B,upper,52,11,183.3,WS2815 12V 60/m
+B19,B,upper,51,7,116.7,WS2815 12V 60/m
+B20,B,upper,50,9,150.0,WS2815 12V 60/m
+B21,B,upper,49,7,116.7,WS2815 12V 60/m
+B22,B,upper,48,10,166.7,WS2815 12V 60/m
+B23,B,upper,47,7,116.7,WS2815 12V 60/m
+B24,B,upper,46,9,150.0,WS2815 12V 60/m
+B25,B,upper,45,7,116.7,WS2815 12V 60/m
+B26,B,upper,44,10,166.7,WS2815 12V 60/m
+B27,B,upper,43,5,83.3,WS2815 12V 60/m
+B28,B,upper,43,1,16.7,WS2815 12V 60/m
+B29,B,upper,42,3,50.0,WS2815 12V 60/m
+B30,B,upper,42,5,83.3,WS2815 12V 60/m
+B31,B,upper,41,8,133.3,WS2815 12V 60/m
+B32,B,upper,40,10,166.7,WS2815 12V 60/m
+B33,B,upper,39,9,150.0,WS2815 12V 60/m
+B34,B,upper,38,11,183.3,WS2815 12V 60/m
+B35,B,upper,37,9,150.0,WS2815 12V 60/m
+B36,B,upper,36,12,200.0,WS2815 12V 60/m
+B37,B,upper,35,10,166.7,WS2815 12V 60/m
+B38,B,upper,34,11,183.3,WS2815 12V 60/m
+B39,B,lower,34,6,100.0,WS2815 12V 60/m
+B40,B,lower,35,7,116.7,WS2815 12V 60/m
+B41,B,lower,36,6,100.0,WS2815 12V 60/m
+B42,B,lower,37,5,83.3,WS2815 12V 60/m
+B43,B,lower,38,4,66.7,WS2815 12V 60/m
+B44,B,lower,39,4,66.7,WS2815 12V 60/m
+B45,B,lower,40,3,50.0,WS2815 12V 60/m
+B46,B,lower,41,3,50.0,WS2815 12V 60/m
+B47,B,lower,42,2,33.3,WS2815 12V 60/m
+B48,B,lower,43,2,33.3,WS2815 12V 60/m
+B49,B,lower,44,1,16.7,WS2815 12V 60/m
+B50,B,lower,45,1,16.7,WS2815 12V 60/m
+B51,B,lower,46,1,16.7,WS2815 12V 60/m
+B52,B,lower,47,1,16.7,WS2815 12V 60/m
+B53,B,lower,48,1,16.7,WS2815 12V 60/m
+B54,B,lower,53,1,16.7,WS2815 12V 60/m
+B55,B,lower,54,1,16.7,WS2815 12V 60/m
+B56,B,lower,55,1,16.7,WS2815 12V 60/m
+B57,B,lower,56,1,16.7,WS2815 12V 60/m
+B58,B,lower,57,1,16.7,WS2815 12V 60/m
+B59,B,lower,58,2,33.3,WS2815 12V 60/m
+B60,B,lower,59,2,33.3,WS2815 12V 60/m
+B61,B,lower,60,3,50.0,WS2815 12V 60/m
+B62,B,lower,61,3,50.0,WS2815 12V 60/m
+B63,B,lower,62,4,66.7,WS2815 12V 60/m
+B64,B,lower,63,4,66.7,WS2815 12V 60/m
+B65,B,lower,64,5,83.3,WS2815 12V 60/m
+B66,B,lower,65,6,100.0,WS2815 12V 60/m
+B67,B,lower,66,7,116.7,WS2815 12V 60/m
+B68,B,lower,67,6,100.0,WS2815 12V 60/m
+EL01,B,accessory,left ear rim channel,,990,COB 12V 10mm — measure the printed ear: ellipse perimeter minus the tenon gap
+ER01,B,accessory,right ear rim channel,,990,COB 12V 10mm — 
+ETL1,B,accessory,left ear side tube (−x),,250,"WS2815 60/m ×2 back-to-back — tube is 250 mm; strip pair ~234 mm each, 8 mm clear at each end"
+ETL2,B,accessory,left ear centre tube,,343,WS2815 60/m ×2 back-to-back — tube is 343 mm; strip pair ~327 mm each
+ETL3,B,accessory,left ear side tube (+x),,250,WS2815 60/m ×2 back-to-back — 
+ETR1,B,accessory,right ear side tube (−x),,250,WS2815 60/m ×2 back-to-back — 
+ETR2,B,accessory,right ear centre tube,,343,WS2815 60/m ×2 back-to-back — 
+ETR3,B,accessory,right ear side tube (+x),,250,WS2815 60/m ×2 back-to-back — 
+VT01,B,accessory,visor top light-pipe trough,,340,COB 12V 10mm — trough is constant width; 2×LG_HALF_X = 280 mm of straight run
+VB01,B,accessory,visor bottom light-pipe trough,,340,COB 12V 10mm — 
