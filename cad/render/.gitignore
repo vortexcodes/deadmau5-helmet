@@ -1,0 +1,7 @@
+# generated: meshes, three.js, frames. Rebuild with README.md.
+build/
+node_modules/
+glb/
+stills/
+frames/
+frames_*/
