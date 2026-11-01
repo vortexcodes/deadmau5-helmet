@@ -205,21 +205,19 @@ def sheet(dark=False):
     return im, ImageDraw.Draw(im, "RGBA")
 
 
-def foot(im, num, title, sub):
-    """The title strip: a title block from the corner of a drawing."""
+def foot(im, title, sub):
+    """The caption strip along the bottom."""
     d = ImageDraw.Draw(im, "RGBA")
     y0 = H - FOOT
     d.rectangle([0, y0, W, H], fill=SURFACE)
     d.line([0, y0, W, y0], fill=INK, width=2)
-    d.line([118, y0, 118, H], fill=RULE, width=1)
-    d.text((26, y0 + 18), "%02d" % num, font=F_NUM, fill=BRASS)
-    d.text((140, y0 + 12), title, font=F_TITLE, fill=INK)
+    d.text((28, y0 + 12), title, font=F_TITLE, fill=INK)
     # one line, so it shrinks to fit rather than running off the frame
     size, f = 21, F_BODY
-    while d.textlength(sub, font=f) > W - 170 and size > 15:
+    while d.textlength(sub, font=f) > W - 56 and size > 15:
         size -= 1
         f = font(size)
-    d.text((140, y0 + 56), sub, font=f, fill=INK2)
+    d.text((28, y0 + 56), sub, font=f, fill=INK2)
     return im
 
 
@@ -282,10 +280,10 @@ def s_title(M, n):
         dots(d, v(M.slots[M.chain == "B"]), 1.6, (35, 71, 198, 150))
         d.text((70, 200), "Finding", font=F_BIG, fill=INK)
         d.text((70, 310), "622 LEDs", font=F_BIG, fill=INK)
-        d.text((74, 450), "How the map of my deadmau5 helmet was built,", font=F_BODY, fill=INK2)
-        d.text((74, 480), "and what the first one got wrong.", font=F_BODY, fill=INK2)
+        d.text((74, 450), "How I worked out where every LED on my helmet is,", font=F_BODY, fill=INK2)
+        d.text((74, 480), "including the map I got wrong first.", font=F_BODY, fill=INK2)
         d.line([74, 540, 380, 540], fill=BRASS, width=2)
-        d.text((74, 552), "MAU5HEAD V2  ·  LOCALISATION", font=F_SMALL, fill=BRASS)
+        d.text((74, 552), "MAU5HEAD V2", font=F_SMALL, fill=BRASS)
         yield im
 
 
@@ -305,9 +303,9 @@ def s_slots(M, n):
         label(d, (60, 60), "948 slots in the print", INK, F_MID)
         label(d, (64, 140), "blue: the 399 on the front, where LEDs went", ACCENT, F_BODY)
         label(d, (64, 170), "grey: the back, still empty", MUTED, F_BODY)
-        yield foot(im, 1, "The print knows where an LED can go",
-                   "A slot for every shell LED, and three tubes and a rim in each ear. "
-                   "Nothing says which LED went where.")
+        yield foot(im, "Every LED has a place in the print",
+                   "948 slots in the shell, and three tubes and a rim in each ear. "
+                   "The CAD doesn't say which LED ended up where.")
 
 
 def s_wiring(M, n):
@@ -327,9 +325,9 @@ def s_wiring(M, n):
         label(d, (60, 60), "One data line", INK, F_MID)
         label(d, (64, 140), "the order the CAD meant the strips to be wired in", BRASS, F_BODY)
         label(d, (64, 170), "%d of 399 slots" % k, MUTED, F_BODY)
-        yield foot(im, 2, "622 LEDs, one wire",
-                   "Index 0 is wherever the wire starts. The map has to find out what was "
-                   "built, not what was drawn.")
+        yield foot(im, "622 LEDs on one wire",
+                   "An LED's number is just how far along the wire it sits. This is the order "
+                   "I meant to wire them in, and I didn't stick to it everywhere.")
 
 
 def footage(path, t0, t1, n):
@@ -357,18 +355,18 @@ def s_night(M, n):
     # 2.6-10.6 s of the session timelapse: the room, before dark,
     # between its title cards at 2.3 s and 10.8 s
     for im in footage(src, 2.6, 10.6, n):
-        yield foot(im, 3, "The first night",
-                   "Before any camera, a walk by hand: each strip lit in turn and its first "
-                   "and last LED written down. %d sections. Keep that list in mind." % secs)
+        yield foot(im, "The first night",
+                   "Before any camera, I lit each strip in turn and wrote down its first and "
+                   "last LED: %d sections." % secs)
 
 
 def s_locate(M, n):
     src = os.path.join(CAL, "session_timelapse.mp4")
     # the dark stretch, up to the next title card at 38 s
     for im in footage(src, 31.8, 37.9, n):
-        yield foot(im, 4, "Then one LED at a time",
-                   "Each lit alone in a dark room; the camera records the centre of its "
-                   "glow. Later, the same again from a second position.")
+        yield foot(im, "Then one LED at a time",
+                   "Each one lit alone in a dark room while the camera logged the centre of its "
+                   "glow. Later I did all 622 again from a second spot.")
 
 
 def s_mistake(M, n):
@@ -392,15 +390,15 @@ def s_mistake(M, n):
         dots(d, O, 2.6, RED + (230,))
         ears = M.old["xyz"][399:]
         dots(d, v(ears), 2.2, (194, 53, 63, 160))
-        label(d, (60, 60), "A map that graded itself", INK, F_MID)
-        label(d, (64, 140), "seen from the side: red is where the first map put each LED,", INK2, F_BODY)
+        label(d, (60, 60), "My first map", INK, F_MID)
+        label(d, (64, 140), "from the side: red is where it put each LED,", INK2, F_BODY)
         label(d, (64, 170), "grey is where the print has room for one", INK2, F_BODY)
         if t > 0.55:
-            label(d, (64, 230), "fits the camera it was made from to 0.02 px", RED, F_BODY)
-            label(d, (64, 260), "ears: every LED at the same depth -- one flat sheet", RED, F_BODY)
-        yield foot(im, 5, "The first map slid every LED onto its own camera ray",
-                   "Perfect from the front, which is the camera that made it. From the side, "
-                   "most LEDs sat between slots -- up to 113 mm off.")
+            label(d, (64, 230), "matched the camera it came from to 0.02 px", RED, F_BODY)
+            label(d, (64, 260), "the ears came out flat, every LED at the same depth", RED, F_BODY)
+        yield foot(im, "It only looked right from the front",
+                   "That's where the camera was. From the side, most LEDs sat between slots, "
+                   "some of them 113 mm off.")
 
 
 def s_cameras(M, n):
@@ -447,9 +445,9 @@ def s_cameras(M, n):
             if t > 0.6:
                 label(d, (x0 + 14, y0 + h + 14), "measured: median %.1f mm, nothing assumed"
                       % np.median(r), INK, F_BODY)
-        yield foot(im, 6, "A second camera, 34 degrees away",
-                   "Two views fix a point instead of a ray. The shell comes out on the CAD's "
-                   "sphere to a third of a millimetre: the cameras are right.")
+        yield foot(im, "A second camera, 34 degrees away",
+                   "Two views give a point where one only gives a ray. The shell LEDs landed "
+                   "0.3 mm from the CAD's sphere, so the cameras were fine.")
 
 
 def triangulate(M, cams):
@@ -515,9 +513,9 @@ def s_align(M, n):
                     "2 px  (the first map: 15)"]
             for j, s in enumerate(rows):
                 label(d, (x0 + 20, y0 + 20 + j * 44), s, (232, 235, 238, a), F_BODY)
-        yield foot(im, 7, "Aligning the chain to the wiring, with room for gaps",
-                   "Each LED is the next slot along its strip, or skips an empty one, or starts "
-                   "the next strip at either end. No slot used twice.")
+        yield foot(im, "Lining the chain up with the wiring",
+                   "Each LED is the next slot on its strip, or skips an empty one, or starts "
+                   "the next strip from either end. A slot can only be used once.")
 
 
 def s_walk(M, n):
@@ -536,11 +534,11 @@ def s_walk(M, n):
     for i in range(n):
         t = ease(i / max(n * 0.6, 1))
         im, d = sheet()
-        label(d, (60, 50), "It was there all along", INK, F_MID)
+        label(d, (60, 50), "The cameras against my notes", INK, F_MID)
         x0, x1 = 70, W - 70
         def X(k):
             return x0 + (x1 - x0) * k / 398
-        for row, (name, spans, y) in enumerate((("the walk, by eye", secs, 230),
+        for row, (name, spans, y) in enumerate((("my notes", secs, 230),
                                                 ("the cameras", cam, 360))):
             label(d, (x0, y - 34), name, INK2, F_BODY)
             for j, (s, e) in enumerate(spans):
@@ -560,9 +558,9 @@ def s_walk(M, n):
                   "strips at the chin", MUTED, F_BODY)
         label(d, (x0, 160), "chain index 0", MUTED, F_SMALL)
         label(d, (x1, 160), "397", MUTED, F_SMALL, "ra")
-        yield foot(im, 8, "The walk had already found it",
-                   "Shell ends at 397, one strip is 11 not 12, the mount strips run out of order. "
-                   "The map had overridden all three with the CAD's numbers.")
+        yield foot(im, "The notes from the first night had it right",
+                   "Shell ends at 397, one strip has 11 LEDs, the mount strips run out of order. "
+                   "My first map had replaced all three with the CAD's numbers.")
 
 
 def s_ears(M, n):
@@ -613,11 +611,11 @@ def s_ears(M, n):
             label(d, (60, 50), "Inside the tubes", (232, 235, 238), F_MID)
             label(d, (64, 122), "blue: out and back along three tubes  ·  orange: the rim",
                   (200, 205, 210), F_BODY)
-        yield foot(im, 9, "The ears stay where the CAD has them",
-                   ("The outline lands on the real ears, so the cameras only decide where along "
-                    "which tube each LED sits -- the part they can measure.") if photo is not None else
-                   ("The cameras only decide where along which tube each LED sits -- "
-                    "the part they can measure."))
+        yield foot(im, "The ears stay where the CAD has them",
+                   ("The outline lands on the real ears, so the cameras only pick where along "
+                    "which tube each LED sits. They can measure that much.") if photo is not None else
+                   ("The cameras only pick where along which tube each LED sits. "
+                    "They can measure that much."))
 
 
 def s_compare(M, n):
@@ -644,9 +642,9 @@ def s_compare(M, n):
                 k = 0.45 + 0.55 * (dep[j] - dep.min()) / (np.ptp(dep) or 1)
                 cols.append(tuple(c * k for c in base))
             im = glow(im, v(X), cols, r=2.4, blur=3.0, gain=0.8)
-        yield foot(im, 10, "Before and after, from every side",
-                   "Left, the first map: flat ears, LEDs between slots. Right, every LED in a "
-                   "slot or a tube of the CAD.")
+        yield foot(im, "Before and after, all the way round",
+                   "Left is the first map, with flat ears and LEDs between slots. Right is the "
+                   "final one, with every LED in a slot or a tube.")
 
 
 def s_end(M, n):
@@ -656,8 +654,8 @@ def s_end(M, n):
         drawing(d, M, v, ink=(22, 25, 29, 90), crease=(22, 25, 29, 35))
         label(d, (70, 220), "Try it", INK, F_BIG)
         label(d, (74, 370), "vortex1.dev/mau5-simulator.html", ACCENT, F_TITLE)
-        label(d, (74, 430), "source: github.com/vortexcodes/deadmau5-helmet", INK2, F_BODY)
-        label(d, (74, 462), "the map itself: mau5slots.py", INK2, F_BODY)
+        label(d, (74, 430), "code: github.com/vortexcodes/deadmau5-helmet", INK2, F_BODY)
+        label(d, (74, 462), "the map comes from mau5slots.py", INK2, F_BODY)
         yield im
 
 

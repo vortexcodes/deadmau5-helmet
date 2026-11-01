@@ -3,10 +3,9 @@
 //
 // Every LED is drawn in the CAD slot or ear tube it actually occupies,
 // inside the helmet's own CAD, and lit by the same engine, the same
-// power guard and the same show player that drive the real thing.  Not
-// a mock-up: the preset you see here is the preset, to within 0.0003 of
-// a count out of 255, because the browser code and the Python are
-// checked against each other on every commit.
+// power guard and the same show player that drive the real thing.  The
+// tests render them in both languages and compare the results, so a
+// preset here is the preset on the helmet to within rounding.
 //
 // The point of putting it on a web page is the audio.  Play any song
 // and the analyser works on it live -- loudness, bands, pitch, onsets,
