@@ -8,8 +8,8 @@ mistakes, and how each was caught. To print and assemble it, see [`build-guide.m
 
 ![turntable](img/cad/turntable.gif)
 
-**The film:** `mau5head_cad_tour.mp4` (40 s: turntable, exploded view, visor, wall mount) is
-attached to the GitHub release *CAD v18*.
+**The film:** [`img/cad/mau5head_cad_tour.mp4`](img/cad/mau5head_cad_tour.mp4) (40 s: turntable, exploded view, visor,
+wall mount).
 
 ## Why code instead of a CAD program
 

@@ -12,6 +12,8 @@ data/cal/review/
 data/cal/shots/
 data/cal/_tmp/
 *.mp4
+# ...except the CAD film, which is the point of docs/img/cad (9 MB, made by cad/render/)
+!docs/img/cad/mau5head_cad_tour.mp4
 
 # Your music. The show JSONs reference these by filename; the tracks
 # themselves are commercial releases and are not ours to redistribute.

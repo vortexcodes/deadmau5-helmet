@@ -20,7 +20,7 @@ and a second builds a **wall mount** that holds the helmet by its rim and from t
 - [`cad/README.md`](cad/README.md): what to print, in what orientation, and the hardware
 - [`docs/build-guide.md`](docs/build-guide.md): how it all goes together, step by step
 - [`docs/cad-design.md`](docs/cad-design.md): how it was designed and why, with the mistakes
-- the film, `mau5head_cad_tour.mp4`, on the *CAD v18* release
+- the film: [`docs/img/cad/mau5head_cad_tour.mp4`](docs/img/cad/mau5head_cad_tour.mp4)
 
 ## Five minutes, no helmet needed
 
