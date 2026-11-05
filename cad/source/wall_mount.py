@@ -1,6 +1,6 @@
 """
 mau5head wall mount — holds the helmet two ways at once:
-  RIM:    a 4-arm cradle ("spider") whose felt-lined pads cup the outside of the shell just above the neck cut
+  RIM:    a 4-arm cradle ("spider"): the rim of the neck sits on a felt ledge in each pad, and the pad cups the shell's outside
   CENTRE: a post rising through the neck opening to a head-form dome that the hard hat's suspension sits on
           (the same way it sits on your head), so the helmet can't tip or twist off the pads.
 
@@ -23,14 +23,14 @@ os.makedirs(OUT, exist_ok=True)
 
 # ── helmet (from mau5head_hat.py) ──
 R_O      = 177.17          # shell outer radius
-NECK_Z   = -143.3          # flat neck cut (CAD). Pads also work if the neck was trimmed up to ~ -130
+NECK_Z   = -130.6          # neck as printed (trimmed 1/2" from the CAD's -143.3; no baffle). The rim sits on a felt ledge in each pad
 CONN_AZ  = 68.0            # GX16 power jack on the back-right, lat -45: keep pads and arms away from it
 PIX_LOW_Z = -117.5         # bottom edge of the lowest LED row: pads stay below it
 
 # ── layout ──
 WALL_GAP   = 28.0          # helmet back to wall
 WALL_Y     = R_O + WALL_GAP            # wall plane
-PAD_R0, PAD_R1 = 105.0, 131.0          # pad contact band, radius from the vertical axis  (z = -142.7 .. -119.3)
+PAD_R0, PAD_R1 = 105.0, 131.0          # pad: a flat ledge under the rim (r 105–120) and a concave seat up the outside (r 120–131, z -131.6 .. -120.8)
 PAD_W      = 32.0                      # pad width (tangential)
 PAD_AZ     = (0.0, 90.0, 180.0, 270.0) # +x side, back (over the arm), -x side, front
 FELT       = 1.0                       # felt thickness: pad face sits this far off the shell
@@ -41,7 +41,7 @@ POST_D, POST_WALL = 40.0, 4.0
 SOCKET_H   = 60.0
 PIN_D      = 6.6                       # 1/4" bolt
 HEAD_TOP_Z = 90.0                      # top of the wearer's head: ~30 mm under the hat's inside crown, as on the Pyramex the shell was sized for
-DOME_A, DOME_B, DOME_H, DOME_T = 70.0, 87.5, 65.0, 3.0   # head form: 140 x 175 base (passes the 165 x 195 neck hole)
+DOME_A, DOME_B, DOME_H, DOME_T = 70.0, 87.5, 65.0, 3.0   # head form: 140 x 175 base (passes the Ø224 neck opening, and the old 165 x 195 one)
 ADJ_STEPS  = 5                         # post holes: nominal ±20 mm in 10 mm steps
 
 def sph_z(r):           # z of the shell's outer surface (lower half) at radius r from the axis
@@ -50,10 +50,11 @@ def sph_z(r):           # z of the shell's outer surface (lower half) at radius 
 # ═══ cradle (spider) ═══
 z0 = ARM_TOP_Z
 SOCKET_H = 60.0
-# what the helmet occupies: everything inside the shell's outer skin (+ felt) above the neck cut, except the neck hole itself
-NECK_A, NECK_B = 80.0, 95.0           # a little inside the 165 x 195 neck hole
+# what the helmet occupies: everything inside the shell's outer skin (+ felt) above the neck cut (+ felt). Carving the pads with it
+# leaves a flat ledge the rim rests on and a concave seat that cups the outside of the shell.
+NECK_A, NECK_B = 80.0, 95.0           # keep the middle clear (inside any neck opening)
 envelope = (cq.Workplane("XY").sphere(R_O + FELT)
-            .intersect(cq.Workplane("XY").workplane(offset=NECK_Z - 0.5).rect(600, 600).extrude(400))
+            .intersect(cq.Workplane("XY").workplane(offset=NECK_Z - FELT).rect(600, 600).extrude(400))
             .cut(cq.Workplane("XY").workplane(offset=NECK_Z - 5).ellipse(NECK_A, NECK_B).extrude(400)))
 arms = None
 for az in PAD_AZ:
