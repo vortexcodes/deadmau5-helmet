@@ -30,7 +30,10 @@ pivot axis, millimetres.
 ## The shell
 
 A sphere of 354 mm outside diameter (measured off the original helmet file), 5 mm wall, cut
-flat at the neck.
+flat at the neck. The neck is where it was printed: the original file's cut at 143 mm below
+the centre was trimmed 1/2" in the slicer to fit the wearer's head, to z = −130.6. That leaves
+a Ø241 mm round opening and puts the cut through the bottom of the electronics-tray bosses'
+skirts. `NECK_Z` sets it.
 
 **The LED grid comes from the strip, not the sphere.** WS2815 at 60 LEDs/m is a 16.67 mm
 pitch, so the grid is 68 vertical channels (one strip each, 16.4 mm apart at the equator)
@@ -52,8 +55,10 @@ pivot collars), each stopping 0.25 mm short so it snaps off. The halves are alig
 filament stubs and bolted through six pads on the inside of the seam, each with a slot so
 the LED strip passes straight through.
 
-**The neck** has a 45° conical light baffle, so the glow doesn't leak out under your chin
-and nothing outside lights your face.
+**The neck** had a 45° conical light baffle so the glow wouldn't leak out under your chin.
+The 1/2" trim took it off, so the generator now builds the baffle only on the full-length neck
+(`NECK_BAFFLE`). If the glow under your chin bothers you, a strip of black tape inside the
+rim does the same job.
 
 ## The ears
 
@@ -146,12 +151,12 @@ so the weight goes through the hat's suspension instead of the shell sitting on 
 
 `cad/source/wall_mount.py`. It holds the helmet in two places at once:
 
-- **The rim:** a four-armed cradle with concave pads cut from the shell's own sphere (+1 mm of
-  felt). They cup the outside just above the neck, between the bottom row of LED windows and
-  the neck cut, and clear the GX16 power jack. The cut-out is made with the helmet's whole
-  envelope above the neck, so it fits even if the neck was trimmed higher by hand.
+- **The rim:** a four-armed cradle. Each pad is carved by the helmet's own shape (+1 mm of felt),
+  which leaves a flat ledge the cut rim of the neck sits on and a concave seat that cups the
+  outside of the shell up to just below the bottom row of LED windows. The ledge carries the
+  weight and the seats keep it centred. Change `NECK_Z` in `wall_mount.py` and the pads re-carve to match.
 - **The centre:** a post up through the neck opening to a head-form dome (140 × 175 mm, small
-  enough to pass the 165 × 195 neck hole). The hard hat's suspension rests on it as it rests
+  enough to pass the neck opening). The hard hat's suspension rests on it as it rests
   on your head. A 1/4" pin through holes every 10 mm sets its height ±20 mm.
 - **The bracket:** wall plate, arm and gusset in one Y-Z profile, printed on its side so no
   layer line runs across the load. Three #10 screws go into one stud, all reachable from

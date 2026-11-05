@@ -119,21 +119,24 @@ README.
 
 ![wall mount](img/cad/wallmount.gif)
 
-Holds the helmet two ways at once: four felt-lined pads cup the outside of the shell just
-above the neck, and a head-form dome on a post goes up inside and takes the hard hat's
-suspension the way your head does. The pads stop it sliding; the dome stops it tipping.
+Holds the helmet two ways at once. The rim of the neck sits on a felt ledge in each of four
+pads, which also cup the outside of the shell. A head-form dome on a post goes up inside and
+takes the hard hat's suspension the way your head does. The pads carry it and stop it
+sliding; the dome stops it tipping.
 
 ![wall mount section](img/cad/wallmount_section.png)
 
 1. **Bracket:** three #10 × 2½" wood screws into one stud, in the countersunk holes. The arm
    points straight out. Level it.
-2. **Cradle:** stick felt on the four pads. Set the cradle on the arm, back spoke along the
+2. **Cradle:** stick felt on the four pads, on the flat ledge and the curved seat. Set the cradle on the arm, back spoke along the
    arm, and bolt it with two 10-32 × 5/8" into the arm's inserts.
 3. **Post:** drop it into the cradle's socket and pin it with the 1/4" bolt through the middle
    hole (the nominal height). Push the dome onto the top of the post.
-4. **Helmet:** lower it straight down over the dome until the shell sits on all four pads.
+4. **Helmet:** lower it straight down over the dome until the rim sits on all four ledges.
    If the shell lands on the dome before the pads, move the pin down a hole; if the hat
    doesn't touch the dome, move it up. Each hole is 10 mm.
 
 The pads clear the bottom row of LED windows and the GX16 jack, and the helmet's back sits
-28 mm off the wall.
+28 mm off the wall. They are cut for the neck as printed (trimmed 1/2", rim at 130.6 mm below
+the centre). If yours is cut elsewhere, set `NECK_Z` in `cad/source/wall_mount.py` and reprint
+the cradle.

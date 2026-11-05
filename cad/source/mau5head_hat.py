@@ -17,6 +17,7 @@ History (details in docs/cad-design.md):
   v14     even visor mesh out to the pivots; Ø40 pivot pad, Ø56 hub disc, edge rims; pivot cap that captures the pad
   v15–17  ear bottom half: JST-size wire path → open grooves in the hidden faces, thicker peg
   v18     crown FRAME for the 3M SecureFit hat (rides higher): spacer stacks set the height at assembly
+  v18.1   neck as printed: trimmed 1/2" to z = -130.6, no baffle
 """
 import math, csv, time, os
 import numpy as np
@@ -25,7 +26,10 @@ import cadquery as cq
 # ───────────────────────────── PARAMETERS ────────────────────────────────────
 R_O   = 177.17          # outer radius (OD 354.3, measured from your file)
 WALL  = 5.0             # 5.0 so the pixel window keeps a 2 mm skin (4-5 perimeters) over a 2 mm LED pocket
-NECK_Z = -143.3         # flat neck cut below centre (measured)
+NECK_Z = -130.6         # flat neck cut, AS PRINTED: trimmed ~1/2" (12.7 mm) in the slicer from the original -143.3 to fit the head.
+                        # It runs through the bottom of the tray bosses' skirts and just clips the GX16 hole; the baffle is gone.
+NECK_Z_ORIG = -143.3    # the original file's neck (set NECK_Z back to this and NECK_BAFFLE = True for the full-length shell)
+NECK_BAFFLE = NECK_Z < -137.0   # the 45° light baffle only fits when the neck is low enough to leave room under the tray band
 
 # mouth wedge: apex on the X axis, opens toward -Y, angles about -Y
 MOUTH_EL_TOP, MOUTH_EL_BOT = 10.0, -35.0
@@ -148,16 +152,17 @@ def wedge_prism(el_top, el_bot, half_x, L=600):
 log("shell base")
 shell = sph(R_O).cut(sph(R_I))
 shell = shell.cut(cq.Workplane("XY").box(600, 600, 400).translate((0, 0, NECK_Z-200)))
-# neck baffle: 45° cone from the inner wall down to the neck plane, elliptical head hole
-_rw = math.sqrt(R_I**2 - LIP_JUNC_Z**2) + 1.2
-_rn = _rw - (LIP_JUNC_Z - NECK_Z)
-_t  = LIP_T2*1.415
-_of = (cq.Workplane("XY").workplane(offset=LIP_JUNC_Z).circle(_rw).workplane(offset=NECK_Z-LIP_JUNC_Z).circle(_rn).loft())
-_if = (cq.Workplane("XY").workplane(offset=LIP_JUNC_Z+3).circle(_rw-_t+3).workplane(offset=NECK_Z-LIP_JUNC_Z-4).circle(_rn-_t-1).loft())
-baffle = (_of.cut(_if)
-          .cut(cq.Workplane("XY").workplane(offset=NECK_Z-2).ellipse(NECK_HOLE_X/2, NECK_HOLE_Y/2).extrude(LIP_JUNC_Z-NECK_Z+6))
-          .cut(cq.Workplane("XY").box(600,600,100).translate((0,0,NECK_Z-50))))
-shell = shell.union(baffle)
+# neck baffle: 45° cone from the inner wall down to the neck plane, elliptical head hole (only on the full-length neck)
+if NECK_BAFFLE:
+    _rw = math.sqrt(R_I**2 - LIP_JUNC_Z**2) + 1.2
+    _rn = _rw - (LIP_JUNC_Z - NECK_Z)
+    _t  = LIP_T2*1.415
+    _of = (cq.Workplane("XY").workplane(offset=LIP_JUNC_Z).circle(_rw).workplane(offset=NECK_Z-LIP_JUNC_Z).circle(_rn).loft())
+    _if = (cq.Workplane("XY").workplane(offset=LIP_JUNC_Z+3).circle(_rw-_t+3).workplane(offset=NECK_Z-LIP_JUNC_Z-4).circle(_rn-_t-1).loft())
+    baffle = (_of.cut(_if)
+              .cut(cq.Workplane("XY").workplane(offset=NECK_Z-2).ellipse(NECK_HOLE_X/2, NECK_HOLE_Y/2).extrude(LIP_JUNC_Z-NECK_Z+6))
+              .cut(cq.Workplane("XY").box(600,600,100).translate((0,0,NECK_Z-50))))
+    shell = shell.union(baffle)
 
 shell = shell.cut(wedge_prism(MOUTH_EL_TOP, MOUTH_EL_BOT, MOUTH_HALF_X))
 
@@ -276,6 +281,7 @@ if EYE_RECESS:
     for s in (1, -1):
         d = dirv(-90+s*EYE_AZ, EYE_EL)
         shell = shell.cut(cq.Workplane(plane_at(d*(R_O-EYE_DEPTH), d, np.cross([0,0,1], d))).circle(EYE_D/2).extrude(30))
+shell = shell.cut(cq.Workplane("XY").box(600, 600, 400).translate((0, 0, NECK_Z-200)))   # neck cut again: bosses added above can hang below it
 log(f"shell base done, valid={shell.val().isValid()}")
 
 # ═════════════════════════ PIXEL GRID ════════════════════════════════════════

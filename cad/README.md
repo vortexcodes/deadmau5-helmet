@@ -38,7 +38,7 @@ PETG throughout. Prusa XL (360 × 360 × 360). Every part fits with margin.
 | File | Qty | Colour | Orientation | Notes |
 |---|---|---|---|---|
 | `parts/shell_half_TOP.step` + `shell_half_TOP_supports.step` | 1 | natural / white | cut face down, crown up | load the supports as a second part; they are designed break-away columns with a 0.25 mm gap |
-| `parts/shell_half_BOTTOM.step` | 1 | same | neck ring down | |
+| `parts/shell_half_BOTTOM.step` | 1 | same | neck ring down | the neck as printed: trimmed 1/2" from the original file, no baffle (`NECK_Z`) |
 | `parts/ear_half_top.step` | 2 | clear | cut face down | low infill (10 % gyroid) so the blades light the whole ear |
 | `parts/ear_half_bottom.step` | 2 | clear | cut face down | **height-range modifier from 125 mm to the top: 100 % infill, 6 perimeters** (the peg carries the ear) |
 | `visor/visor_A_…_RECOMMENDED.3mf` | 1 | **black** | standing on its bottom edge | Arachne, 2 perimeters, slow outer wall, **no supports inside the holes** |
