@@ -161,6 +161,16 @@ so the weight goes through the hat's suspension instead of the shell sitting on 
 - **The bracket:** wall plate, arm and gusset in one Y-Z profile, printed on its side so no
   layer line runs across the load. Three #10 screws go into one stud, all reachable from
   the front.
+- **Strength (v2):** the arm now runs right under the cradle's hub, so the hub and the post
+  rest straight on it. The gusset is solid (a lightening pocket would have been a closed void
+  when printed on its side). The cradle spokes are 18 × 30 mm with 8 mm fillets at every inside
+  corner, held by three 10-32s, and the post wall is 5 mm. A hand check at 3× a 5 kg helmet
+  (147 N): 1.7 MPa in the arm, 1.9 MPa in a spoke (7.5 MPa if one pad took everything),
+  1 MPa across the post's layers from a 30 N side push, 76 N on the top wall screw. Those
+  are against roughly 25 MPa for printed PETG along its layers. Day to day the arm sees about
+  0.6 MPa, well under where PETG starts to creep.
+- **Printing:** every part prints without supports. The only overhangs left are the small
+  horizontal bolt and pin holes, which bridge.
 
 Checked against the helmet CAD: zero interference with the shell, visor, ears and the GX16
 plug; pads within the felt gap of the shell; the helmet's back 28 mm off the wall.

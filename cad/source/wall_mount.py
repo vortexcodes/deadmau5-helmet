@@ -35,9 +35,9 @@ PAD_W      = 32.0                      # pad width (tangential)
 PAD_AZ     = (0.0, 90.0, 180.0, 270.0) # +x side, back (over the arm), -x side, front
 FELT       = 1.0                       # felt thickness: pad face sits this far off the shell
 ARM_TOP_Z  = -170.0                    # top of the bracket arm = underside of the cradle
-CR_T       = 14.0                      # cradle arm thickness
+CR_T       = 18.0                      # cradle spoke thickness (was 14)
 HUB_D      = 70.0
-POST_D, POST_WALL = 40.0, 4.0
+POST_D, POST_WALL = 40.0, 5.0
 SOCKET_H   = 60.0
 PIN_D      = 6.6                       # 1/4" bolt
 HEAD_TOP_Z = 90.0                      # top of the wearer's head: ~30 mm under the hat's inside crown, as on the Pyramex the shell was sized for
@@ -56,23 +56,26 @@ NECK_A, NECK_B = 80.0, 95.0           # keep the middle clear (inside any neck o
 envelope = (cq.Workplane("XY").sphere(R_O + FELT)
             .intersect(cq.Workplane("XY").workplane(offset=NECK_Z - FELT).rect(600, 600).extrude(400))
             .cut(cq.Workplane("XY").workplane(offset=NECK_Z - 5).ellipse(NECK_A, NECK_B).extrude(400)))
-arms = None
+SPOKE_W = 30.0
+# hub + 4 spokes as one star-shaped prism, every inside corner rounded (no sharp notch for a crack to start from)
+star = cq.Workplane("XY").workplane(offset=z0).circle(HUB_D/2).extrude(CR_T)
 for az in PAD_AZ:
-    arm = (cq.Workplane("XY").workplane(offset=z0).rect(PAD_R1 + 4, 26.0, centered=(False, True)).extrude(CR_T)
-           .edges("|Z").fillet(3.0).rotate((0, 0, 0), (0, 0, 1), az))
+    star = star.union(cq.Workplane("XY").workplane(offset=z0).rect(PAD_R1 + 4, SPOKE_W, centered=(False, True)).extrude(CR_T)
+                      .rotate((0, 0, 0), (0, 0, 1), az))
+star = star.edges("|Z").fillet(8.0)
+pads = None
+for az in PAD_AZ:
     pr = (PAD_R0 + PAD_R1) / 2
     pad = (cq.Workplane("XY").workplane(offset=z0).center(pr, 0)
            .rect(PAD_R1 - PAD_R0 + 6, PAD_W).extrude(PIX_LOW_Z - 2.0 - z0)
            .edges("|Z").fillet(5.0).rotate((0, 0, 0), (0, 0, 1), az))
-    piece = arm.union(pad)
-    arms = piece if arms is None else arms.union(piece)
-cradle = arms.cut(envelope)                                            # concave felt seats, each the shape of the shell
-cradle = cradle.union(cq.Workplane("XY").workplane(offset=z0).circle(HUB_D/2).extrude(CR_T))
+    pads = pad if pads is None else pads.union(pad)
+cradle = star.union(pads).cut(envelope)                               # ledge + concave felt seat in each pad, the shape of the shell
 cradle = cradle.union(cq.Workplane("XY").workplane(offset=z0).circle(POST_D/2 + 6.0).extrude(SOCKET_H))
 cradle = cradle.cut(cq.Workplane("XY").workplane(offset=z0 - 1).circle(POST_D/2 + 0.3).extrude(SOCKET_H + 2))
 pin_z = z0 + SOCKET_H - 8.0
 cradle = cradle.cut(cq.Workplane("YZ").workplane(offset=-60).center(0, pin_z).circle(PIN_D/2).extrude(120))
-BOLT_YS = (55.0, 85.0)                  # two 10-32 down through the back arm into inserts in the bracket arm
+BOLT_YS = (45.0, 75.0, 105.0)           # three 10-32 down through the back spoke into inserts in the bracket arm
 for by in BOLT_YS:
     cradle = cradle.cut(cq.Workplane("XY").workplane(offset=z0 - 1).center(0, by).circle(5.2/2).extrude(CR_T + 2))
     cradle = cradle.cut(cq.Workplane("XY").workplane(offset=z0 + CR_T - 5.5).center(0, by).circle(9.5/2).extrude(10))
@@ -83,7 +86,7 @@ cradle_s = cradle.val()
 BR_W   = 50.0
 PLATE_T = 10.0
 ARM_H  = 30.0
-ARM_Y0 = 30.0                 # arm reaches from the wall to here (under the cradle's back arm, clear of the post)
+ARM_Y0 = -30.0                # arm runs from the wall right under the cradle's hub and the post (the post can bottom out on it)
 PL_TOP, PL_BOT = ARM_TOP_Z + 66.0, ARM_TOP_Z - ARM_H - 140.0
 y_w = WALL_Y
 prof = (cq.Workplane("YZ")
@@ -101,10 +104,7 @@ bracket = prof.extrude(BR_W/2, both=True)
 # the plate is wider than the arm: extra plate wings for 3 screws
 plate = cq.Workplane("XZ").workplane(offset=-(y_w + PLATE_T)).center(0, (PL_TOP + PL_BOT)/2).rect(BR_W, PL_TOP - PL_BOT).extrude(PLATE_T)
 bracket = bracket.union(plate)
-# lighten the gusset web (keeps 8 mm flanges)
-web = (cq.Workplane("YZ").moveTo(y_w - 12, ARM_TOP_Z - ARM_H - 10).lineTo(y_w - 92, ARM_TOP_Z - ARM_H - 10)
-       .lineTo(y_w - 12, PL_BOT + 52).close().extrude(BR_W/2 - 8, both=True))
-bracket = bracket.cut(web)
+# the gusset stays solid: a lightening pocket here would be a closed void with a flat ceiling when printed on its side
 # wall screws: 3 in a vertical line (one stud), countersunk on the room side, clear of the arm and gusset
 for z in (PL_TOP - 12.0, PL_TOP - 38.0, PL_BOT + 14.0):     # two above the arm, one below the gusset: every head reachable
     hole = cq.Workplane("XZ").workplane(offset=-(y_w + PLATE_T + 1)).center(0, z).circle(2.6).extrude(PLATE_T + 2)
@@ -138,7 +138,9 @@ for i, t in enumerate((0, 15, 30, 45, 58, 70, 80, 87)):
           else wp.workplane(offset=z - _prev).ellipse(DOME_A*math.cos(tr), DOME_B*math.cos(tr)))
     _prev = z
 dome = wp.loft(ruled=False).val()
-dome = dome.cut(cq.Workplane("XY").workplane(offset=-1).circle(POST_D/2 + 0.3).extrude(31).val()).clean()
+_sock = (cq.Workplane("XY").workplane(offset=-1).circle(POST_D/2 + 0.3).extrude(31)               # post goes 30 mm in and stops at the cone
+         .faces(">Z").workplane().circle(POST_D/2 + 0.3).workplane(offset=POST_D/2).circle(0.5).loft())   # 45° roof: prints without supports
+dome = dome.cut(_sock.val()).clean()
 dome_s = dome.translate(cq.Vector(0, 0, dome_base_z))
 
 # ═══ export ═══

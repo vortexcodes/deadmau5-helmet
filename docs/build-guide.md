@@ -129,7 +129,8 @@ sliding; the dome stops it tipping.
 1. **Bracket:** three #10 × 2½" wood screws into one stud, in the countersunk holes. The arm
    points straight out. Level it.
 2. **Cradle:** stick felt on the four pads, on the flat ledge and the curved seat. Set the cradle on the arm, back spoke along the
-   arm, and bolt it with two 10-32 × 5/8" into the arm's inserts.
+   arm, and bolt it with three 10-32 × 3/4" into the arm's inserts. The arm runs right under
+   the cradle's hub, so the hub and the post rest straight on it.
 3. **Post:** drop it into the cradle's socket and pin it with the 1/4" bolt through the middle
    hole (the nominal height). Push the dome onto the top of the post.
 4. **Helmet:** lower it straight down over the dome until the rim sits on all four ledges.
