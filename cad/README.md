@@ -48,10 +48,10 @@ PETG throughout. Prusa XL (360 × 360 × 360). Every part fits with margin.
 | `parts/hat_spacers.step` | 1 set | black | as laid out | 4 each of 2 / 4 / 8 / 16 mm |
 | `parts/hat_drill_template.step` | 1 | any | flat | 1.2 mm, flexes onto the hat |
 | `parts/electronics_tray.step` | 1 | black | flat | |
-| `parts/wallmount_bracket.stl` | 1 | any | on its side (large flat face down) | 4 perimeters, 30 % infill |
-| `parts/wallmount_cradle.stl` | 1 | any | flat, pads up | 4 perimeters, 30 % infill |
-| `parts/wallmount_post.stl` | 1 | any | standing | |
-| `parts/wallmount_dome.stl` | 1 | any | flat base down | 10 % infill, 3 walls |
+| `parts/wallmount_bracket.stl` | 1 | any | on its side (large flat face down) | 5 perimeters, 40 % gyroid; no supports needed |
+| `parts/wallmount_cradle.stl` | 1 | any | flat, pads up | 5 perimeters, 40 % gyroid; no supports needed |
+| `parts/wallmount_post.stl` | 1 | any | standing | 5 perimeters (the 5 mm wall prints solid) |
+| `parts/wallmount_dome.stl` | 1 | any | flat base down | 10 % infill, 3 walls; the socket has a 45° roof, so no supports |
 
 ### Visor hole patterns
 
@@ -71,11 +71,11 @@ Any other pattern: `python3 source/visor_perforate.py --hole 3.0 --pitch 3.9 --o
 
 | Item | Qty | Where |
 |---|---|---|
-| 10-32 brass heat-set inserts (6.4 mm pilot, ~7 mm long) | 34 | seam pads 12 · ear pegs 8 · crown bosses 4 · hat pads 4 · tray 2 · pivot pins 2 · wall bracket 2 |
+| 10-32 brass heat-set inserts (6.4 mm pilot, ~7 mm long) | 35 | seam pads 12 · ear pegs 8 · crown bosses 4 · hat pads 4 · tray 2 · pivot pins 2 · wall bracket 3 |
 | 10-32 × 3/8" socket cap | 20 | seam plates 12 · crown frame → shell 4 · tray 2 · pivot caps 2 |
 | 10-32 × 1/2" | 8 | ear pegs |
 | 10-32 × ½"–1½" assortment + 4 fender washers | 4 | hard hat → frame (length ≈ spacer stack + 10 mm) |
-| 10-32 × 5/8" | 2 | wall cradle → bracket |
+| 10-32 × 3/4" | 3 | wall cradle → bracket |
 | #10 × 2½" wood screws | 3 | wall bracket → one stud |
 | 1/4"-20 × 2½" bolt + nut | 1 | wall-mount post height pin |
 | 1" OD × 3/4" ID clear polycarbonate tube, 36" | 2 | per ear: centre 13 3/8", 2 × side 9 3/4" |
